@@ -65,7 +65,22 @@ export class AuthController {
 
   @UseGuards(JwtAccessGuard)
   @Post('me')
-  me(@Req() req: Request) {
-    return req.user;
+  me(@Req() req: Request & { user?: Record<string, unknown> }) {
+    if (!req.user) {
+      return null;
+    }
+
+    const {
+      id,
+      email,
+      role,
+      isActive,
+      failedLoginCount,
+      lockedUntil,
+      createdAt,
+      updatedAt,
+    } = req.user;
+
+    return { id, email, role, isActive, failedLoginCount, lockedUntil, createdAt, updatedAt };
   }
 }

@@ -17,6 +17,17 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+type SafeUser = {
+  id: string;
+  email: string;
+  role: Role;
+  isActive: boolean;
+  failedLoginCount: number;
+  lockedUntil: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -46,7 +57,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id, user.role);
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
-    return { user, ...tokens };
+    return { user: this.toSafeUser(user), ...tokens };
   }
 
   async login(payload: LoginDto) {
@@ -83,7 +94,7 @@ export class AuthService {
 
     await this.auditService.log('LOGIN', 'USER', user.id, user.id);
 
-    return { user, ...tokens };
+    return { user: this.toSafeUser(user), ...tokens };
   }
 
   async logout(userId: string, refreshToken: string) {
@@ -229,5 +240,27 @@ export class AuthService {
     await this.prisma.refreshToken.create({
       data: { userId, tokenHash, expiresAt },
     });
+  }
+
+  toSafeUser(user: {
+    id: string;
+    email: string;
+    role: Role;
+    isActive: boolean;
+    failedLoginCount: number;
+    lockedUntil: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): SafeUser {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      failedLoginCount: user.failedLoginCount,
+      lockedUntil: user.lockedUntil,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }
