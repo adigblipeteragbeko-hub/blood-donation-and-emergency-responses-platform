@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import DonorLoginPage from './pages/DonorLoginPage';
 import HospitalLoginPage from './pages/HospitalLoginPage';
+import AdminLoginPage from './pages/AdminLoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EmergencyRequestsPage from './pages/EmergencyRequestsPage';
 import InventoryPage from './pages/InventoryPage';
@@ -22,6 +23,7 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/donor-login" element={<DonorLoginPage />} />
         <Route path="/hospital-login" element={<HospitalLoginPage />} />
+        <Route path="/admin-login" element={<AdminLoginPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />

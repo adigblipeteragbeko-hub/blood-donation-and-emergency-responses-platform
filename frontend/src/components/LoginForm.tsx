@@ -13,7 +13,13 @@ export function LoginForm({ title }: { title: string }) {
     e.preventDefault();
     try {
       await login(email, password);
-      navigate('/dashboard');
+      const rawUser = localStorage.getItem('user');
+      const nextRole = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : undefined;
+      if (nextRole === 'ADMIN') {
+        navigate('/admin/management');
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       setError('Login failed. Check credentials and try again.');
     }

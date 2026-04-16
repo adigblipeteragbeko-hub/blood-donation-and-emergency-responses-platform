@@ -15,11 +15,9 @@ export function MainLayout() {
             {[
               ['/', 'Home'],
               ['/about', 'About'],
-              ['/emergency-requests', 'Emergency'],
-              ['/inventory', 'Inventory'],
-              ['/appointments', 'Appointments'],
-              ['/notifications', 'Notifications'],
-              ['/reports', 'Reports'],
+              ['/donor-login', 'Donor Login'],
+              ['/hospital-login', 'Hospital Login'],
+              ['/admin-login', 'Admin Login'],
             ].map(([path, label]) => (
               <NavLink
                 key={path}
@@ -35,16 +33,7 @@ export function MainLayout() {
               <button className="btn-primary" onClick={logout}>
                 Logout
               </button>
-            ) : (
-              <>
-                <NavLink to="/donor-login" className="rounded px-2 py-1 hover:bg-red-50">
-                  Donor Login
-                </NavLink>
-                <NavLink to="/hospital-login" className="rounded px-2 py-1 hover:bg-red-50">
-                  Hospital Login
-                </NavLink>
-              </>
-            )}
+            ) : null}
           </nav>
         </div>
       </header>
