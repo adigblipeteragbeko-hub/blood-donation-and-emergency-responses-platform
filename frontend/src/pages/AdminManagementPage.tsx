@@ -39,14 +39,8 @@ export default function AdminManagementPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [userForm, setUserForm] = useState({
-    email: '',
-    password: '',
-    role: 'DONOR' as Role,
-    isActive: true,
-  });
-
-  const [donorForm, setDonorForm] = useState({
+  const [accountRole, setAccountRole] = useState<Role>('DONOR');
+  const [accountForm, setAccountForm] = useState({
     email: '',
     password: '',
     fullName: '',
@@ -56,15 +50,9 @@ export default function AdminManagementPage() {
     availabilityStatus: true,
     emergencyContactName: '',
     emergencyContactPhone: '',
-  });
-
-  const [hospitalForm, setHospitalForm] = useState({
-    email: '',
-    password: '',
     hospitalName: '',
     registrationCode: '',
     address: '',
-    location: '',
     contactName: '',
     contactPhone: '',
   });
@@ -93,58 +81,70 @@ export default function AdminManagementPage() {
     void loadAll();
   }, []);
 
-  const createUser = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await api.post('/users', userForm);
-      setUserForm({ email: '', password: '', role: 'DONOR', isActive: true });
-      await loadAll();
-    } catch {
-      setError('Could not create user.');
-    }
+  const resetAccountForm = () => {
+    setAccountForm({
+      email: '',
+      password: '',
+      fullName: '',
+      bloodGroup: 'O_POS',
+      location: '',
+      eligibilityStatus: true,
+      availabilityStatus: true,
+      emergencyContactName: '',
+      emergencyContactPhone: '',
+      hospitalName: '',
+      registrationCode: '',
+      address: '',
+      contactName: '',
+      contactPhone: '',
+    });
   };
 
-  const createDonor = async (e: FormEvent) => {
+  const createAccount = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    try {
-      await api.post('/donors/admin', donorForm);
-      setDonorForm({
-        email: '',
-        password: '',
-        fullName: '',
-        bloodGroup: 'O_POS',
-        location: '',
-        eligibilityStatus: true,
-        availabilityStatus: true,
-        emergencyContactName: '',
-        emergencyContactPhone: '',
-      });
-      await loadAll();
-    } catch {
-      setError('Could not create donor.');
-    }
-  };
 
-  const createHospital = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
     try {
-      await api.post('/hospitals/admin', hospitalForm);
-      setHospitalForm({
-        email: '',
-        password: '',
-        hospitalName: '',
-        registrationCode: '',
-        address: '',
-        location: '',
-        contactName: '',
-        contactPhone: '',
-      });
+      if (accountRole === 'ADMIN') {
+        await api.post('/users', {
+          email: accountForm.email,
+          password: accountForm.password,
+          role: 'ADMIN',
+          isActive: true,
+        });
+      }
+
+      if (accountRole === 'DONOR') {
+        await api.post('/donors/admin', {
+          email: accountForm.email,
+          password: accountForm.password,
+          fullName: accountForm.fullName,
+          bloodGroup: accountForm.bloodGroup,
+          location: accountForm.location,
+          eligibilityStatus: accountForm.eligibilityStatus,
+          availabilityStatus: accountForm.availabilityStatus,
+          emergencyContactName: accountForm.emergencyContactName,
+          emergencyContactPhone: accountForm.emergencyContactPhone,
+        });
+      }
+
+      if (accountRole === 'HOSPITAL_STAFF') {
+        await api.post('/hospitals/admin', {
+          email: accountForm.email,
+          password: accountForm.password,
+          hospitalName: accountForm.hospitalName,
+          registrationCode: accountForm.registrationCode,
+          address: accountForm.address,
+          location: accountForm.location,
+          contactName: accountForm.contactName,
+          contactPhone: accountForm.contactPhone,
+        });
+      }
+
+      resetAccountForm();
       await loadAll();
     } catch {
-      setError('Could not create hospital.');
+      setError('Could not create account. Check required fields for selected account type.');
     }
   };
 
@@ -245,46 +245,73 @@ export default function AdminManagementPage() {
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <form className="card space-y-2" onSubmit={createUser}>
-          <h2 className="font-semibold">Add User</h2>
-          <input className="w-full rounded border p-2" placeholder="Email" value={userForm.email} onChange={(e) => setUserForm((v) => ({ ...v, email: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Password" type="password" value={userForm.password} onChange={(e) => setUserForm((v) => ({ ...v, password: e.target.value }))} required />
-          <select className="w-full rounded border p-2" value={userForm.role} onChange={(e) => setUserForm((v) => ({ ...v, role: e.target.value as Role }))}>
-            <option value="DONOR">DONOR</option>
-            <option value="HOSPITAL_STAFF">HOSPITAL_STAFF</option>
-            <option value="ADMIN">ADMIN</option>
-          </select>
-          <button className="btn-primary w-full" type="submit">Create User</button>
-        </form>
+      <form className="card space-y-3" onSubmit={createAccount}>
+        <h2 className="text-xl font-semibold">Add Account</h2>
+        <p className="text-sm text-muted">Allowed account types: Donor, Hospital Staff, Admin.</p>
 
-        <form className="card space-y-2" onSubmit={createDonor}>
-          <h2 className="font-semibold">Add Donor</h2>
-          <input className="w-full rounded border p-2" placeholder="Email" value={donorForm.email} onChange={(e) => setDonorForm((v) => ({ ...v, email: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Password" type="password" value={donorForm.password} onChange={(e) => setDonorForm((v) => ({ ...v, password: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Full Name" value={donorForm.fullName} onChange={(e) => setDonorForm((v) => ({ ...v, fullName: e.target.value }))} required />
-          <select className="w-full rounded border p-2" value={donorForm.bloodGroup} onChange={(e) => setDonorForm((v) => ({ ...v, bloodGroup: e.target.value }))}>
-            {bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}
-          </select>
-          <input className="w-full rounded border p-2" placeholder="Location" value={donorForm.location} onChange={(e) => setDonorForm((v) => ({ ...v, location: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Emergency Contact Name" value={donorForm.emergencyContactName} onChange={(e) => setDonorForm((v) => ({ ...v, emergencyContactName: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Emergency Contact Phone" value={donorForm.emergencyContactPhone} onChange={(e) => setDonorForm((v) => ({ ...v, emergencyContactPhone: e.target.value }))} required />
-          <button className="btn-primary w-full" type="submit">Create Donor</button>
-        </form>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="text-sm font-semibold">
+            Account Type
+            <select
+              className="mt-1 w-full rounded border p-2"
+              value={accountRole}
+              onChange={(e) => setAccountRole(e.target.value as Role)}
+            >
+              <option value="DONOR">Donor</option>
+              <option value="HOSPITAL_STAFF">Hospital Staff</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </label>
 
-        <form className="card space-y-2" onSubmit={createHospital}>
-          <h2 className="font-semibold">Add Hospital</h2>
-          <input className="w-full rounded border p-2" placeholder="Email" value={hospitalForm.email} onChange={(e) => setHospitalForm((v) => ({ ...v, email: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Password" type="password" value={hospitalForm.password} onChange={(e) => setHospitalForm((v) => ({ ...v, password: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Hospital Name" value={hospitalForm.hospitalName} onChange={(e) => setHospitalForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Registration Code" value={hospitalForm.registrationCode} onChange={(e) => setHospitalForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Address" value={hospitalForm.address} onChange={(e) => setHospitalForm((v) => ({ ...v, address: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Location" value={hospitalForm.location} onChange={(e) => setHospitalForm((v) => ({ ...v, location: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Contact Name" value={hospitalForm.contactName} onChange={(e) => setHospitalForm((v) => ({ ...v, contactName: e.target.value }))} required />
-          <input className="w-full rounded border p-2" placeholder="Contact Phone" value={hospitalForm.contactPhone} onChange={(e) => setHospitalForm((v) => ({ ...v, contactPhone: e.target.value }))} required />
-          <button className="btn-primary w-full" type="submit">Create Hospital</button>
-        </form>
-      </div>
+          <label className="text-sm font-semibold">
+            Email
+            <input
+              className="mt-1 w-full rounded border p-2"
+              placeholder="email@example.com"
+              value={accountForm.email}
+              onChange={(e) => setAccountForm((v) => ({ ...v, email: e.target.value }))}
+              required
+            />
+          </label>
+
+          <label className="text-sm font-semibold">
+            Password
+            <input
+              className="mt-1 w-full rounded border p-2"
+              type="password"
+              placeholder="Minimum 8 chars"
+              value={accountForm.password}
+              onChange={(e) => setAccountForm((v) => ({ ...v, password: e.target.value }))}
+              required
+            />
+          </label>
+        </div>
+
+        {accountRole === 'DONOR' ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value }))} required />
+            <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))}>
+              {bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+            </select>
+            <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Emergency Contact Name" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Emergency Contact Phone" value={accountForm.emergencyContactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactPhone: e.target.value }))} required />
+          </div>
+        ) : null}
+
+        {accountRole === 'HOSPITAL_STAFF' ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Address" value={accountForm.address} onChange={(e) => setAccountForm((v) => ({ ...v, address: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Contact Name" value={accountForm.contactName} onChange={(e) => setAccountForm((v) => ({ ...v, contactName: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Contact Phone" value={accountForm.contactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, contactPhone: e.target.value }))} required />
+          </div>
+        ) : null}
+
+        <button className="btn-primary" type="submit">Create Account</button>
+      </form>
 
       <div className="card space-y-3">
         <h2 className="text-xl font-semibold">Users</h2>
