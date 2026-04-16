@@ -57,6 +57,14 @@ export default function AdminManagementPage() {
     contactName: '',
     contactPhone: '',
   });
+  const [editingUser, setEditingUser] = useState<{ id: string; role: Role; isActive: boolean } | null>(null);
+  const [editingDonor, setEditingDonor] = useState<{ id: string; fullName: string; location: string; bloodGroup: string } | null>(null);
+  const [editingHospital, setEditingHospital] = useState<{
+    id: string;
+    hospitalName: string;
+    location: string;
+    contactName: string;
+  } | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -149,20 +157,21 @@ export default function AdminManagementPage() {
     }
   };
 
-  const editUser = async (user: UserItem) => {
-    const roleInput = prompt('Update role (ADMIN, DONOR, HOSPITAL):', formatRole(user.role));
-    const isActive = prompt('Set active status (true/false):', String(user.isActive));
-    if (!roleInput || !isActive) {
+  const editUser = (user: UserItem) => {
+    setEditingUser({ id: user.id, role: user.role, isActive: user.isActive });
+  };
+
+  const updateUser = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) {
       return;
     }
-
-    const normalizedRole = roleInput.toUpperCase() === 'HOSPITAL' ? 'HOSPITAL_STAFF' : roleInput.toUpperCase();
-
     try {
-      await api.patch(`/users/${user.id}`, {
-        role: normalizedRole,
-        isActive: isActive.toLowerCase() === 'true',
+      await api.patch(`/users/${editingUser.id}`, {
+        role: editingUser.role,
+        isActive: editingUser.isActive,
       });
+      setEditingUser(null);
       await loadAll();
     } catch {
       setError('Could not update user.');
@@ -182,17 +191,27 @@ export default function AdminManagementPage() {
     }
   };
 
-  const editDonor = async (donor: DonorItem) => {
-    const fullName = prompt('Full name:', donor.fullName);
-    const location = prompt('Location:', donor.location);
-    const bloodGroup = prompt('Blood group (example O_POS):', donor.bloodGroup);
+  const editDonor = (donor: DonorItem) => {
+    setEditingDonor({
+      id: donor.id,
+      fullName: donor.fullName,
+      location: donor.location,
+      bloodGroup: donor.bloodGroup,
+    });
+  };
 
-    if (!fullName || !location || !bloodGroup) {
+  const updateDonor = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingDonor) {
       return;
     }
-
     try {
-      await api.patch(`/donors/admin/${donor.id}`, { fullName, location, bloodGroup });
+      await api.patch(`/donors/admin/${editingDonor.id}`, {
+        fullName: editingDonor.fullName,
+        location: editingDonor.location,
+        bloodGroup: editingDonor.bloodGroup,
+      });
+      setEditingDonor(null);
       await loadAll();
     } catch {
       setError('Could not update donor.');
@@ -212,17 +231,27 @@ export default function AdminManagementPage() {
     }
   };
 
-  const editHospital = async (hospital: HospitalItem) => {
-    const hospitalName = prompt('Hospital name:', hospital.hospitalName);
-    const location = prompt('Location:', hospital.location);
-    const contactName = prompt('Contact name:', hospital.contactName);
+  const editHospital = (hospital: HospitalItem) => {
+    setEditingHospital({
+      id: hospital.id,
+      hospitalName: hospital.hospitalName,
+      location: hospital.location,
+      contactName: hospital.contactName,
+    });
+  };
 
-    if (!hospitalName || !location || !contactName) {
+  const updateHospital = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingHospital) {
       return;
     }
-
     try {
-      await api.patch(`/hospitals/admin/${hospital.id}`, { hospitalName, location, contactName });
+      await api.patch(`/hospitals/admin/${editingHospital.id}`, {
+        hospitalName: editingHospital.hospitalName,
+        location: editingHospital.location,
+        contactName: editingHospital.contactName,
+      });
+      setEditingHospital(null);
       await loadAll();
     } catch {
       setError('Could not update hospital.');
@@ -345,6 +374,40 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        {editingUser ? (
+          <form className="rounded border bg-gray-50 p-3" onSubmit={updateUser}>
+            <h3 className="mb-2 font-semibold">Edit User</h3>
+            <div className="grid gap-2 md:grid-cols-3">
+              <select
+                className="rounded border p-2"
+                value={editingUser.role}
+                onChange={(e) => setEditingUser((v) => (v ? { ...v, role: e.target.value as Role } : v))}
+              >
+                <option value="DONOR">DONOR</option>
+                <option value="HOSPITAL_STAFF">HOSPITAL</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <select
+                className="rounded border p-2"
+                value={String(editingUser.isActive)}
+                onChange={(e) =>
+                  setEditingUser((v) => (v ? { ...v, isActive: e.target.value === 'true' } : v))
+                }
+              >
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+              <div className="flex gap-2">
+                <button className="btn-primary" type="submit">
+                  Update
+                </button>
+                <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingUser(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : null}
       </div>
 
       <div className="card space-y-3">
@@ -378,6 +441,46 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        {editingDonor ? (
+          <form className="rounded border bg-gray-50 p-3" onSubmit={updateDonor}>
+            <h3 className="mb-2 font-semibold">Edit Donor</h3>
+            <div className="grid gap-2 md:grid-cols-4">
+              <input
+                className="rounded border p-2"
+                placeholder="Full Name"
+                value={editingDonor.fullName}
+                onChange={(e) => setEditingDonor((v) => (v ? { ...v, fullName: e.target.value } : v))}
+                required
+              />
+              <input
+                className="rounded border p-2"
+                placeholder="Location"
+                value={editingDonor.location}
+                onChange={(e) => setEditingDonor((v) => (v ? { ...v, location: e.target.value } : v))}
+                required
+              />
+              <select
+                className="rounded border p-2"
+                value={editingDonor.bloodGroup}
+                onChange={(e) => setEditingDonor((v) => (v ? { ...v, bloodGroup: e.target.value } : v))}
+              >
+                {bloodGroups.map((group) => (
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button className="btn-primary" type="submit">
+                  Update
+                </button>
+                <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingDonor(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : null}
       </div>
 
       <div className="card space-y-3">
@@ -411,6 +514,46 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        {editingHospital ? (
+          <form className="rounded border bg-gray-50 p-3" onSubmit={updateHospital}>
+            <h3 className="mb-2 font-semibold">Edit Hospital</h3>
+            <div className="grid gap-2 md:grid-cols-4">
+              <input
+                className="rounded border p-2"
+                placeholder="Hospital Name"
+                value={editingHospital.hospitalName}
+                onChange={(e) => setEditingHospital((v) => (v ? { ...v, hospitalName: e.target.value } : v))}
+                required
+              />
+              <input
+                className="rounded border p-2"
+                placeholder="Location"
+                value={editingHospital.location}
+                onChange={(e) => setEditingHospital((v) => (v ? { ...v, location: e.target.value } : v))}
+                required
+              />
+              <input
+                className="rounded border p-2"
+                placeholder="Contact Name"
+                value={editingHospital.contactName}
+                onChange={(e) => setEditingHospital((v) => (v ? { ...v, contactName: e.target.value } : v))}
+                required
+              />
+              <div className="flex gap-2">
+                <button className="btn-primary" type="submit">
+                  Update
+                </button>
+                <button
+                  className="rounded border px-3 py-2"
+                  type="button"
+                  onClick={() => setEditingHospital(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : null}
       </div>
     </section>
   );
