@@ -1,0 +1,2 @@
+-- Initial migration generated for Blood Donation and Emergency Response Platform.
+-- Run `npx prisma migrate dev` to apply in local development.
