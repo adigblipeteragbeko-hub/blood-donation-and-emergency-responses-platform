@@ -32,6 +32,16 @@ type HospitalItem = {
 
 const bloodGroups = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'];
 const formatRole = (role: Role) => (role === 'HOSPITAL_STAFF' ? 'HOSPITAL' : role);
+const bloodGroupLabel: Record<string, string> = {
+  O_POS: 'O_POS (O+)',
+  O_NEG: 'O_NEG (O-)',
+  A_POS: 'A_POS (A+)',
+  A_NEG: 'A_NEG (A-)',
+  B_POS: 'B_POS (B+)',
+  B_NEG: 'B_NEG (B-)',
+  AB_POS: 'AB_POS (AB+)',
+  AB_NEG: 'AB_NEG (AB-)',
+};
 
 export default function AdminManagementPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -323,7 +333,11 @@ export default function AdminManagementPage() {
           <div className="grid gap-3 md:grid-cols-3">
             <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value }))} required />
             <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))}>
-              {bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+              {bloodGroups.map((group) => (
+                <option key={group} value={group}>
+                  {bloodGroupLabel[group]}
+                </option>
+              ))}
             </select>
             <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
             <input className="rounded border p-2" placeholder="Emergency Contact Name" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value }))} required />
@@ -428,7 +442,7 @@ export default function AdminManagementPage() {
                 <tr key={donor.id} className="border-b">
                   <td className="py-2">{donor.fullName}</td>
                   <td className="py-2">{donor.user.email}</td>
-                  <td className="py-2">{donor.bloodGroup}</td>
+                  <td className="py-2">{bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}</td>
                   <td className="py-2">{donor.location}</td>
                   <td className="py-2">
                     <div className="flex gap-2">
@@ -466,7 +480,7 @@ export default function AdminManagementPage() {
               >
                 {bloodGroups.map((group) => (
                   <option key={group} value={group}>
-                    {group}
+                    {bloodGroupLabel[group] ?? group}
                   </option>
                 ))}
               </select>

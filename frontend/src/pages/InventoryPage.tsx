@@ -11,11 +11,11 @@ export default function InventoryPage() {
         </thead>
         <tbody>
           <tr className="border-b">
-            <td className="py-2">O_POS</td>
+            <td className="py-2">O_POS (O+)</td>
             <td className="py-2">12</td>
           </tr>
           <tr>
-            <td className="py-2">A_NEG</td>
+            <td className="py-2">A_NEG (A-)</td>
             <td className="py-2">4</td>
           </tr>
         </tbody>
