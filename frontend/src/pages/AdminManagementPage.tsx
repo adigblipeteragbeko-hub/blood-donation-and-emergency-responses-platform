@@ -31,6 +31,7 @@ type HospitalItem = {
 };
 
 const bloodGroups = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'];
+const formatRole = (role: Role) => (role === 'HOSPITAL_STAFF' ? 'HOSPITAL' : role);
 
 export default function AdminManagementPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -149,15 +150,17 @@ export default function AdminManagementPage() {
   };
 
   const editUser = async (user: UserItem) => {
-    const role = prompt('Update role (ADMIN, DONOR, HOSPITAL_STAFF):', user.role);
+    const roleInput = prompt('Update role (ADMIN, DONOR, HOSPITAL):', formatRole(user.role));
     const isActive = prompt('Set active status (true/false):', String(user.isActive));
-    if (!role || !isActive) {
+    if (!roleInput || !isActive) {
       return;
     }
 
+    const normalizedRole = roleInput.toUpperCase() === 'HOSPITAL' ? 'HOSPITAL_STAFF' : roleInput.toUpperCase();
+
     try {
       await api.patch(`/users/${user.id}`, {
-        role,
+        role: normalizedRole,
         isActive: isActive.toLowerCase() === 'true',
       });
       await loadAll();
@@ -247,7 +250,7 @@ export default function AdminManagementPage() {
 
       <form className="card space-y-3" onSubmit={createAccount}>
         <h2 className="text-xl font-semibold">Add Account</h2>
-        <p className="text-sm text-muted">Allowed account types: Donor, Hospital Staff, Admin.</p>
+        <p className="text-sm text-muted">Allowed account types: Donor, Hospital, Admin.</p>
 
         <div className="grid gap-3 md:grid-cols-3">
           <label className="text-sm font-semibold">
@@ -258,7 +261,7 @@ export default function AdminManagementPage() {
               onChange={(e) => setAccountRole(e.target.value as Role)}
             >
               <option value="DONOR">Donor</option>
-              <option value="HOSPITAL_STAFF">Hospital Staff</option>
+              <option value="HOSPITAL_STAFF">Hospital</option>
               <option value="ADMIN">Admin</option>
             </select>
           </label>
@@ -329,7 +332,7 @@ export default function AdminManagementPage() {
               {users.map((user) => (
                 <tr key={user.id} className="border-b">
                   <td className="py-2">{user.email}</td>
-                  <td className="py-2">{user.role}</td>
+                  <td className="py-2">{formatRole(user.role)}</td>
                   <td className="py-2">{String(user.isActive)}</td>
                   <td className="py-2">
                     <div className="flex gap-2">

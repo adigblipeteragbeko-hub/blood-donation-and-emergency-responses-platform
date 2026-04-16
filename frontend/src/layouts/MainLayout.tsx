@@ -20,7 +20,6 @@ export function MainLayout() {
             ['/donor-login', 'Donor Login'],
             ['/hospital-login', 'Hospital Login'],
             ['/admin-login', 'Admin Login'],
-            ['/admin/management', 'Admin Panel'],
           ].map(([path, label]) => (
             <NavLink
               key={path}
