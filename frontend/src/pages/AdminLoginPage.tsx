@@ -1,5 +1,5 @@
 import { LoginForm } from '../components/LoginForm';
 
 export default function AdminLoginPage() {
-  return <LoginForm title="Admin Login" />;
+  return <LoginForm title="Admin Login" expectedRole="ADMIN" />;
 }

@@ -2,8 +2,10 @@ import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-export function LoginForm({ title }: { title: string }) {
-  const { login } = useAuth();
+type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
+
+export function LoginForm({ title, expectedRole }: { title: string; expectedRole?: Role }) {
+  const { login, logout } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -11,10 +13,19 @@ export function LoginForm({ title }: { title: string }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    setError('');
+
     try {
       await login(email, password);
       const rawUser = localStorage.getItem('user');
       const nextRole = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : undefined;
+
+      if (expectedRole && nextRole !== expectedRole) {
+        logout();
+        setError(`This login is for ${expectedRole === 'HOSPITAL_STAFF' ? 'Hospital' : expectedRole} accounts only.`);
+        return;
+      }
+
       if (nextRole === 'ADMIN') {
         navigate('/admin/management');
       } else {
