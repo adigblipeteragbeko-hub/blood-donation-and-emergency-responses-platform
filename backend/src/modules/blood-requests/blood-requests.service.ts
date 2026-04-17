@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { RequestStatus } from '@prisma/client';
+import { BloodGroup, RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { CreateBloodRequestDto } from './dto/create-blood-request.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
@@ -14,22 +14,81 @@ export class BloodRequestsService {
     private readonly alerts: AlertsService,
   ) {}
 
+  private getCompatibleGroups(group: BloodGroup): BloodGroup[] {
+    const compatibility: Record<BloodGroup, BloodGroup[]> = {
+      O_NEG: ['O_NEG'],
+      O_POS: ['O_POS', 'O_NEG'],
+      A_NEG: ['A_NEG', 'O_NEG'],
+      A_POS: ['A_POS', 'A_NEG', 'O_POS', 'O_NEG'],
+      B_NEG: ['B_NEG', 'O_NEG'],
+      B_POS: ['B_POS', 'B_NEG', 'O_POS', 'O_NEG'],
+      AB_NEG: ['AB_NEG', 'A_NEG', 'B_NEG', 'O_NEG'],
+      AB_POS: ['AB_POS', 'AB_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'O_POS', 'O_NEG'],
+    };
+
+    return compatibility[group];
+  }
+
+  private compatibilityRank(requested: BloodGroup, donor: BloodGroup): number {
+    if (requested === donor) {
+      return 0;
+    }
+    return this.getCompatibleGroups(requested).indexOf(donor) + 1;
+  }
+
   async create(userId: string, dto: CreateBloodRequestDto) {
     const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
     if (!hospital) {
       throw new NotFoundException('Hospital profile not found');
     }
 
-    const matchedDonors = await this.prisma.donor.findMany({
+    const donorTarget = dto.type === 'EMERGENCY' || dto.priority === 'CRITICAL' ? 100 : 50;
+    const compatibleGroups = this.getCompatibleGroups(dto.bloodGroup);
+    const normalizedLocation = dto.location.trim();
+
+    const exactMatchedDonors = await this.prisma.donor.findMany({
       where: {
-        bloodGroup: dto.bloodGroup,
-        location: dto.location,
+        bloodGroup: { in: compatibleGroups },
+        location: { equals: normalizedLocation, mode: 'insensitive' },
         eligibilityStatus: true,
         availabilityStatus: true,
       },
-      select: { id: true, userId: true },
-      take: 50,
+      select: { id: true, userId: true, bloodGroup: true },
+      take: donorTarget,
     });
+
+    const broadenedMatchedDonors =
+      exactMatchedDonors.length < donorTarget
+        ? await this.prisma.donor.findMany({
+            where: {
+              bloodGroup: { in: compatibleGroups },
+              location: { contains: normalizedLocation, mode: 'insensitive' },
+              eligibilityStatus: true,
+              availabilityStatus: true,
+              id: { notIn: exactMatchedDonors.map((d) => d.id) },
+            },
+            select: { id: true, userId: true, bloodGroup: true },
+            take: donorTarget - exactMatchedDonors.length,
+          })
+        : [];
+
+    const rankedDonors = [...exactMatchedDonors, ...broadenedMatchedDonors].sort(
+      (a, b) => this.compatibilityRank(dto.bloodGroup, a.bloodGroup) - this.compatibilityRank(dto.bloodGroup, b.bloodGroup),
+    );
+
+    const matchedDonors = rankedDonors.map((donor) => ({
+      id: donor.id,
+      userId: donor.userId,
+    }));
+
+    if (matchedDonors.length < dto.unitsNeeded && dto.type === 'EMERGENCY') {
+      this.alerts.notifyCritical('LOW_MATCH_COVERAGE', {
+        requestLocation: normalizedLocation,
+        bloodGroup: dto.bloodGroup,
+        unitsNeeded: dto.unitsNeeded,
+        matchedDonors: matchedDonors.length,
+      });
+    }
 
     const request = await this.prisma.bloodRequest.create({
       data: {
@@ -38,7 +97,7 @@ export class BloodRequestsService {
         unitsNeeded: dto.unitsNeeded,
         type: dto.type,
         priority: dto.priority,
-        location: dto.location,
+        location: normalizedLocation,
         requiredBy: new Date(dto.requiredBy),
         notes: dto.notes,
         status: RequestStatus.MATCHING,
@@ -64,8 +123,8 @@ export class BloodRequestsService {
           data: {
             userId: donor.userId,
             bloodRequestId: request.id,
-            title: `Urgent ${dto.bloodGroup} blood request`,
-            body: `Hospital in ${dto.location} needs ${dto.unitsNeeded} units.`,
+            title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} ${dto.bloodGroup} blood request`,
+            body: `Hospital in ${normalizedLocation} needs ${dto.unitsNeeded} units.`,
             channel: 'IN_APP',
             delivered: true,
           },

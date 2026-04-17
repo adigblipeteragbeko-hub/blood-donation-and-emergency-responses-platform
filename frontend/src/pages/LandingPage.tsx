@@ -1,6 +1,33 @@
 import { Link } from 'react-router-dom';
 
 export default function LandingPage() {
+  const solvedChallenges = [
+    {
+      challenge: 'Slow emergency donor discovery',
+      solution: 'Automatic donor matching now uses blood compatibility plus location filtering to mobilize donors faster.',
+    },
+    {
+      challenge: 'No centralized, real-time system',
+      solution: 'One platform now combines donors, hospitals, requests, inventory, appointments, and notifications.',
+    },
+    {
+      challenge: 'Manual paperwork and communication delays',
+      solution: 'Digital forms, role-based dashboards, and in-app alerts replace manual call chains.',
+    },
+    {
+      challenge: 'Poor emergency response visibility',
+      solution: 'Emergency requests are tracked by priority and status with auditable actions and operational alerts.',
+    },
+    {
+      challenge: 'Weak donor engagement and retention',
+      solution: 'Donors manage profile, eligibility, availability, and donation activity in one account.',
+    },
+    {
+      challenge: 'Security and scalability concerns',
+      solution: 'JWT auth, RBAC, validation, rate limiting, audit logs, and indexed PostgreSQL data model are in place.',
+    },
+  ];
+
   return (
     <section className="space-y-6">
       <div className="legacy-panel grid gap-6 md:grid-cols-2 md:items-center">
@@ -39,6 +66,21 @@ export default function LandingPage() {
         <div className="legacy-panel">
           <h3 className="mb-2 text-xl font-bold text-primary">Emergency</h3>
           <p className="text-gray-700">Urgent requests are matched quickly by blood group and location.</p>
+        </div>
+      </div>
+
+      <div className="legacy-panel space-y-4">
+        <h2 className="text-3xl font-bold text-primary">Challenges Solved In This Platform</h2>
+        <p className="text-gray-700">
+          Based on your reviewed research gaps, these are now implemented directly in this project.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {solvedChallenges.map((item) => (
+            <article key={item.challenge} className="rounded-lg border border-red-100 bg-white p-4 shadow-sm">
+              <h3 className="text-lg font-bold text-primary">{item.challenge}</h3>
+              <p className="mt-2 text-sm text-gray-700">{item.solution}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>

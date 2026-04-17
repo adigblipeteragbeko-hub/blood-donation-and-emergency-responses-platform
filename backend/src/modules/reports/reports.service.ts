@@ -21,19 +21,46 @@ export class ReportsService {
 
   async summary(filter: ReportFilterDto) {
     const where = this.getDateFilter(filter);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [bloodStock, donations, requests, emergencies] = await Promise.all([
+    const [bloodStock, donations, requests, emergencies, demandByGroup] = await Promise.all([
       this.prisma.inventoryItem.groupBy({ by: ['bloodGroup'], _sum: { availableUnits: true } }),
       this.prisma.donation.count({ where }),
       this.prisma.bloodRequest.count({ where }),
       this.prisma.bloodRequest.count({ where: { ...where, type: 'EMERGENCY' } }),
+      this.prisma.bloodRequest.groupBy({
+        by: ['bloodGroup'],
+        where: { createdAt: { gte: thirtyDaysAgo } },
+        _count: { _all: true },
+      }),
     ]);
+
+    const stockByGroup = new Map(bloodStock.map((item) => [item.bloodGroup, item._sum.availableUnits ?? 0]));
+    const totalRecentDemand = demandByGroup.reduce((sum, item) => sum + item._count._all, 0);
+    const projected7DayDemand = Math.ceil((totalRecentDemand / 30) * 7);
+    const shortageRisk = demandByGroup.map((item) => {
+      const currentStock = stockByGroup.get(item.bloodGroup) ?? 0;
+      const ratio = currentStock === 0 ? item._count._all : item._count._all / currentStock;
+      const riskLevel = currentStock === 0 || ratio >= 2 ? 'CRITICAL' : ratio >= 1 ? 'HIGH' : ratio >= 0.5 ? 'MEDIUM' : 'LOW';
+      return {
+        bloodGroup: item.bloodGroup,
+        recentRequests: item._count._all,
+        currentStock,
+        riskLevel,
+      };
+    });
 
     return {
       bloodStock,
       donationActivity: { totalDonations: donations },
       requestFulfillment: { totalRequests: requests },
       emergencyResponse: { totalEmergencyRequests: emergencies },
+      predictiveAnalytics: {
+        windowDays: 30,
+        projected7DayDemand,
+        shortageRisk,
+      },
     };
   }
 }

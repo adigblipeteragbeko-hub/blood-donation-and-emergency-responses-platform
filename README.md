@@ -74,6 +74,7 @@ FINAL PROJECT/
     App.tsx
     package.json
   docs/
+    CHALLENGES_SOLVED.md
     MOBILE_VISION.md
     ROLLBACK.md
     SECURITY.md
@@ -126,6 +127,11 @@ Core backend modules:
 - `AppointmentsModule`: appointment booking and status updates.
 - `NotificationsModule`: in-app notification feed and delivery status updates.
 - `ReportsModule`: blood stock, donation activity, request, emergency summaries.
+
+Research-challenge upgrades now included:
+- Smarter emergency donor matching using blood compatibility + location strategy.
+- Low match coverage critical alerts for emergency requests.
+- Predictive shortage analytics (30-day demand window + 7-day projection + risk by blood group).
 
 API route summary:
 - `POST /auth/register`
@@ -283,6 +289,7 @@ docker compose up --build
 ## Mobile App Vision Structure and Screen List
 See:
 - `docs/MOBILE_VISION.md`
+- `docs/CHALLENGES_SOLVED.md` for mapped challenge-to-solution implementation.
 
 Current screens scaffolded:
 - Donor Login/Register
