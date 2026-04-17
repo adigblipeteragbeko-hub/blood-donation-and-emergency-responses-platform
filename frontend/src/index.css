@@ -19,3 +19,15 @@ body {
 .btn-primary {
   @apply rounded-lg bg-primary px-4 py-2 font-semibold text-white hover:bg-red-800;
 }
+
+.legacy-panel {
+  @apply rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm;
+}
+
+.legacy-title {
+  @apply text-4xl font-extrabold text-primary;
+}
+
+.legacy-input {
+  @apply w-full rounded border border-gray-300 bg-white px-3 py-2;
+}

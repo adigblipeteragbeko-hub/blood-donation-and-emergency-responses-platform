@@ -5,42 +5,51 @@ export function MainLayout() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-white text-text md:grid md:grid-cols-[250px_1fr]">
-      <aside className="border-b border-r border-gray-200 bg-white md:min-h-screen">
-        <div className="px-5 py-5">
-          <Link to="/" className="text-xl font-bold text-primary">
-            Blood Response Platform
+    <div className="min-h-screen bg-white text-text">
+      <header className="border-b border-red-300 bg-primary">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <Link to="/" className="rounded-md bg-white/95 px-3 py-2 text-lg font-bold text-primary shadow-sm">
+            Donation Desk
           </Link>
-        </div>
 
-        <nav className="flex flex-wrap gap-2 px-3 pb-4 md:flex-col md:gap-1">
-          {[
-            ['/', 'Home'],
-            ['/about', 'About'],
-            ['/donor-login', 'Donor Login'],
-            ['/hospital-login', 'Hospital Login'],
-            ['/admin-login', 'Admin Login'],
-          ].map(([path, label]) => (
+          <nav className="flex flex-wrap items-center gap-2 text-sm">
+            {[
+              ['/', 'Home'],
+              ['/donor-login', 'Donors'],
+              ['/hospital-login', 'Hospitals'],
+              ['/request', 'Request'],
+              ['/how-to-donate', 'How To Donate'],
+              ['/about', 'About Us'],
+              ['/contact', 'Contact'],
+            ].map(([path, label]) => (
+              <NavLink
+                key={path}
+                to={path}
+                className={({ isActive }) =>
+                  `${isActive ? 'bg-black/30' : 'bg-transparent'} rounded-md px-3 py-2 font-semibold text-white hover:bg-black/20`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
             <NavLink
-              key={path}
-              to={path}
+              to="/admin-login"
               className={({ isActive }) =>
-                `${isActive ? 'bg-red-50 text-primary' : 'text-text'} rounded-md px-3 py-2 text-sm hover:bg-red-50`
+                `${isActive ? 'bg-black/30' : 'bg-white/20'} rounded-md px-3 py-2 font-semibold text-white hover:bg-black/20`
               }
             >
-              {label}
+              Admin
             </NavLink>
-          ))}
+            {user ? (
+              <button className="rounded-md bg-white px-3 py-2 font-semibold text-primary" onClick={logout}>
+                Logout
+              </button>
+            ) : null}
+          </nav>
+        </div>
+      </header>
 
-          {user ? (
-            <button className="btn-primary mt-1 md:mt-3" onClick={logout}>
-              Logout
-            </button>
-          ) : null}
-        </nav>
-      </aside>
-
-      <main className="px-4 py-6 md:px-8">
+      <main className="mx-auto max-w-7xl px-4 py-6">
         <Outlet />
       </main>
     </div>

@@ -1,10 +1,20 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
 
-export function LoginForm({ title, expectedRole }: { title: string; expectedRole?: Role }) {
+export function LoginForm({
+  title,
+  expectedRole,
+  subtitle,
+  footer,
+}: {
+  title: string;
+  expectedRole?: Role;
+  subtitle?: string;
+  footer?: ReactNode;
+}) {
   const { login, logout } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -37,13 +47,14 @@ export function LoginForm({ title, expectedRole }: { title: string; expectedRole
   };
 
   return (
-    <form onSubmit={submit} className="card mx-auto w-full max-w-md space-y-3">
-      <h1 className="text-xl font-bold text-primary">{title}</h1>
+    <form onSubmit={submit} className="legacy-panel mx-auto w-full max-w-xl space-y-3">
+      <h1 className="text-center text-4xl font-bold text-primary">{title}</h1>
+      {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
       {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
       <label className="block text-sm font-semibold">
         Email
         <input
-          className="mt-1 w-full rounded border border-gray-300 p-2"
+          className="legacy-input mt-1"
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -53,7 +64,7 @@ export function LoginForm({ title, expectedRole }: { title: string; expectedRole
       <label className="block text-sm font-semibold">
         Password
         <input
-          className="mt-1 w-full rounded border border-gray-300 p-2"
+          className="legacy-input mt-1"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -61,8 +72,9 @@ export function LoginForm({ title, expectedRole }: { title: string; expectedRole
         />
       </label>
       <button className="btn-primary w-full" type="submit">
-        Sign In
+        Login
       </button>
+      {footer ? <div className="flex justify-center gap-5 pt-1 text-sm">{footer}</div> : null}
     </form>
   );
 }
