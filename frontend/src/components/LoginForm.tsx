@@ -20,6 +20,7 @@ export function LoginForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -32,6 +33,7 @@ export function LoginForm({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setSubmitting(true);
 
     try {
       await login(email, password);
@@ -55,6 +57,8 @@ export function LoginForm({
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
       setError(extracted ?? 'Login failed. Check credentials and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -87,8 +91,8 @@ export function LoginForm({
           required
         />
       </label>
-      <button className="btn-primary w-full" type="submit">
-        Login
+      <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
+        {submitting ? 'Signing in...' : 'Login'}
       </button>
       {footer ? <div className="flex justify-center gap-5 pt-1 text-sm">{footer}</div> : null}
     </form>

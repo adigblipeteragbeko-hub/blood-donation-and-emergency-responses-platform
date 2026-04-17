@@ -1,15 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { bloodGroups } from '../constants/blood-groups';
 
 export default function DonorRegisterPage() {
   const navigate = useNavigate();
   const emptyForm = {
-    username: '',
+    fullName: '',
     email: '',
-    age: '',
-    weight: '',
-    address: '',
+    bloodGroup: '',
+    location: '',
     phone: '',
     password: '',
   };
@@ -18,6 +18,7 @@ export default function DonorRegisterPage() {
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => setForm({ ...emptyForm }), 50);
@@ -28,17 +29,29 @@ export default function DonorRegisterPage() {
     e.preventDefault();
     setError('');
     setMessage('');
+    setSubmitting(true);
 
     try {
       await api.post('/auth/register', {
         email: form.email,
         password: form.password,
         role: 'DONOR',
+        donorProfile: {
+          fullName: form.fullName,
+          bloodGroup: form.bloodGroup,
+          location: form.location,
+          emergencyContactName: form.fullName,
+          emergencyContactPhone: form.phone,
+        },
       });
       setForm({ ...emptyForm });
       navigate('/verify-email', { state: { email: form.email, role: 'donor' } });
-    } catch {
-      setError('Registration failed. Email might already exist.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Registration failed. Email might already exist.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -48,15 +61,21 @@ export default function DonorRegisterPage() {
       {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
       <form className="space-y-2" onSubmit={submit} autoComplete="off">
-        <input className="legacy-input" name="donor_signup_username" autoComplete="off" placeholder="Username" value={form.username} onChange={(e) => setForm((v) => ({ ...v, username: e.target.value }))} required />
+        <input className="legacy-input" name="donor_signup_fullname" autoComplete="off" placeholder="Full Name" value={form.fullName} onChange={(e) => setForm((v) => ({ ...v, fullName: e.target.value }))} required />
         <input className="legacy-input" name="donor_signup_email" autoComplete="off" placeholder="Email Address" type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required />
-        <input className="legacy-input" name="donor_signup_age" autoComplete="off" placeholder="Enter Age" value={form.age} onChange={(e) => setForm((v) => ({ ...v, age: e.target.value }))} required />
-        <input className="legacy-input" name="donor_signup_weight" autoComplete="off" placeholder="Enter Weight (kg)" value={form.weight} onChange={(e) => setForm((v) => ({ ...v, weight: e.target.value }))} required />
-        <input className="legacy-input" name="donor_signup_address" autoComplete="off" placeholder="Enter your address" value={form.address} onChange={(e) => setForm((v) => ({ ...v, address: e.target.value }))} required />
+        <select className="legacy-input" name="donor_signup_blood_group" value={form.bloodGroup} onChange={(e) => setForm((v) => ({ ...v, bloodGroup: e.target.value }))} required>
+          <option value="">Select Blood Group</option>
+          {bloodGroups.map((group) => (
+            <option key={group.value} value={group.value}>
+              {group.label}
+            </option>
+          ))}
+        </select>
+        <input className="legacy-input" name="donor_signup_location" autoComplete="off" placeholder="Location" value={form.location} onChange={(e) => setForm((v) => ({ ...v, location: e.target.value }))} required />
         <input className="legacy-input" name="donor_signup_phone" autoComplete="off" placeholder="Enter Mobile Number" value={form.phone} onChange={(e) => setForm((v) => ({ ...v, phone: e.target.value }))} required />
         <input className="legacy-input" name="donor_signup_password" autoComplete="new-password" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required />
-        <button className="btn-primary w-full" type="submit">
-          Register Donor
+        <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
+          {submitting ? 'Registering...' : 'Register Donor'}
         </button>
       </form>
       <div className="flex justify-center gap-5 text-sm">

@@ -17,6 +17,7 @@ export default function HospitalRegisterPage() {
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => setForm({ ...emptyForm }), 50);
@@ -27,6 +28,7 @@ export default function HospitalRegisterPage() {
     e.preventDefault();
     setError('');
     setMessage('');
+    setSubmitting(true);
 
     try {
       await api.post('/auth/register', {
@@ -36,8 +38,12 @@ export default function HospitalRegisterPage() {
       });
       setForm({ ...emptyForm });
       navigate('/verify-email', { state: { email: form.email, role: 'hospital' } });
-    } catch {
-      setError('Registration failed. Email might already exist.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Registration failed. Email might already exist.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -53,8 +59,8 @@ export default function HospitalRegisterPage() {
         <input className="legacy-input" name="hospital_signup_in_charge" autoComplete="off" placeholder="Name of applicant (In-charge)" value={form.inCharge} onChange={(e) => setForm((v) => ({ ...v, inCharge: e.target.value }))} required />
         <input className="legacy-input" name="hospital_signup_contact" autoComplete="off" placeholder="Contact Number (In-charge)" value={form.contact} onChange={(e) => setForm((v) => ({ ...v, contact: e.target.value }))} required />
         <input className="legacy-input" name="hospital_signup_password" autoComplete="new-password" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required />
-        <button className="btn-primary w-full" type="submit">
-          Register Hospital
+        <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
+          {submitting ? 'Registering...' : 'Register Hospital'}
         </button>
       </form>
       <div className="flex justify-center gap-5 text-sm">

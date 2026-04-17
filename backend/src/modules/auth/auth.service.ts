@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
@@ -50,16 +45,44 @@ export class AuthService {
       throw new BadRequestException('Email already in use');
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: payload.email,
-        passwordHash: await argon2.hash(payload.password),
-        role: payload.role as Role,
-        emailVerified: false,
-      },
+    if (payload.role === 'DONOR' && !payload.donorProfile) {
+      throw new BadRequestException('Donor profile details are required');
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: payload.email,
+          passwordHash: await argon2.hash(payload.password),
+          role: payload.role as Role,
+          emailVerified: false,
+        },
+      });
+
+      if (payload.role === 'DONOR' && payload.donorProfile) {
+        await tx.donor.create({
+          data: {
+            userId: createdUser.id,
+            fullName: payload.donorProfile.fullName,
+            bloodGroup: payload.donorProfile.bloodGroup,
+            location: payload.donorProfile.location,
+            eligibilityStatus: true,
+            availabilityStatus: true,
+            emergencyContactName: payload.donorProfile.emergencyContactName,
+            emergencyContactPhone: payload.donorProfile.emergencyContactPhone,
+          },
+        });
+      }
+
+      return createdUser;
     });
 
-    await this.createAndSendVerificationCode(user.id, user.email);
+    void this.createAndSendVerificationCode(user.id, user.email).catch(() => {
+      this.alertsService.notifyCritical('EMAIL_DELIVERY_FAILED', {
+        userId: user.id,
+        email: user.email,
+      });
+    });
     await this.auditService.log('REGISTER', 'USER', user.id, user.id);
 
     return {
@@ -339,7 +362,6 @@ export class AuthService {
         userId,
         email,
       });
-      throw new InternalServerErrorException('Could not send verification email. Please try again.');
     }
   }
 
