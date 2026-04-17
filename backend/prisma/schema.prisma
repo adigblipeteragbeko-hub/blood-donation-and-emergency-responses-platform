@@ -55,6 +55,7 @@ model User {
   email            String          @unique
   passwordHash     String
   role             Role
+  emailVerified    Boolean         @default(false)
   isActive         Boolean         @default(true)
   failedLoginCount Int             @default(0)
   lockedUntil      DateTime?
@@ -63,6 +64,7 @@ model User {
   donorProfile     Donor?
   hospitalProfile  Hospital?
   refreshTokens    RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
   notifications    Notification[]
   auditLogs        AuditLog[]      @relation("AuditActor")
 
@@ -221,6 +223,19 @@ model PasswordResetToken {
 
   @@index([expiresAt])
   @@index([createdAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model AuditLog {

@@ -36,7 +36,7 @@ export default function DonorRegisterPage() {
         role: 'DONOR',
       });
       setForm({ ...emptyForm });
-      navigate('/donor-login');
+      navigate('/verify-email', { state: { email: form.email, role: 'donor' } });
     } catch {
       setError('Registration failed. Email might already exist.');
     }

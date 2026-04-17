@@ -51,8 +51,10 @@ export function LoginForm({
       } else {
         navigate('/dashboard');
       }
-    } catch {
-      setError('Login failed. Check credentials and try again.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Login failed. Check credentials and try again.');
     }
   };
 

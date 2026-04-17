@@ -9,6 +9,7 @@ import HospitalLoginPage from './pages/HospitalLoginPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import DonorRegisterPage from './pages/DonorRegisterPage';
 import HospitalRegisterPage from './pages/HospitalRegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import RequestPage from './pages/RequestPage';
 import HowToDonatePage from './pages/HowToDonatePage';
 import ContactPage from './pages/ContactPage';
@@ -40,6 +41,7 @@ function App() {
         <Route path="/donor-register" element={<DonorRegisterPage />} />
         <Route path="/hospital-login" element={<HospitalLoginPage />} />
         <Route path="/hospital-register" element={<HospitalRegisterPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/request" element={<RequestPage />} />
         <Route path="/how-to-donate" element={<HowToDonatePage />} />

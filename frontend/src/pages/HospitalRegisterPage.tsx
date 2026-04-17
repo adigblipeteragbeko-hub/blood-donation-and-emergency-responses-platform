@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 export default function HospitalRegisterPage() {
+  const navigate = useNavigate();
   const emptyForm = {
     hospitalName: '',
     email: '',
@@ -33,8 +34,8 @@ export default function HospitalRegisterPage() {
         password: form.password,
         role: 'HOSPITAL_STAFF',
       });
-      setMessage('Hospital registration successful. You can now login as hospital.');
       setForm({ ...emptyForm });
+      navigate('/verify-email', { state: { email: form.email, role: 'hospital' } });
     } catch {
       setError('Registration failed. Email might already exist.');
     }

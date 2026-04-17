@@ -46,6 +46,7 @@ export class UsersService {
         email: dto.email,
         passwordHash: await argon2.hash(dto.password),
         role: dto.role,
+        emailVerified: true,
         isActive: dto.isActive ?? true,
       },
     });

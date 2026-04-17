@@ -14,5 +14,13 @@ export default () => ({
   },
   security: {
     resetTokenTtlMinutes: parseInt(process.env.RESET_TOKEN_TTL_MINUTES ?? '30', 10),
+    emailVerificationTtlMinutes: parseInt(process.env.EMAIL_VERIFICATION_TTL_MINUTES ?? '10', 10),
+  },
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'no-reply@bloodresponse.local',
   },
 });

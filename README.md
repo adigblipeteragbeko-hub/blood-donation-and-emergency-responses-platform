@@ -136,6 +136,8 @@ Research-challenge upgrades now included:
 API route summary:
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/verify-email`
+- `POST /auth/resend-verification`
 - `POST /auth/refresh`
 - `POST /auth/logout`
 - `POST /auth/forgot-password`
@@ -208,6 +210,7 @@ Implemented controls:
 - Role-based route protection.
 - Secure password hashing (Argon2).
 - Password reset tokens hashed with expiry.
+- Email verification code workflow with SMTP delivery before account access.
 - CORS whitelist configuration.
 - Global rate limiting (`ThrottlerModule`).
 - Centralized exception filter with safe error output.
@@ -283,6 +286,7 @@ docker compose up --build
 1. Replace all default JWT secrets and database credentials.
 2. Disable password reset token preview in API response.
 3. Configure real email/SMS providers.
+  - SMTP is required for signup verification (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`).
 4. Enable centralized log shipping and incident alert integrations.
 5. Validate migration backups before applying schema changes.
 
