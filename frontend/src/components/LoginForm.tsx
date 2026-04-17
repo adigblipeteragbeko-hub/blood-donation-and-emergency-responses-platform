@@ -46,6 +46,8 @@ export function LoginForm({
 
       if (nextRole === 'ADMIN') {
         navigate('/admin/management');
+      } else if (nextRole === 'DONOR') {
+        navigate('/donor/dashboard');
       } else {
         navigate('/dashboard');
       }

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { MainLayout } from './layouts/MainLayout';
+import { DonorPortalLayout } from './layouts/DonorPortalLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
@@ -19,6 +20,10 @@ import NotificationsPage from './pages/NotificationsPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminManagementPage from './pages/AdminManagementPage';
 import ReportsPage from './pages/ReportsPage';
+import DonorDashboardPage from './pages/DonorDashboardPage';
+import EligibilityPage from './pages/EligibilityPage';
+import HistoryPage from './pages/HistoryPage';
+import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
@@ -43,6 +48,19 @@ function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/reports" element={<ReportsPage />} />
+        </Route>
+
+        <Route element={<ProtectedRoute roles={['DONOR']} />}>
+          <Route path="/donor" element={<DonorPortalLayout />}>
+            <Route path="dashboard" element={<DonorDashboardPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="eligibility" element={<EligibilityPage />} />
+            <Route path="appointments" element={<AppointmentsPage />} />
+            <Route path="emergency-requests" element={<EmergencyRequestsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="history" element={<HistoryPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
         </Route>
 
         <Route element={<ProtectedRoute roles={['ADMIN']} />}>
