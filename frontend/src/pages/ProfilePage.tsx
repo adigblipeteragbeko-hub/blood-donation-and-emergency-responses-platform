@@ -1,14 +1,16 @@
 import { FormEvent, useState } from 'react';
 
+const emptyProfile = {
+  fullName: '',
+  bloodType: '',
+  phone: '',
+  email: '',
+  location: '',
+};
+
 export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
-  const [profile, setProfile] = useState({
-    fullName: 'Peter Agbeko',
-    bloodType: 'O_POS (O+)',
-    phone: '+233 24 000 0000',
-    email: 'adigblipeteragbeko@gmail.com',
-    location: 'Accra Central',
-  });
+  const [profile, setProfile] = useState(emptyProfile);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -19,8 +21,8 @@ export default function ProfilePage() {
     <section className="card space-y-3">
       <h1 className="text-2xl font-bold text-primary">My Profile</h1>
       <p className="text-sm text-gray-600">Personal info, blood type, contact details, and location.</p>
-      {saved ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">Profile updated successfully.</p> : null}
-      <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
+      {saved ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">Profile saved.</p> : null}
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit} autoComplete="off">
         <label className="text-sm font-semibold">
           Full Name
           <input className="legacy-input mt-1" value={profile.fullName} onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value }))} />

@@ -1,14 +1,16 @@
 import { FormEvent, useState } from 'react';
 
+const emptySettings = {
+  currentPassword: '',
+  newPassword: '',
+  emailNotifications: false,
+  smsNotifications: false,
+  profileVisibility: '',
+};
+
 export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    emailNotifications: true,
-    smsNotifications: false,
-    profileVisibility: 'Private',
-  });
+  const [form, setForm] = useState(emptySettings);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -20,7 +22,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold text-primary">Settings</h1>
       <p className="text-sm text-gray-600">Change password, notification preferences, and privacy settings.</p>
       {saved ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">Settings saved.</p> : null}
-      <form className="space-y-3" onSubmit={submit}>
+      <form className="space-y-3" onSubmit={submit} autoComplete="off">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-semibold">
             Current Password
@@ -43,9 +45,10 @@ export default function SettingsPage() {
 
         <label className="text-sm font-semibold">
           Privacy
-          <select className="legacy-input mt-1" value={form.profileVisibility} onChange={(e) => setForm((v) => ({ ...v, profileVisibility: e.target.value }))}>
-            <option>Private</option>
-            <option>Public</option>
+          <select className="legacy-input mt-1" value={form.profileVisibility} onChange={(e) => setForm((v) => ({ ...v, profileVisibility: e.target.value }))} required>
+            <option value="">Select</option>
+            <option value="Private">Private</option>
+            <option value="Public">Public</option>
           </select>
         </label>
 
