@@ -1,12 +1,58 @@
+import { FormEvent, useState } from 'react';
+
 export default function SettingsPage() {
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    emailNotifications: true,
+    smsNotifications: false,
+    profileVisibility: 'Private',
+  });
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    setSaved(true);
+  };
+
   return (
     <section className="card space-y-3">
       <h1 className="text-2xl font-bold text-primary">Settings</h1>
-      <p className="text-sm text-gray-600">Manage notification preferences, password, and account options.</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button className="btn-primary">Update Preferences</button>
-        <button className="rounded-lg border border-primary px-4 py-2 font-semibold text-primary">Change Password</button>
-      </div>
+      <p className="text-sm text-gray-600">Change password, notification preferences, and privacy settings.</p>
+      {saved ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">Settings saved.</p> : null}
+      <form className="space-y-3" onSubmit={submit}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm font-semibold">
+            Current Password
+            <input className="legacy-input mt-1" type="password" value={form.currentPassword} onChange={(e) => setForm((v) => ({ ...v, currentPassword: e.target.value }))} />
+          </label>
+          <label className="text-sm font-semibold">
+            New Password
+            <input className="legacy-input mt-1" type="password" value={form.newPassword} onChange={(e) => setForm((v) => ({ ...v, newPassword: e.target.value }))} />
+          </label>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input checked={form.emailNotifications} onChange={(e) => setForm((v) => ({ ...v, emailNotifications: e.target.checked }))} type="checkbox" />
+          Email Notifications
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input checked={form.smsNotifications} onChange={(e) => setForm((v) => ({ ...v, smsNotifications: e.target.checked }))} type="checkbox" />
+          SMS Notifications
+        </label>
+
+        <label className="text-sm font-semibold">
+          Privacy
+          <select className="legacy-input mt-1" value={form.profileVisibility} onChange={(e) => setForm((v) => ({ ...v, profileVisibility: e.target.value }))}>
+            <option>Private</option>
+            <option>Public</option>
+          </select>
+        </label>
+
+        <button className="btn-primary" type="submit">
+          Save Settings
+        </button>
+      </form>
     </section>
   );
 }

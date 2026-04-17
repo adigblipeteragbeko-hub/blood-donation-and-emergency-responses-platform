@@ -24,6 +24,11 @@ import DonorDashboardPage from './pages/DonorDashboardPage';
 import EligibilityPage from './pages/EligibilityPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
+import AvailabilityStatusPage from './pages/AvailabilityStatusPage';
+import NearbyCentersPage from './pages/NearbyCentersPage';
+import RewardsPage from './pages/RewardsPage';
+import HealthEligibilityFormPage from './pages/HealthEligibilityFormPage';
+import SupportHelpPage from './pages/SupportHelpPage';
 
 function App() {
   return (
@@ -55,11 +60,16 @@ function App() {
             <Route path="dashboard" element={<DonorDashboardPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="eligibility" element={<EligibilityPage />} />
+            <Route path="history" element={<HistoryPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="emergency-requests" element={<EmergencyRequestsPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="history" element={<HistoryPage />} />
+            <Route path="availability" element={<AvailabilityStatusPage />} />
+            <Route path="nearby-centers" element={<NearbyCentersPage />} />
+            <Route path="rewards" element={<RewardsPage />} />
+            <Route path="health-form" element={<HealthEligibilityFormPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="support" element={<SupportHelpPage />} />
           </Route>
         </Route>
 

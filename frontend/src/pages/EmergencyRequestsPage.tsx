@@ -1,7 +1,5 @@
-const emergencyCards = [
-  { id: 1, bloodGroup: 'O_NEG', hospital: 'City Hospital', priority: 'CRITICAL', status: 'MATCHING' },
-  { id: 2, bloodGroup: 'A_POS', hospital: 'County Medical', priority: 'HIGH', status: 'OPEN' },
-];
+import { useState } from 'react';
+
 const bloodGroupLabel: Record<string, string> = {
   O_POS: 'O_POS (O+)',
   O_NEG: 'O_NEG (O-)',
@@ -13,17 +11,37 @@ const bloodGroupLabel: Record<string, string> = {
   AB_NEG: 'AB_NEG (AB-)',
 };
 
+const initialRequests = [
+  { id: 1, bloodGroup: 'O_NEG', hospital: 'City Hospital', priority: 'CRITICAL', status: 'OPEN', response: '' },
+  { id: 2, bloodGroup: 'A_POS', hospital: 'County Medical', priority: 'HIGH', status: 'OPEN', response: '' },
+];
+
 export default function EmergencyRequestsPage() {
+  const [requests, setRequests] = useState(initialRequests);
+
+  const respond = (id: number, response: 'Accepted' | 'Declined') => {
+    setRequests((prev) => prev.map((item) => (item.id === id ? { ...item, response } : item)));
+  };
+
   return (
     <section className="space-y-3">
       <h1 className="text-2xl font-bold text-primary">Emergency Requests</h1>
-      {emergencyCards.map((card) => (
+      <p className="text-sm text-gray-600">View urgent blood requests and respond (accept/decline).</p>
+      {requests.map((card) => (
         <article key={card.id} className="card border-red-300">
           <p className="font-semibold text-red-700">{card.priority} Priority Alert</p>
           <p>Blood Group: {bloodGroupLabel[card.bloodGroup] ?? card.bloodGroup}</p>
           <p>Hospital: {card.hospital}</p>
           <p>Status: {card.status}</p>
-          <button className="btn-primary mt-3">View and Respond</button>
+          <p className="text-sm text-gray-600">Your response: {card.response || 'Pending'}</p>
+          <div className="mt-3 flex gap-2">
+            <button className="btn-primary" onClick={() => respond(card.id, 'Accepted')} type="button">
+              Accept
+            </button>
+            <button className="rounded-lg border border-red-300 px-4 py-2 font-semibold text-red-700" onClick={() => respond(card.id, 'Declined')} type="button">
+              Decline
+            </button>
+          </div>
         </article>
       ))}
     </section>
