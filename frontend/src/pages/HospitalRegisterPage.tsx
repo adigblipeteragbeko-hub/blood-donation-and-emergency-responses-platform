@@ -1,9 +1,9 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 
 export default function HospitalRegisterPage() {
-  const [form, setForm] = useState({
+  const emptyForm = {
     hospitalId: '',
     hospitalName: '',
     email: '',
@@ -11,9 +11,17 @@ export default function HospitalRegisterPage() {
     inCharge: '',
     contact: '',
     password: '',
+  };
+  const [form, setForm] = useState({
+    ...emptyForm,
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setForm({ ...emptyForm }), 50);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,7 +35,7 @@ export default function HospitalRegisterPage() {
         role: 'HOSPITAL_STAFF',
       });
       setMessage('Hospital registration successful. You can now login as hospital.');
-      setForm({ hospitalId: '', hospitalName: '', email: '', address: '', inCharge: '', contact: '', password: '' });
+      setForm({ ...emptyForm });
     } catch {
       setError('Registration failed. Email might already exist.');
     }
@@ -38,14 +46,14 @@ export default function HospitalRegisterPage() {
       <h1 className="text-center text-5xl font-bold text-primary">Hospital Registration</h1>
       {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
-      <form className="space-y-2" onSubmit={submit}>
-        <input className="legacy-input" placeholder="Hospital Id" value={form.hospitalId} onChange={(e) => setForm((v) => ({ ...v, hospitalId: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Name Of Hospital" value={form.hospitalName} onChange={(e) => setForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Email Address (Hospital)" type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Address of Hospital" value={form.address} onChange={(e) => setForm((v) => ({ ...v, address: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Name of applicant (In-charge)" value={form.inCharge} onChange={(e) => setForm((v) => ({ ...v, inCharge: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Contact Number (In-charge)" value={form.contact} onChange={(e) => setForm((v) => ({ ...v, contact: e.target.value }))} required />
-        <input className="legacy-input" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required />
+      <form className="space-y-2" onSubmit={submit} autoComplete="off">
+        <input className="legacy-input" name="hospital_signup_id" autoComplete="off" placeholder="Hospital Id" value={form.hospitalId} onChange={(e) => setForm((v) => ({ ...v, hospitalId: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_name" autoComplete="off" placeholder="Name Of Hospital" value={form.hospitalName} onChange={(e) => setForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_email" autoComplete="off" placeholder="Email Address (Hospital)" type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_address" autoComplete="off" placeholder="Address of Hospital" value={form.address} onChange={(e) => setForm((v) => ({ ...v, address: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_in_charge" autoComplete="off" placeholder="Name of applicant (In-charge)" value={form.inCharge} onChange={(e) => setForm((v) => ({ ...v, inCharge: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_contact" autoComplete="off" placeholder="Contact Number (In-charge)" value={form.contact} onChange={(e) => setForm((v) => ({ ...v, contact: e.target.value }))} required />
+        <input className="legacy-input" name="hospital_signup_password" autoComplete="new-password" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required />
         <button className="btn-primary w-full" type="submit">
           Register Hospital
         </button>

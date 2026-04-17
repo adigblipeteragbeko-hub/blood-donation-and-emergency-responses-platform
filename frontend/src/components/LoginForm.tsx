@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
@@ -20,6 +20,14 @@ export function LoginForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setEmail('');
+      setPassword('');
+    }, 50);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,7 +55,7 @@ export function LoginForm({
   };
 
   return (
-    <form onSubmit={submit} className="legacy-panel mx-auto w-full max-w-xl space-y-3">
+    <form onSubmit={submit} autoComplete="off" className="legacy-panel mx-auto w-full max-w-xl space-y-3">
       <h1 className="text-center text-4xl font-bold text-primary">{title}</h1>
       {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
       {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -56,6 +64,8 @@ export function LoginForm({
         <input
           className="legacy-input mt-1"
           type="email"
+          name={`manual_email_${title.replace(/\s+/g, '_').toLowerCase()}`}
+          autoComplete="off"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           required
@@ -66,6 +76,8 @@ export function LoginForm({
         <input
           className="legacy-input mt-1"
           type="password"
+          name={`manual_password_${title.replace(/\s+/g, '_').toLowerCase()}`}
+          autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
