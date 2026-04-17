@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 export default function DonorRegisterPage() {
+  const navigate = useNavigate();
   const emptyForm = {
     username: '',
     email: '',
@@ -34,8 +35,8 @@ export default function DonorRegisterPage() {
         password: form.password,
         role: 'DONOR',
       });
-      setMessage('Registration successful. You can now login as donor.');
       setForm({ ...emptyForm });
+      navigate('/donor-login');
     } catch {
       setError('Registration failed. Email might already exist.');
     }

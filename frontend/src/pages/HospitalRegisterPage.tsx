@@ -4,7 +4,6 @@ import api from '../services/api';
 
 export default function HospitalRegisterPage() {
   const emptyForm = {
-    hospitalId: '',
     hospitalName: '',
     email: '',
     address: '',
@@ -47,7 +46,6 @@ export default function HospitalRegisterPage() {
       {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
       <form className="space-y-2" onSubmit={submit} autoComplete="off">
-        <input className="legacy-input" name="hospital_signup_id" autoComplete="off" placeholder="Hospital Id" value={form.hospitalId} onChange={(e) => setForm((v) => ({ ...v, hospitalId: e.target.value }))} required />
         <input className="legacy-input" name="hospital_signup_name" autoComplete="off" placeholder="Name Of Hospital" value={form.hospitalName} onChange={(e) => setForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
         <input className="legacy-input" name="hospital_signup_email" autoComplete="off" placeholder="Email Address (Hospital)" type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required />
         <input className="legacy-input" name="hospital_signup_address" autoComplete="off" placeholder="Address of Hospital" value={form.address} onChange={(e) => setForm((v) => ({ ...v, address: e.target.value }))} required />
