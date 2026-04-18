@@ -145,6 +145,26 @@ export class BloodRequestsService {
     });
   }
 
+  async listMine(userId: string, role: 'ADMIN' | 'HOSPITAL_STAFF') {
+    if (role === 'ADMIN') {
+      return this.listAll();
+    }
+
+    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
+    if (!hospital) {
+      throw new NotFoundException('Hospital profile not found');
+    }
+
+    return this.prisma.bloodRequest.findMany({
+      where: { hospitalId: hospital.id },
+      include: {
+        hospital: { select: { hospitalName: true, location: true } },
+        matchedDonors: { select: { id: true, fullName: true, bloodGroup: true, location: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async updateStatus(id: string, userId: string, dto: UpdateBloodRequestStatusDto) {
     const request = await this.prisma.bloodRequest.findUnique({ where: { id } });
     if (!request) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -9,6 +9,7 @@ import { UpsertHospitalProfileDto } from './dto/upsert-hospital-profile.dto';
 import { HospitalsService } from './hospitals.service';
 import { CreateHospitalAdminDto } from './dto/admin/create-hospital-admin.dto';
 import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
+import { DonorSearchDto } from './dto/donor-search.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -24,6 +25,11 @@ export class HospitalsController {
   @Get('profile')
   getProfile(@CurrentUser() user: { id: string }) {
     return this.hospitalsService.getProfile(user.id);
+  }
+
+  @Get('donor-search')
+  donorSearch(@CurrentUser() user: { id: string }, @Query() query: DonorSearchDto) {
+    return this.hospitalsService.searchDonors(user.id, query);
   }
 
   @Roles(Role.ADMIN)

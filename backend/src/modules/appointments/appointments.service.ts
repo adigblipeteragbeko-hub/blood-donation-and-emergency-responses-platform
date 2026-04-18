@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AuditService } from '../../common/audit/audit.service';
+import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
 
 @Injectable()
 export class AppointmentsService {
@@ -27,6 +28,33 @@ export class AppointmentsService {
     });
 
     await this.audit.log('APPOINTMENT_CREATED', 'APPOINTMENT', userId, appointment.id, dto);
+    return appointment;
+  }
+
+  async createByHospital(userId: string, dto: CreateHospitalAppointmentDto) {
+    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
+    if (!hospital) {
+      throw new NotFoundException('Hospital profile not found');
+    }
+
+    const donor = await this.prisma.donor.findUnique({ where: { id: dto.donorId } });
+    if (!donor) {
+      throw new NotFoundException('Donor not found');
+    }
+
+    const appointment = await this.prisma.appointment.create({
+      data: {
+        donorId: donor.id,
+        hospitalId: hospital.id,
+        scheduledAt: new Date(dto.scheduledAt),
+        notes: dto.notes,
+      },
+      include: {
+        donor: { select: { id: true, fullName: true, bloodGroup: true, location: true } },
+      },
+    });
+
+    await this.audit.log('APPOINTMENT_CREATED_BY_HOSPITAL', 'APPOINTMENT', userId, appointment.id, dto);
     return appointment;
   }
 

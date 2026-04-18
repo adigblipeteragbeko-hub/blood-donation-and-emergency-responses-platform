@@ -6,6 +6,7 @@ import { CreateHospitalAdminDto } from './dto/admin/create-hospital-admin.dto';
 import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import * as argon2 from 'argon2';
 import { Role } from '@prisma/client';
+import { DonorSearchDto } from './dto/donor-search.dto';
 
 @Injectable()
 export class HospitalsService {
@@ -36,6 +37,40 @@ export class HospitalsService {
     }
 
     return hospital;
+  }
+
+  async searchDonors(userId: string, query: DonorSearchDto) {
+    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
+    if (!hospital) {
+      throw new NotFoundException('Hospital profile not found');
+    }
+
+    const locationFilter = query.location?.trim() || hospital.location;
+
+    return this.prisma.donor.findMany({
+      where: {
+        bloodGroup: query.bloodGroup,
+        availabilityStatus: true,
+        eligibilityStatus: true,
+        location: locationFilter
+          ? {
+              contains: locationFilter,
+              mode: 'insensitive',
+            }
+          : undefined,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        fullName: true,
+        bloodGroup: true,
+        location: true,
+        emergencyContactPhone: true,
+        availabilityStatus: true,
+        eligibilityStatus: true,
+      },
+    });
   }
 
   listAllForAdmin() {

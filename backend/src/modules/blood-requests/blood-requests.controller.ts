@@ -26,6 +26,12 @@ export class BloodRequestsController {
     return this.bloodRequestsService.listAll();
   }
 
+  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Get('mine')
+  listMine(@CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF');
+  }
+
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(

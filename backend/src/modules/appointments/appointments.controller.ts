@@ -7,6 +7,7 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
@@ -18,6 +19,12 @@ export class AppointmentsController {
   @Post()
   create(@CurrentUser() user: { id: string }, @Body() dto: CreateAppointmentDto) {
     return this.appointmentsService.create(user.id, dto);
+  }
+
+  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Post('hospital')
+  createByHospital(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalAppointmentDto) {
+    return this.appointmentsService.createByHospital(user.id, dto);
   }
 
   @Roles(Role.ADMIN, Role.DONOR, Role.HOSPITAL_STAFF)
