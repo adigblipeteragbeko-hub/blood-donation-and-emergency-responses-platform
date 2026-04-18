@@ -36,17 +36,20 @@ const rows: PrevalenceRow[] = [
 
 function BloodCircle({ group, percent }: { group: string; percent: number }) {
   const ringStyle: CSSProperties = {
-    background: `conic-gradient(#ef1b1b 0 ${percent}%, #ebebeb ${percent}% 100%)`,
+    background: `conic-gradient(from -90deg, #ff1313 0 ${percent}%, #ececec ${percent}% 100%)`,
   };
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="relative h-44 w-44 rounded-full" style={ringStyle}>
-        <div className="absolute inset-[22px] grid place-items-center rounded-full bg-[#f4f4f4]">
-          <span className="text-7xl font-extrabold text-[#ef1b1b]">{group}</span>
+      <div className="relative h-52 w-52 rounded-full" style={ringStyle}>
+        <div
+          className="absolute inset-[24px] grid place-items-center rounded-full"
+          style={{ background: 'repeating-linear-gradient(45deg, #f6f6f6, #f6f6f6 6px, #f3f3f3 6px, #f3f3f3 12px)' }}
+        >
+          <span className="text-7xl font-extrabold text-[#ff1313]">{group}</span>
         </div>
       </div>
-      <p className="text-4xl font-extrabold text-[#ef1b1b]">{percent}%</p>
+      <p className="text-[42px] font-extrabold text-[#ff1313]">{percent}%</p>
     </div>
   );
 }
@@ -93,23 +96,38 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div className="space-y-6 rounded-xl border border-red-100 bg-[#f4f4f4] px-5 py-8 md:px-10">
-        <header className="space-y-2 text-center">
-          <h2 className="text-5xl font-bold text-primary">Someone needs your blood type</h2>
-          <p className="text-4xl font-medium text-[#8e9ab7]">Blood Type Prevalence In Ghana</p>
+      <div className="bg-[#f2f2f2] px-4 py-10 md:px-14">
+        <header className="space-y-3 text-center">
+          <h2 className="text-5xl font-semibold text-primary md:text-7xl">Someone needs your blood type</h2>
+          <p className="text-3xl font-medium text-[#8d98b5] md:text-5xl">Blood Type Prevalence In Ghana</p>
         </header>
 
-        {rows.map((row) => (
-          <article key={`${row.left.group}-${row.right.group}`} className="border-t border-[#ef1b1b] py-8">
-            <div className="grid items-center gap-6 md:grid-cols-[1fr_1.4fr_1fr]">
+        <div className="relative mt-10 border-t border-[#e2e2e2]">
+          <div className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-[#e2e2e2] bg-[#f2f2f2]" />
+        </div>
+
+        {rows.map((row, index) => (
+          <article
+            key={`${row.left.group}-${row.right.group}`}
+            className={`${index === 0 ? 'border-t-0' : ''} border-t border-[#ff1313] py-10`}
+          >
+            <div className="grid items-center gap-8 md:grid-cols-[1fr_1.45fr_1fr]">
               <BloodCircle group={row.left.group} percent={row.left.percent} />
-              <p className="text-5xl leading-tight text-[#4a4a4a]">{row.description}</p>
+              <p className="text-[25px] leading-tight text-[#494949] md:text-[52px]">
+                {row.description.split(' ').map((word) =>
+                  ['Group', 'A', 'B', 'AB', 'O'].includes(word) ? (
+                    <strong key={`${row.left.group}-${word}`}>{`${word} `}</strong>
+                  ) : (
+                    `${word} `
+                  ),
+                )}
+              </p>
               <BloodCircle group={row.right.group} percent={row.right.percent} />
             </div>
           </article>
         ))}
 
-        <p className="border-t border-[#ef1b1b] pt-7 text-4xl leading-tight text-[#4a4a4a]">
+        <p className="border-t border-[#ff1313] pt-8 text-[25px] leading-tight text-[#4a4a4a] md:text-[46px]">
           No matter your blood type, your blood is always needed to save someone&apos;s life.{' '}
           <Link className="font-semibold text-primary underline" to="/donor-register">
             Sign up to be a blood donor
