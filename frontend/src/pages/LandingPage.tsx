@@ -59,13 +59,21 @@ const rows: PrevalenceRow[] = [
 ];
 
 function BloodCircle({ group, percent, ring }: { group: string; percent: number; ring: number }) {
-  const ringStyle: CSSProperties & { '--target': string } = {
-    '--target': `${ring}%`,
+  const radius = 95;
+  const circumference = 2 * Math.PI * radius;
+  const progressOffset = circumference * (1 - ring / 100);
+  const ringStyle: CSSProperties & { '--progress-offset': string; '--circumference': string } = {
+    '--progress-offset': `${progressOffset}px`,
+    '--circumference': `${circumference}px`,
   };
 
   return (
     <div className="blood-group-circle-wrap">
       <div className="blood-group-ring" style={ringStyle}>
+        <svg className="blood-group-svg" viewBox="0 0 220 220" aria-hidden="true">
+          <circle className="blood-group-track" cx="110" cy="110" r={radius} />
+          <circle className="blood-group-progress" cx="110" cy="110" r={radius} />
+        </svg>
         <div className="blood-group-center">
           <span className="blood-group-label">{group}</span>
         </div>
