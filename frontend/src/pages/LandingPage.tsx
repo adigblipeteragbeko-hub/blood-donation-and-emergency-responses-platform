@@ -59,8 +59,8 @@ const rows: PrevalenceRow[] = [
 ];
 
 function BloodCircle({ group, percent, ring }: { group: string; percent: number; ring: number }) {
-  const ringStyle: CSSProperties = {
-    background: `conic-gradient(from -90deg, #ff1313 0 ${ring}%, #ececec ${ring}% 100%)`,
+  const ringStyle: CSSProperties & { '--target': string } = {
+    '--target': `${ring}%`,
   };
 
   return (

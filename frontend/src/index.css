@@ -12,6 +12,12 @@ body {
   margin: 0;
 }
 
+@property --fill {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
 .card {
   @apply rounded-xl border border-gray-200 bg-white p-5 shadow-sm;
 }
@@ -98,15 +104,17 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  transition: transform 220ms ease;
 }
 
 .blood-group-ring {
+  --fill: 0%;
+  --target: 0%;
   width: 198px;
   height: 198px;
   border-radius: 999px;
   position: relative;
-  transition: transform 220ms ease, box-shadow 220ms ease;
+  background: conic-gradient(from -90deg, #ff1313 0 var(--fill), #ececec var(--fill) 100%);
+  transition: --fill 900ms ease-out, transform 220ms ease, box-shadow 220ms ease;
 }
 
 .blood-group-center {
@@ -131,16 +139,12 @@ body {
   font-size: 50px;
   line-height: 1;
   font-weight: 700;
-  transition: transform 220ms ease;
 }
 
-.blood-group-circle-wrap:hover .blood-group-ring {
+.blood-group-ring:hover {
+  --fill: var(--target);
   transform: scale(1.04);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
-}
-
-.blood-group-circle-wrap:hover .blood-group-percent {
-  transform: translateY(2px);
 }
 
 .blood-row-description {
