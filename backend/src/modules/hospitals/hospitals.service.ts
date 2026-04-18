@@ -59,6 +59,7 @@ export class HospitalsService {
           email: dto.email,
           passwordHash: await argon2.hash(dto.password),
           role: Role.HOSPITAL_STAFF,
+          emailVerified: true,
         },
       });
 

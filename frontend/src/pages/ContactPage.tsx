@@ -14,7 +14,7 @@ export default function ContactPage() {
           </button>
         ))}
       </div>
-      <p className="text-sm text-gray-600">Email support: support@donationdesk.org</p>
+      <p className="text-sm text-gray-600">Support: +233 544515775 | +233 554287342</p>
     </section>
   );
 }

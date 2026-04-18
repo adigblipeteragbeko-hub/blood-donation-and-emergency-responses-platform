@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateHospitalAdminDto {
   @IsEmail()
@@ -6,6 +6,9 @@ export class CreateHospitalAdminDto {
 
   @IsString()
   @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).+$/, {
+    message: 'Password must include uppercase, lowercase, and special character',
+  })
   password!: string;
 
   @IsString()

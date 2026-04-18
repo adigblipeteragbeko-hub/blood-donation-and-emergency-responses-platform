@@ -1,5 +1,5 @@
 import { BloodGroup } from '@prisma/client';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateDonorAdminDto {
   @IsEmail()
@@ -7,6 +7,9 @@ export class CreateDonorAdminDto {
 
   @IsString()
   @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).+$/, {
+    message: 'Password must include uppercase, lowercase, and special character',
+  })
   password!: string;
 
   @IsString()

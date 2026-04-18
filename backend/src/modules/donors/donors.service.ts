@@ -81,6 +81,7 @@ export class DonorsService {
           email: dto.email,
           passwordHash: await argon2.hash(dto.password),
           role: Role.DONOR,
+          emailVerified: true,
         },
       });
 

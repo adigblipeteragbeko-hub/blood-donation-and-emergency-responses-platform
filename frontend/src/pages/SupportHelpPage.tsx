@@ -27,7 +27,7 @@ export default function SupportHelpPage() {
         ))}
       </div>
       <div className="rounded border border-red-200 bg-red-50 p-3 text-sm">
-        Contact support: <span className="font-semibold">support@bloodresponse.org</span> | +233 20 555 0144
+        Contact support: <span className="font-semibold">+233 544515775</span> | +233 554287342
       </div>
     </section>
   );

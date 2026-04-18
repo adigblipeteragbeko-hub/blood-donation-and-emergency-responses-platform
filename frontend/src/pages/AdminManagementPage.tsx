@@ -42,6 +42,7 @@ const bloodGroupLabel: Record<string, string> = {
   AB_POS: 'AB_POS (AB+)',
   AB_NEG: 'AB_NEG (AB-)',
 };
+const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 
 export default function AdminManagementPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -55,7 +56,7 @@ export default function AdminManagementPage() {
     email: '',
     password: '',
     fullName: '',
-    bloodGroup: 'O_POS',
+    bloodGroup: '',
     location: '',
     eligibilityStatus: true,
     availabilityStatus: true,
@@ -105,7 +106,7 @@ export default function AdminManagementPage() {
       email: '',
       password: '',
       fullName: '',
-      bloodGroup: 'O_POS',
+      bloodGroup: '',
       location: '',
       eligibilityStatus: true,
       availabilityStatus: true,
@@ -119,9 +120,18 @@ export default function AdminManagementPage() {
     });
   };
 
+  useEffect(() => {
+    resetAccountForm();
+  }, [accountRole]);
+
   const createAccount = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!passwordRule.test(accountForm.password)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, and special character.');
+      return;
+    }
 
     try {
       if (accountRole === 'ADMIN') {
@@ -162,8 +172,10 @@ export default function AdminManagementPage() {
 
       resetAccountForm();
       await loadAll();
-    } catch {
-      setError('Could not create account. Check required fields for selected account type.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not create account. Check required fields for selected account type.');
     }
   };
 
@@ -287,7 +299,7 @@ export default function AdminManagementPage() {
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
 
-      <form className="card space-y-3" onSubmit={createAccount}>
+      <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
         <h2 className="text-xl font-semibold">Add Account</h2>
         <p className="text-sm text-muted">Allowed account types: Donor, Hospital, Admin.</p>
 
@@ -310,6 +322,8 @@ export default function AdminManagementPage() {
             <input
               className="mt-1 w-full rounded border p-2"
               placeholder="email@example.com"
+              name="admin_create_email"
+              autoComplete="off"
               value={accountForm.email}
               onChange={(e) => setAccountForm((v) => ({ ...v, email: e.target.value }))}
               required
@@ -322,6 +336,8 @@ export default function AdminManagementPage() {
               className="mt-1 w-full rounded border p-2"
               type="password"
               placeholder="Minimum 8 chars"
+              name="admin_create_password"
+              autoComplete="new-password"
               value={accountForm.password}
               onChange={(e) => setAccountForm((v) => ({ ...v, password: e.target.value }))}
               required
@@ -332,7 +348,8 @@ export default function AdminManagementPage() {
         {accountRole === 'DONOR' ? (
           <div className="grid gap-3 md:grid-cols-3">
             <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value }))} required />
-            <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))}>
+            <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))} required>
+              <option value="">Select Blood Group</option>
               {bloodGroups.map((group) => (
                 <option key={group} value={group}>
                   {bloodGroupLabel[group]}
