@@ -34,7 +34,9 @@ body {
 
 .blood-prevalence-section {
   background: #f1f1f1;
-  padding: 40px 72px 28px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 36px 28px 24px;
 }
 
 .blood-prevalence-header {
@@ -44,7 +46,7 @@ body {
 .blood-prevalence-title {
   margin: 0;
   color: #c8102e;
-  font-size: 68px;
+  font-size: clamp(48px, 4.2vw, 74px);
   line-height: 1.1;
   font-weight: 500;
 }
@@ -52,7 +54,7 @@ body {
 .blood-prevalence-subtitle {
   margin: 18px 0 0;
   color: #8f9bb6;
-  font-size: 48px;
+  font-size: clamp(32px, 2.8vw, 56px);
   line-height: 1.2;
   font-weight: 500;
 }
@@ -85,9 +87,10 @@ body {
 
 .blood-row-grid {
   display: grid;
-  grid-template-columns: 1fr 1.25fr 1fr;
-  gap: 18px;
+  grid-template-columns: 260px minmax(520px, 1fr) 260px;
+  gap: 36px;
   align-items: center;
+  justify-content: center;
 }
 
 .blood-group-circle-wrap {
@@ -98,8 +101,8 @@ body {
 }
 
 .blood-group-ring {
-  width: 252px;
-  height: 252px;
+  width: 228px;
+  height: 228px;
   border-radius: 999px;
   position: relative;
 }
@@ -114,7 +117,7 @@ body {
 }
 
 .blood-group-label {
-  font-size: 84px;
+  font-size: 74px;
   line-height: 1;
   font-weight: 700;
   color: #ff1313;
@@ -123,7 +126,7 @@ body {
 .blood-group-percent {
   margin: 0;
   color: #ff1313;
-  font-size: 52px;
+  font-size: 46px;
   line-height: 1;
   font-weight: 700;
 }
@@ -131,8 +134,8 @@ body {
 .blood-row-description {
   margin: 0;
   color: #454545;
-  font-size: 56px;
-  line-height: 1.46;
+  font-size: clamp(22px, 2.1vw, 30px);
+  line-height: 1.45;
   font-weight: 500;
 }
 
@@ -142,10 +145,10 @@ body {
 
 .blood-bottom-note {
   border-top: 1px solid #ff1d1d;
-  padding-top: 40px;
+  padding-top: 32px;
   margin: 0;
   color: #4a4a4a;
-  font-size: 48px;
+  font-size: clamp(26px, 2.5vw, 42px);
   line-height: 1.45;
   font-weight: 500;
 }
@@ -154,6 +157,7 @@ body {
   color: #d10f28;
   text-decoration: underline;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 @media (max-width: 1279px) {
@@ -172,7 +176,7 @@ body {
   .blood-row-grid {
     grid-template-columns: 1fr;
     gap: 20px;
-    text-align: center;
+    text-align: left;
   }
 
   .blood-group-ring {
