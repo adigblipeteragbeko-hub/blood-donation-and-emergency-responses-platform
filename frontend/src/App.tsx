@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { MainLayout } from './layouts/MainLayout';
 import { DonorPortalLayout } from './layouts/DonorPortalLayout';
+import { HospitalPortalLayout } from './layouts/HospitalPortalLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
@@ -30,6 +31,19 @@ import NearbyCentersPage from './pages/NearbyCentersPage';
 import RewardsPage from './pages/RewardsPage';
 import HealthEligibilityFormPage from './pages/HealthEligibilityFormPage';
 import SupportHelpPage from './pages/SupportHelpPage';
+import HospitalDashboardPage from './pages/HospitalDashboardPage';
+import HospitalInventoryPage from './pages/HospitalInventoryPage';
+import HospitalRequestBloodPage from './pages/HospitalRequestBloodPage';
+import HospitalActiveRequestsPage from './pages/HospitalActiveRequestsPage';
+import HospitalDonorSearchPage from './pages/HospitalDonorSearchPage';
+import HospitalAppointmentsPage from './pages/HospitalAppointmentsPage';
+import HospitalNotificationsPage from './pages/HospitalNotificationsPage';
+import HospitalReportsPage from './pages/HospitalReportsPage';
+import HospitalEmergencyRequestsPage from './pages/HospitalEmergencyRequestsPage';
+import HospitalStaffManagementPage from './pages/HospitalStaffManagementPage';
+import HospitalProfilePage from './pages/HospitalProfilePage';
+import HospitalSettingsPage from './pages/HospitalSettingsPage';
+import HospitalSupportPage from './pages/HospitalSupportPage';
 
 function App() {
   return (
@@ -72,6 +86,24 @@ function App() {
             <Route path="health-form" element={<HealthEligibilityFormPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="support" element={<SupportHelpPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute roles={['HOSPITAL_STAFF']} />}>
+          <Route path="/hospital" element={<HospitalPortalLayout />}>
+            <Route path="dashboard" element={<HospitalDashboardPage />} />
+            <Route path="inventory" element={<HospitalInventoryPage />} />
+            <Route path="request-blood" element={<HospitalRequestBloodPage />} />
+            <Route path="active-requests" element={<HospitalActiveRequestsPage />} />
+            <Route path="donor-search" element={<HospitalDonorSearchPage />} />
+            <Route path="appointments" element={<HospitalAppointmentsPage />} />
+            <Route path="notifications" element={<HospitalNotificationsPage />} />
+            <Route path="reports" element={<HospitalReportsPage />} />
+            <Route path="emergency-requests" element={<HospitalEmergencyRequestsPage />} />
+            <Route path="staff" element={<HospitalStaffManagementPage />} />
+            <Route path="profile" element={<HospitalProfilePage />} />
+            <Route path="settings" element={<HospitalSettingsPage />} />
+            <Route path="support" element={<HospitalSupportPage />} />
           </Route>
         </Route>
 

@@ -50,6 +50,8 @@ export function LoginForm({
         navigate('/admin/management');
       } else if (nextRole === 'DONOR') {
         navigate('/donor/dashboard');
+      } else if (nextRole === 'HOSPITAL_STAFF') {
+        navigate('/hospital/dashboard');
       } else {
         navigate('/dashboard');
       }
