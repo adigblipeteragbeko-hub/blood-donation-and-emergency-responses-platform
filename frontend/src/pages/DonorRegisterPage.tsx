@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { bloodGroups } from '../constants/blood-groups';
+import { countryCodes } from '../constants/country-codes';
 
 export default function DonorRegisterPage() {
   const navigate = useNavigate();
@@ -10,7 +11,8 @@ export default function DonorRegisterPage() {
     email: '',
     bloodGroup: '',
     location: '',
-    phone: '',
+    countryCode: '+233',
+    phoneNumber: '',
     password: '',
   };
   const [form, setForm] = useState({
@@ -41,7 +43,7 @@ export default function DonorRegisterPage() {
           bloodGroup: form.bloodGroup,
           location: form.location,
           emergencyContactName: form.fullName,
-          emergencyContactPhone: form.phone,
+          emergencyContactPhone: `${form.countryCode}${form.phoneNumber}`,
         },
       });
       setForm({ ...emptyForm });
@@ -61,7 +63,17 @@ export default function DonorRegisterPage() {
       {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
       <form className="space-y-2" onSubmit={submit} autoComplete="off">
-        <input className="legacy-input" name="donor_signup_fullname" autoComplete="off" placeholder="Full Name" value={form.fullName} onChange={(e) => setForm((v) => ({ ...v, fullName: e.target.value }))} required />
+        <input
+          className="legacy-input"
+          name="donor_signup_fullname"
+          autoComplete="off"
+          placeholder="Full Name"
+          value={form.fullName}
+          onChange={(e) => setForm((v) => ({ ...v, fullName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))}
+          pattern="[A-Za-z\s'-]+"
+          title="Name should contain letters only"
+          required
+        />
         <input className="legacy-input" name="donor_signup_email" autoComplete="off" placeholder="Email Address" type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required />
         <select className="legacy-input" name="donor_signup_blood_group" value={form.bloodGroup} onChange={(e) => setForm((v) => ({ ...v, bloodGroup: e.target.value }))} required>
           <option value="">Select Blood Group</option>
@@ -72,7 +84,27 @@ export default function DonorRegisterPage() {
           ))}
         </select>
         <input className="legacy-input" name="donor_signup_location" autoComplete="off" placeholder="Location" value={form.location} onChange={(e) => setForm((v) => ({ ...v, location: e.target.value }))} required />
-        <input className="legacy-input" name="donor_signup_phone" autoComplete="off" placeholder="Enter Mobile Number" value={form.phone} onChange={(e) => setForm((v) => ({ ...v, phone: e.target.value }))} required />
+        <div className="grid grid-cols-[1fr_2fr] gap-2">
+          <select className="legacy-input" value={form.countryCode} onChange={(e) => setForm((v) => ({ ...v, countryCode: e.target.value }))}>
+            {countryCodes.map((code) => (
+              <option key={code.value} value={code.value}>
+                {code.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className="legacy-input"
+            name="donor_signup_phone"
+            autoComplete="off"
+            placeholder="Mobile Number"
+            value={form.phoneNumber}
+            onChange={(e) => setForm((v) => ({ ...v, phoneNumber: e.target.value.replace(/\D/g, '') }))}
+            pattern="\d+"
+            inputMode="numeric"
+            title="Phone number should contain numbers only"
+            required
+          />
+        </div>
         <input className="legacy-input" name="donor_signup_password" autoComplete="new-password" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required />
         <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
           {submitting ? 'Registering...' : 'Register Donor'}

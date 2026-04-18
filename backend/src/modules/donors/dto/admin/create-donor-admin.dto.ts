@@ -13,6 +13,7 @@ export class CreateDonorAdminDto {
   password!: string;
 
   @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Full name should contain letters only' })
   fullName!: string;
 
   @IsEnum(BloodGroup)
@@ -28,9 +29,11 @@ export class CreateDonorAdminDto {
   availabilityStatus!: boolean;
 
   @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Emergency contact name should contain letters only' })
   emergencyContactName!: string;
 
   @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Emergency contact phone must be digits with country code' })
   emergencyContactPhone!: string;
 
   @IsOptional()

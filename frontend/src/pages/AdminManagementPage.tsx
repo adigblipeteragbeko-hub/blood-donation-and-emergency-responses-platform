@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import api from '../services/api';
+import { countryCodes } from '../constants/country-codes';
 
 type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
 
@@ -43,6 +44,7 @@ const bloodGroupLabel: Record<string, string> = {
   AB_NEG: 'AB_NEG (AB-)',
 };
 const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
+const nameRule = /^[A-Za-z\s'-]+$/;
 
 export default function AdminManagementPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -61,11 +63,13 @@ export default function AdminManagementPage() {
     eligibilityStatus: true,
     availabilityStatus: true,
     emergencyContactName: '',
+    emergencyContactCode: '+233',
     emergencyContactPhone: '',
     hospitalName: '',
     registrationCode: '',
     address: '',
     contactName: '',
+    contactCode: '+233',
     contactPhone: '',
   });
   const [editingUser, setEditingUser] = useState<{ id: string; role: Role; isActive: boolean } | null>(null);
@@ -111,11 +115,13 @@ export default function AdminManagementPage() {
       eligibilityStatus: true,
       availabilityStatus: true,
       emergencyContactName: '',
+      emergencyContactCode: '+233',
       emergencyContactPhone: '',
       hospitalName: '',
       registrationCode: '',
       address: '',
       contactName: '',
+      contactCode: '+233',
       contactPhone: '',
     });
   };
@@ -130,6 +136,14 @@ export default function AdminManagementPage() {
 
     if (!passwordRule.test(accountForm.password)) {
       setError('Password must be at least 8 characters and include uppercase, lowercase, and special character.');
+      return;
+    }
+    if (accountRole === 'DONOR' && (!nameRule.test(accountForm.fullName) || !nameRule.test(accountForm.emergencyContactName))) {
+      setError('Donor name fields must contain letters only.');
+      return;
+    }
+    if (accountRole === 'HOSPITAL_STAFF' && !nameRule.test(accountForm.contactName)) {
+      setError('Contact name must contain letters only.');
       return;
     }
 
@@ -153,7 +167,7 @@ export default function AdminManagementPage() {
           eligibilityStatus: accountForm.eligibilityStatus,
           availabilityStatus: accountForm.availabilityStatus,
           emergencyContactName: accountForm.emergencyContactName,
-          emergencyContactPhone: accountForm.emergencyContactPhone,
+          emergencyContactPhone: `${accountForm.emergencyContactCode}${accountForm.emergencyContactPhone}`,
         });
       }
 
@@ -166,7 +180,7 @@ export default function AdminManagementPage() {
           address: accountForm.address,
           location: accountForm.location,
           contactName: accountForm.contactName,
-          contactPhone: accountForm.contactPhone,
+          contactPhone: `${accountForm.contactCode}${accountForm.contactPhone}`,
         });
       }
 
@@ -347,7 +361,7 @@ export default function AdminManagementPage() {
 
         {accountRole === 'DONOR' ? (
           <div className="grid gap-3 md:grid-cols-3">
-            <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))} required>
               <option value="">Select Blood Group</option>
               {bloodGroups.map((group) => (
@@ -357,19 +371,37 @@ export default function AdminManagementPage() {
               ))}
             </select>
             <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
-            <input className="rounded border p-2" placeholder="Emergency Contact Name" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value }))} required />
-            <input className="rounded border p-2" placeholder="Emergency Contact Phone" value={accountForm.emergencyContactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactPhone: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Emergency Contact Name" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
+            <div className="grid grid-cols-[1fr_2fr] gap-2">
+              <select className="rounded border p-2" value={accountForm.emergencyContactCode} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactCode: e.target.value }))}>
+                {countryCodes.map((code) => (
+                  <option key={code.value} value={code.value}>
+                    {code.label}
+                  </option>
+                ))}
+              </select>
+              <input className="rounded border p-2" placeholder="Emergency Contact Number" value={accountForm.emergencyContactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" title="Number field should contain digits only" required />
+            </div>
           </div>
         ) : null}
 
         {accountRole === 'HOSPITAL_STAFF' ? (
           <div className="grid gap-3 md:grid-cols-3">
-            <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
             <input className="rounded border p-2" placeholder="Address" value={accountForm.address} onChange={(e) => setAccountForm((v) => ({ ...v, address: e.target.value }))} required />
             <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
-            <input className="rounded border p-2" placeholder="Contact Name" value={accountForm.contactName} onChange={(e) => setAccountForm((v) => ({ ...v, contactName: e.target.value }))} required />
-            <input className="rounded border p-2" placeholder="Contact Phone" value={accountForm.contactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, contactPhone: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Contact Name" value={accountForm.contactName} onChange={(e) => setAccountForm((v) => ({ ...v, contactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
+            <div className="grid grid-cols-[1fr_2fr] gap-2">
+              <select className="rounded border p-2" value={accountForm.contactCode} onChange={(e) => setAccountForm((v) => ({ ...v, contactCode: e.target.value }))}>
+                {countryCodes.map((code) => (
+                  <option key={code.value} value={code.value}>
+                    {code.label}
+                  </option>
+                ))}
+              </select>
+              <input className="rounded border p-2" placeholder="Contact Number" value={accountForm.contactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, contactPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" title="Number field should contain digits only" required />
+            </div>
           </div>
         ) : null}
 

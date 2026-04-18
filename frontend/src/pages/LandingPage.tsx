@@ -1,33 +1,57 @@
+import { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 
-export default function LandingPage() {
-  const solvedChallenges = [
-    {
-      challenge: 'Slow emergency donor discovery',
-      solution: 'Automatic donor matching now uses blood compatibility plus location filtering to mobilize donors faster.',
-    },
-    {
-      challenge: 'No centralized, real-time system',
-      solution: 'One platform now combines donors, hospitals, requests, inventory, appointments, and notifications.',
-    },
-    {
-      challenge: 'Manual paperwork and communication delays',
-      solution: 'Digital forms, role-based dashboards, and in-app alerts replace manual call chains.',
-    },
-    {
-      challenge: 'Poor emergency response visibility',
-      solution: 'Emergency requests are tracked by priority and status with auditable actions and operational alerts.',
-    },
-    {
-      challenge: 'Weak donor engagement and retention',
-      solution: 'Donors manage profile, eligibility, availability, and donation activity in one account.',
-    },
-    {
-      challenge: 'Security and scalability concerns',
-      solution: 'JWT auth, RBAC, validation, rate limiting, audit logs, and indexed PostgreSQL data model are in place.',
-    },
-  ];
+type PrevalenceRow = {
+  left: { group: string; percent: number };
+  right: { group: string; percent: number };
+  description: string;
+};
 
+const rows: PrevalenceRow[] = [
+  {
+    left: { group: 'A+', percent: 19 },
+    right: { group: 'A-', percent: 2 },
+    description:
+      'Group A blood can be given to patients with blood types A and AB, and blood group A patients can receive types A and O blood.',
+  },
+  {
+    left: { group: 'B+', percent: 21 },
+    right: { group: 'B-', percent: 2 },
+    description:
+      'Group B blood can be given to patients with blood types B and AB, and blood group B patients can receive types B and O blood.',
+  },
+  {
+    left: { group: 'AB+', percent: 3 },
+    right: { group: 'AB-', percent: 1 },
+    description:
+      'Group AB blood can be given to patients with blood type AB, and blood group AB patients can receive any blood type.',
+  },
+  {
+    left: { group: 'O+', percent: 48 },
+    right: { group: 'O-', percent: 4 },
+    description:
+      'Group O blood can be given to patients with all blood types, while blood group O patients can only receive type O blood.',
+  },
+];
+
+function BloodCircle({ group, percent }: { group: string; percent: number }) {
+  const ringStyle: CSSProperties = {
+    background: `conic-gradient(#ef1b1b 0 ${percent}%, #ebebeb ${percent}% 100%)`,
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="relative h-44 w-44 rounded-full" style={ringStyle}>
+        <div className="absolute inset-[22px] grid place-items-center rounded-full bg-[#f4f4f4]">
+          <span className="text-7xl font-extrabold text-[#ef1b1b]">{group}</span>
+        </div>
+      </div>
+      <p className="text-4xl font-extrabold text-[#ef1b1b]">{percent}%</p>
+    </div>
+  );
+}
+
+export default function LandingPage() {
   return (
     <section className="space-y-6">
       <div className="legacy-panel grid gap-6 md:grid-cols-2 md:items-center">
@@ -69,19 +93,29 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div className="legacy-panel space-y-4">
-        <h2 className="text-3xl font-bold text-primary">Challenges Solved In This Platform</h2>
-        <p className="text-gray-700">
-          Based on your reviewed research gaps, these are now implemented directly in this project.
+      <div className="space-y-6 rounded-xl border border-red-100 bg-[#f4f4f4] px-5 py-8 md:px-10">
+        <header className="space-y-2 text-center">
+          <h2 className="text-5xl font-bold text-primary">Someone needs your blood type</h2>
+          <p className="text-4xl font-medium text-[#8e9ab7]">Blood Type Prevalence In Ghana</p>
+        </header>
+
+        {rows.map((row) => (
+          <article key={`${row.left.group}-${row.right.group}`} className="border-t border-[#ef1b1b] py-8">
+            <div className="grid items-center gap-6 md:grid-cols-[1fr_1.4fr_1fr]">
+              <BloodCircle group={row.left.group} percent={row.left.percent} />
+              <p className="text-5xl leading-tight text-[#4a4a4a]">{row.description}</p>
+              <BloodCircle group={row.right.group} percent={row.right.percent} />
+            </div>
+          </article>
+        ))}
+
+        <p className="border-t border-[#ef1b1b] pt-7 text-4xl leading-tight text-[#4a4a4a]">
+          No matter your blood type, your blood is always needed to save someone&apos;s life.{' '}
+          <Link className="font-semibold text-primary underline" to="/donor-register">
+            Sign up to be a blood donor
+          </Link>
+          .
         </p>
-        <div className="grid gap-3 md:grid-cols-2">
-          {solvedChallenges.map((item) => (
-            <article key={item.challenge} className="rounded-lg border border-red-100 bg-white p-4 shadow-sm">
-              <h3 className="text-lg font-bold text-primary">{item.challenge}</h3>
-              <p className="mt-2 text-sm text-gray-700">{item.solution}</p>
-            </article>
-          ))}
-        </div>
       </div>
     </section>
   );

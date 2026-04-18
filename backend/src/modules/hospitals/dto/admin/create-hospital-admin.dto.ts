@@ -12,6 +12,7 @@ export class CreateHospitalAdminDto {
   password!: string;
 
   @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Hospital name should contain letters only' })
   hospitalName!: string;
 
   @IsString()
@@ -24,8 +25,10 @@ export class CreateHospitalAdminDto {
   location!: string;
 
   @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Contact name should contain letters only' })
   contactName!: string;
 
   @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Contact phone must be digits with country code' })
   contactPhone!: string;
 }

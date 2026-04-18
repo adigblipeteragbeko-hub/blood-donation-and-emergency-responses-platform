@@ -1,13 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react';
 import api from '../services/api';
 import { bloodGroups } from '../constants/blood-groups';
+import { countryCodes } from '../constants/country-codes';
 
 type DonorProfileForm = {
   fullName: string;
   bloodGroup: string;
   location: string;
   emergencyContactName: string;
-  emergencyContactPhone: string;
+  emergencyContactCode: string;
+  emergencyContactNumber: string;
   eligibilityStatus: boolean;
   availabilityStatus: boolean;
   notificationEmailEnabled: boolean;
@@ -19,7 +21,8 @@ const emptyProfile: DonorProfileForm = {
   bloodGroup: '',
   location: '',
   emergencyContactName: '',
-  emergencyContactPhone: '',
+  emergencyContactCode: '+233',
+  emergencyContactNumber: '',
   eligibilityStatus: true,
   availabilityStatus: true,
   notificationEmailEnabled: true,
@@ -38,13 +41,15 @@ export default function ProfilePage() {
       try {
         const response = await api.get('/donors/profile');
         const data = response.data?.data;
+        const parsedPhone = `${data?.emergencyContactPhone ?? ''}`.match(/^(\+\d{1,4})(\d+)$/);
 
         setProfile({
           fullName: data?.fullName ?? '',
           bloodGroup: data?.bloodGroup ?? '',
           location: data?.location ?? '',
           emergencyContactName: data?.emergencyContactName ?? '',
-          emergencyContactPhone: data?.emergencyContactPhone ?? '',
+          emergencyContactCode: parsedPhone?.[1] ?? '+233',
+          emergencyContactNumber: parsedPhone?.[2] ?? '',
           eligibilityStatus: data?.eligibilityStatus ?? true,
           availabilityStatus: data?.availabilityStatus ?? true,
           notificationEmailEnabled: data?.notificationEmailEnabled ?? true,
@@ -72,7 +77,7 @@ export default function ProfilePage() {
         bloodGroup: profile.bloodGroup,
         location: profile.location,
         emergencyContactName: profile.emergencyContactName,
-        emergencyContactPhone: profile.emergencyContactPhone,
+        emergencyContactPhone: `${profile.emergencyContactCode}${profile.emergencyContactNumber}`,
         eligibilityStatus: profile.eligibilityStatus,
         availabilityStatus: profile.availabilityStatus,
         notificationEmailEnabled: profile.notificationEmailEnabled,
@@ -99,7 +104,14 @@ export default function ProfilePage() {
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit} autoComplete="off">
         <label className="text-sm font-semibold">
           Full Name
-          <input className="legacy-input mt-1" value={profile.fullName} onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value }))} required />
+          <input
+            className="legacy-input mt-1"
+            value={profile.fullName}
+            onChange={(e) => setProfile((v) => ({ ...v, fullName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))}
+            pattern="[A-Za-z\s'-]+"
+            title="Name should contain letters only"
+            required
+          />
         </label>
         <label className="text-sm font-semibold">
           Blood Group
@@ -114,11 +126,39 @@ export default function ProfilePage() {
         </label>
         <label className="text-sm font-semibold">
           Contact Number
-          <input className="legacy-input mt-1" value={profile.emergencyContactPhone} onChange={(e) => setProfile((v) => ({ ...v, emergencyContactPhone: e.target.value }))} required />
+          <div className="mt-1 grid grid-cols-[1fr_2fr] gap-2">
+            <select
+              className="legacy-input"
+              value={profile.emergencyContactCode}
+              onChange={(e) => setProfile((v) => ({ ...v, emergencyContactCode: e.target.value }))}
+            >
+              {countryCodes.map((code) => (
+                <option key={code.value} value={code.value}>
+                  {code.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="legacy-input"
+              value={profile.emergencyContactNumber}
+              onChange={(e) => setProfile((v) => ({ ...v, emergencyContactNumber: e.target.value.replace(/\D/g, '') }))}
+              pattern="\d+"
+              inputMode="numeric"
+              title="Contact number should contain numbers only"
+              required
+            />
+          </div>
         </label>
         <label className="text-sm font-semibold">
           Emergency Contact Name
-          <input className="legacy-input mt-1" value={profile.emergencyContactName} onChange={(e) => setProfile((v) => ({ ...v, emergencyContactName: e.target.value }))} required />
+          <input
+            className="legacy-input mt-1"
+            value={profile.emergencyContactName}
+            onChange={(e) => setProfile((v) => ({ ...v, emergencyContactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))}
+            pattern="[A-Za-z\s'-]+"
+            title="Name should contain letters only"
+            required
+          />
         </label>
         <label className="text-sm font-semibold sm:col-span-2">
           Location
