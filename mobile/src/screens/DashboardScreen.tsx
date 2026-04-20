@@ -1,15 +1,14 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BLOOD_GROUPS } from '../constants/bloodGroups';
 import { useAuth } from '../hooks/useAuth';
 import { donorApi } from '../services/api';
-import { RootStackParamList } from '../types/navigation';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
+type Props = {
+  onNavigate: (route: 'EmergencyAlerts' | 'Appointments' | 'DonationHistory' | 'Profile' | 'Dashboard') => void;
+};
 
-export function DashboardScreen({ navigation }: Props) {
+export function DashboardScreen({ onNavigate }: Props) {
   const { user, logout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [bloodGroup, setBloodGroup] = useState('-');
@@ -34,11 +33,9 @@ export function DashboardScreen({ navigation }: Props) {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -55,10 +52,10 @@ export function DashboardScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.actions}>
-        <NavButton label="Emergency Alerts" onPress={() => navigation.navigate('EmergencyAlerts')} />
-        <NavButton label="Appointments" onPress={() => navigation.navigate('Appointments')} />
-        <NavButton label="Donation History" onPress={() => navigation.navigate('DonationHistory')} />
-        <NavButton label="Profile" onPress={() => navigation.navigate('Profile')} />
+        <NavButton label="Emergency Alerts" onPress={() => onNavigate('EmergencyAlerts')} />
+        <NavButton label="Appointments" onPress={() => onNavigate('Appointments')} />
+        <NavButton label="Donation History" onPress={() => onNavigate('DonationHistory')} />
+        <NavButton label="Profile" onPress={() => onNavigate('Profile')} />
       </View>
 
       <Pressable style={styles.logoutButton} onPress={() => void logout()}>
@@ -100,4 +97,3 @@ const styles = StyleSheet.create({
   logoutButton: { borderWidth: 1, borderColor: '#c8102e', borderRadius: 8, padding: 12, marginTop: 8 },
   logoutText: { color: '#c8102e', textAlign: 'center', fontWeight: '700' },
 });
-

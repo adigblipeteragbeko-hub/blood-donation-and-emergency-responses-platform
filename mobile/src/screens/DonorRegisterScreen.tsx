@@ -1,13 +1,14 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BLOOD_GROUPS, BloodGroup } from '../constants/bloodGroups';
 import { useAuth } from '../hooks/useAuth';
-import { RootStackParamList } from '../types/navigation';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'DonorRegister'>;
+type Props = {
+  onRegistered: (email: string) => void;
+  onBackToLogin: () => void;
+};
 
-export function DonorRegisterScreen({ navigation }: Props) {
+export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
   const { registerDonor } = useAuth();
   const [form, setForm] = useState({
     fullName: '',
@@ -23,12 +24,25 @@ export function DonorRegisterScreen({ navigation }: Props) {
 
   const submit = async () => {
     setError('');
+    if (!form.fullName.trim()) return setError('Full name is required.');
+    if (!form.email.trim()) return setError('Email is required.');
+    if (!form.password.trim()) return setError('Password is required.');
+    if (form.password.length < 8) return setError('Password must be at least 8 characters.');
+    if (!form.location.trim()) return setError('Location is required.');
+    if (!form.emergencyContactName.trim()) return setError('Emergency contact name is required.');
+    if (!form.emergencyContactPhone.trim()) return setError('Emergency contact phone is required.');
+
     setSubmitting(true);
     try {
       const result = await registerDonor(form);
-      navigation.navigate('VerifyEmail', { email: result.email || form.email.trim() });
+      onRegistered(result.email || form.email.trim());
     } catch (err: any) {
-      setError(err?.response?.data?.error?.message ?? err?.message ?? 'Registration failed.');
+      const raw = err?.response?.data?.error?.message ?? err?.message ?? 'Registration failed.';
+      const message =
+        raw === 'Network Error' || raw?.toLowerCase?.().includes('timeout')
+          ? 'Cannot reach server. Make sure backend is running on port 4000 and phone/PC are on the same Wi-Fi or hotspot.'
+          : raw;
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -37,17 +51,26 @@ export function DonorRegisterScreen({ navigation }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Donor Register</Text>
-      <TextInput style={styles.input} placeholder="Full name" value={form.fullName} onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))} />
+      <Text style={styles.label}>Full Name</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Enter your full name"
+        value={form.fullName}
+        onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))}
+      />
+      <Text style={styles.label}>Email Address</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter your email address"
         autoCapitalize="none"
+        keyboardType="email-address"
         value={form.email}
         onChangeText={(v) => setForm((p) => ({ ...p, email: v }))}
       />
+      <Text style={styles.label}>Password</Text>
       <TextInput
         style={styles.input}
-        placeholder="Password (min 8 chars)"
+        placeholder="Create a password (minimum 8 characters)"
         secureTextEntry
         value={form.password}
         onChangeText={(v) => setForm((p) => ({ ...p, password: v }))}
@@ -66,16 +89,20 @@ export function DonorRegisterScreen({ navigation }: Props) {
         ))}
       </View>
 
-      <TextInput style={styles.input} placeholder="Location" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <Text style={styles.label}>Location</Text>
+      <TextInput style={styles.input} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <Text style={styles.label}>Emergency Contact Name</Text>
       <TextInput
         style={styles.input}
-        placeholder="Emergency contact name"
+        placeholder="Enter emergency contact full name"
         value={form.emergencyContactName}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactName: v }))}
       />
+      <Text style={styles.label}>Emergency Contact Phone</Text>
       <TextInput
         style={styles.input}
-        placeholder="Emergency contact phone (+233...)"
+        placeholder="Enter emergency contact phone number"
+        keyboardType="phone-pad"
         value={form.emergencyContactPhone}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactPhone: v }))}
       />
@@ -85,7 +112,7 @@ export function DonorRegisterScreen({ navigation }: Props) {
       <Pressable style={styles.button} onPress={submit} disabled={submitting}>
         <Text style={styles.buttonText}>{submitting ? 'Registering...' : 'Register'}</Text>
       </Pressable>
-      <Pressable onPress={() => navigation.navigate('DonorLogin')}>
+      <Pressable onPress={onBackToLogin}>
         <Text style={styles.link}>Already registered? Login</Text>
       </Pressable>
     </ScrollView>
@@ -93,7 +120,7 @@ export function DonorRegisterScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, gap: 10, backgroundColor: '#fff' },
+  container: { padding: 20, paddingTop: 48, paddingBottom: 32, gap: 10, backgroundColor: '#fff' },
   title: { fontSize: 28, fontWeight: '700', color: '#c8102e', marginBottom: 8 },
   label: { fontWeight: '600', color: '#374151' },
   input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 12 },
@@ -107,4 +134,3 @@ const styles = StyleSheet.create({
   link: { textAlign: 'center', color: '#c8102e', textDecorationLine: 'underline', marginTop: 8 },
   error: { color: '#b91c1c' },
 });
-

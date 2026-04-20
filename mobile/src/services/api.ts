@@ -1,16 +1,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { NativeModules } from 'react-native';
 import { BloodGroup } from '../constants/bloodGroups';
-import { authStorageKeys } from '../context/AuthContext';
+import { authStorageKeys } from '../constants/storageKeys';
 
 type ApiEnvelope<T> = { success: boolean; data: T };
 const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
+
+function getAutoBaseUrl() {
+  const scriptURL: string = NativeModules?.SourceCode?.scriptURL ?? '';
+  const match = scriptURL.match(/https?:\/\/([^/:]+)/);
+  const hostFromScript = match?.[1] ?? '';
+  const host = process.env.REACT_NATIVE_PACKAGER_HOSTNAME ?? hostFromScript;
+  if (!host) {
+    return 'http://localhost:4000';
+  }
+  return `http://${host}:4000`;
+}
 
 const api = axios.create({
   baseURL:
     process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
     process.env.MOBILE_API_BASE_URL ??
-    'http://localhost:4000',
+    getAutoBaseUrl(),
+  timeout: 6000,
   headers: { 'Content-Type': 'application/json' },
 });
 

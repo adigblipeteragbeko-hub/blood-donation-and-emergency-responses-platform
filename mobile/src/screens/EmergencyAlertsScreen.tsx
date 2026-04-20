@@ -1,5 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BLOOD_GROUPS } from '../constants/bloodGroups';
 import { BloodRequest, donorApi } from '../services/api';
@@ -18,11 +17,9 @@ export function EmergencyAlertsScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -53,4 +50,3 @@ const styles = StyleSheet.create({
   cardTitle: { color: '#991b1b', fontSize: 16, fontWeight: '700' },
   cardText: { color: '#374151' },
 });
-

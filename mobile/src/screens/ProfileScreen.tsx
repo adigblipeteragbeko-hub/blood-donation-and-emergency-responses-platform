@@ -81,17 +81,22 @@ export function ProfileScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>My Profile</Text>
 
-      <TextInput style={styles.input} placeholder="Full name" value={form.fullName} onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))} />
-      <TextInput style={styles.input} placeholder="Location" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <Text style={styles.label}>Full Name</Text>
+      <TextInput style={styles.input} placeholder="Enter your full name" value={form.fullName} onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))} />
+      <Text style={styles.label}>Location</Text>
+      <TextInput style={styles.input} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <Text style={styles.label}>Emergency Contact Name</Text>
       <TextInput
         style={styles.input}
-        placeholder="Emergency contact name"
+        placeholder="Enter emergency contact full name"
         value={form.emergencyContactName}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactName: v }))}
       />
+      <Text style={styles.label}>Emergency Contact Phone</Text>
       <TextInput
         style={styles.input}
-        placeholder="Emergency contact phone (+233...)"
+        placeholder="Enter emergency contact phone number"
+        keyboardType="phone-pad"
         value={form.emergencyContactPhone}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactPhone: v }))}
       />
@@ -166,4 +171,3 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', textAlign: 'center', fontWeight: '700' },
   message: { color: '#166534' },
 });
-

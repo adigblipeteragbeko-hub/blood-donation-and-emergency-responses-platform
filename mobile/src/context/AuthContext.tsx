@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, useEffect, useMemo, useState } from 'react';
-import { authApi, AuthSession, DonorRegisterPayload } from '../services/api';
+import { authStorageKeys } from '../constants/storageKeys';
+import { authApi, DonorRegisterPayload } from '../services/api';
 
 export type AuthUser = {
   id: string;
@@ -18,9 +19,7 @@ type AuthContextValue = {
   logout: () => Promise<void>;
 };
 
-const ACCESS_KEY = 'mobile_access_token';
-const REFRESH_KEY = 'mobile_refresh_token';
-const USER_KEY = 'mobile_user';
+const { ACCESS_KEY, REFRESH_KEY, USER_KEY } = authStorageKeys;
 
 export const AuthContext = createContext<AuthContextValue>({
   user: null,
@@ -97,6 +96,3 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export const authStorageKeys = { ACCESS_KEY, REFRESH_KEY, USER_KEY };
-

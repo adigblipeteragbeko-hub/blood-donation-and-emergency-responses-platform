@@ -1,15 +1,15 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { RootStackParamList } from '../types/navigation';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'VerifyEmail'>;
+type Props = {
+  email: string;
+  onBackToLogin: () => void;
+};
 const EXPIRY_SECONDS = 10 * 60;
 
-export function VerifyEmailScreen({ route, navigation }: Props) {
+export function VerifyEmailScreen({ email, onBackToLogin }: Props) {
   const { verifyEmail, resendVerification } = useAuth();
-  const email = route.params.email;
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
@@ -39,7 +39,7 @@ export function VerifyEmailScreen({ route, navigation }: Props) {
     try {
       await verifyEmail(email, code);
       setSuccess('Email verified. You can now log in.');
-      setTimeout(() => navigation.navigate('DonorLogin'), 700);
+      setTimeout(onBackToLogin, 700);
     } catch (err: any) {
       setError(err?.response?.data?.error?.message ?? err?.message ?? 'Verification failed.');
     } finally {
@@ -103,4 +103,3 @@ const styles = StyleSheet.create({
   success: { color: '#166534' },
   link: { color: '#c8102e', textAlign: 'center', textDecorationLine: 'underline', marginTop: 8 },
 });
-
