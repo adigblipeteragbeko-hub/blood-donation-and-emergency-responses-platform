@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 
 type Props = {
@@ -31,7 +31,8 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboardContainer}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Text style={styles.title}>Donor Login</Text>
       <Text style={styles.label}>Email Address</Text>
       <TextInput
@@ -58,10 +59,12 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
         <Text style={styles.link}>New donor? Register here</Text>
       </Pressable>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardContainer: { flex: 1, backgroundColor: '#fff' },
   container: { flexGrow: 1, padding: 20, paddingTop: 64, justifyContent: 'flex-start', gap: 10, backgroundColor: '#fff' },
   title: { fontSize: 28, fontWeight: '700', color: '#c8102e', marginBottom: 8 },
   label: { fontSize: 14, fontWeight: '600', color: '#374151' },
