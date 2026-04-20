@@ -11,28 +11,28 @@ function getAutoBaseUrl() {
   const scriptURL: string = NativeModules?.SourceCode?.scriptURL ?? '';
   const match = scriptURL.match(/https?:\/\/([^/:]+)/);
   const hostFromScript = match?.[1] ?? '';
-  const host = process.env.REACT_NATIVE_PACKAGER_HOSTNAME ?? hostFromScript;
+  const hostFromEnv = process.env.REACT_NATIVE_PACKAGER_HOSTNAME ?? '';
+  const host = hostFromScript || hostFromEnv;
   if (!host) {
     return 'http://localhost:4000';
   }
   return `http://${host}:4000`;
 }
 
+export const MOBILE_API_BASE_URL =
+  process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
+  process.env.MOBILE_API_BASE_URL ??
+  getAutoBaseUrl();
+
 const api = axios.create({
-  baseURL:
-    process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
-    process.env.MOBILE_API_BASE_URL ??
-    getAutoBaseUrl(),
-  timeout: 6000,
+  baseURL: MOBILE_API_BASE_URL,
+  timeout: 4000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 const healthApi = axios.create({
-  baseURL:
-    process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
-    process.env.MOBILE_API_BASE_URL ??
-    getAutoBaseUrl(),
-  timeout: 2500,
+  baseURL: MOBILE_API_BASE_URL,
+  timeout: 1500,
   headers: { 'Content-Type': 'application/json' },
 });
 

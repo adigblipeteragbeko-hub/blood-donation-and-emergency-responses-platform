@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { connectivityApi } from '../services/api';
+import { connectivityApi, MOBILE_API_BASE_URL } from '../services/api';
 
 type Props = {
   onGoRegister: () => void;
@@ -15,6 +15,18 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
   const [error, setError] = useState('');
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
+
+  const checkConnection = async () => {
+    setIsCheckingConnection(true);
+    try {
+      await connectivityApi.pingBackend();
+      setIsBackendConnected(true);
+    } catch {
+      setIsBackendConnected(false);
+    } finally {
+      setIsCheckingConnection(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -36,7 +48,7 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
       }
     };
 
-    void check();
+    void checkConnection();
     const timer = setInterval(() => {
       void check();
     }, 8000);
@@ -86,13 +98,21 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
         onChangeText={setPassword}
       />
       <View style={[styles.statusBox, isBackendConnected ? styles.statusOk : styles.statusBad]}>
-        <Text style={[styles.statusText, isBackendConnected ? styles.statusTextOk : styles.statusTextBad]}>
-          {isCheckingConnection
-            ? 'Checking backend connection...'
-            : isBackendConnected
-            ? 'Backend Connected'
-            : 'Backend Not Connected'}
-        </Text>
+        <View style={styles.statusRow}>
+          <Text style={[styles.statusText, isBackendConnected ? styles.statusTextOk : styles.statusTextBad]}>
+            {isCheckingConnection
+              ? 'Checking backend connection...'
+              : isBackendConnected
+              ? 'Backend Connected'
+              : 'Backend Not Connected'}
+          </Text>
+          <Pressable style={styles.retryButton} onPress={() => void checkConnection()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+        {!isBackendConnected && !isCheckingConnection ? (
+          <Text style={styles.statusHint}>API: {MOBILE_API_BASE_URL}</Text>
+        ) : null}
       </View>
       {!!error && <Text style={styles.error}>{error}</Text>}
       <Pressable style={styles.button} onPress={onLogin} disabled={submitting}>
@@ -128,4 +148,8 @@ const styles = StyleSheet.create({
   statusText: { fontWeight: '600' },
   statusTextOk: { color: '#166534' },
   statusTextBad: { color: '#991b1b' },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  statusHint: { marginTop: 4, fontSize: 12, color: '#6b7280' },
+  retryButton: { borderWidth: 1, borderColor: '#c8102e', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  retryButtonText: { color: '#c8102e', fontWeight: '700' },
 });
