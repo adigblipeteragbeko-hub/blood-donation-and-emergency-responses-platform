@@ -31,3 +31,21 @@ export function normalizeNationalNumber(rawInput: string, country: CountryPhone)
 export function toE164(country: CountryPhone, nationalNumber: string) {
   return `+${country.dialCode}${nationalNumber}`;
 }
+
+export function splitE164(value: string) {
+  const digits = sanitizePhoneDigits(value);
+  const matchedCountry =
+    COUNTRY_PHONE_OPTIONS
+      .slice()
+      .sort((a, b) => b.dialCode.length - a.dialCode.length)
+      .find((country) => digits.startsWith(country.dialCode)) ?? DEFAULT_COUNTRY_PHONE;
+
+  if (!digits.startsWith(matchedCountry.dialCode)) {
+    return { country: matchedCountry, nationalNumber: '' };
+  }
+
+  return {
+    country: matchedCountry,
+    nationalNumber: digits.slice(matchedCountry.dialCode.length),
+  };
+}
