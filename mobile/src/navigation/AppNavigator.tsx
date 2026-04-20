@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
@@ -14,6 +14,13 @@ import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
 type PublicRoute = 'DonorLogin' | 'DonorRegister' | 'VerifyEmail';
 type PrivateRoute = 'Dashboard' | 'EmergencyAlerts' | 'Appointments' | 'DonationHistory' | 'Profile';
 const SIDEBAR_WIDTH = 250;
+const NAV_ITEMS: Array<{ key: PrivateRoute; label: string }> = [
+  { key: 'Dashboard', label: 'Dashboard' },
+  { key: 'EmergencyAlerts', label: 'Emergency Alerts' },
+  { key: 'Appointments', label: 'Appointments' },
+  { key: 'DonationHistory', label: 'Donation History' },
+  { key: 'Profile', label: 'Profile' },
+];
 
 export function AppNavigator() {
   const { user, loading } = useAuth();
@@ -31,16 +38,16 @@ export function AppNavigator() {
     setMenuOpen(false);
   }, [user?.id]);
 
-  const openMenu = () => {
+  const openMenu = useCallback(() => {
     setMenuOpen(true);
     Animated.timing(mobileSidebarX, {
       toValue: 0,
       duration: 180,
       useNativeDriver: true,
     }).start();
-  };
+  }, [mobileSidebarX]);
 
-  const closeMenu = () => {
+  const closeMenu = useCallback(() => {
     Animated.timing(mobileSidebarX, {
       toValue: -SIDEBAR_WIDTH,
       duration: 170,
@@ -50,7 +57,7 @@ export function AppNavigator() {
         setMenuOpen(false);
       }
     });
-  };
+  }, [mobileSidebarX]);
 
   useEffect(() => {
     if (isDesktop) {
@@ -58,6 +65,34 @@ export function AppNavigator() {
       mobileSidebarX.setValue(-SIDEBAR_WIDTH);
     }
   }, [isDesktop, mobileSidebarX]);
+
+  const edgePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.x0 <= 24 && gestureState.dx > 12,
+        onPanResponderRelease: (_evt, gestureState) => {
+          if (gestureState.dx > 48 && !isDesktop && !menuOpen) {
+            openMenu();
+          }
+        },
+      }),
+    [isDesktop, menuOpen, openMenu],
+  );
+
+  const closePan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.dx < -12,
+        onPanResponderRelease: (_evt, gestureState) => {
+          if (gestureState.dx < -48) {
+            closeMenu();
+          }
+        },
+      }),
+    [closeMenu],
+  );
 
   if (loading) {
     return (
@@ -112,45 +147,6 @@ export function AppNavigator() {
       break;
   }
 
-  const items: Array<{ key: PrivateRoute; label: string }> = useMemo(
-    () => [
-      { key: 'Dashboard', label: 'Dashboard' },
-      { key: 'EmergencyAlerts', label: 'Emergency Alerts' },
-      { key: 'Appointments', label: 'Appointments' },
-      { key: 'DonationHistory', label: 'Donation History' },
-      { key: 'Profile', label: 'Profile' },
-    ],
-    [],
-  );
-
-  const edgePan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.x0 <= 24 && gestureState.dx > 12,
-        onPanResponderRelease: (_evt, gestureState) => {
-          if (gestureState.dx > 48 && !isDesktop && !menuOpen) {
-            openMenu();
-          }
-        },
-      }),
-    [isDesktop, menuOpen],
-  );
-
-  const closePan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.dx < -12,
-        onPanResponderRelease: (_evt, gestureState) => {
-          if (gestureState.dx < -48) {
-            closeMenu();
-          }
-        },
-      }),
-    [],
-  );
-
   return (
     <View style={styles.root}>
       {!isDesktop && !menuOpen ? <View style={styles.edgeSwipeArea} {...edgePan.panHandlers} /> : null}
@@ -163,9 +159,9 @@ export function AppNavigator() {
         </View>
       ) : null}
 
-      <View style={styles.layout}>
+        <View style={styles.layout}>
         {isDesktop ? (
-          <Sidebar items={items} active={privateRoute} onSelect={(route) => setPrivateRoute(route)} />
+          <Sidebar items={NAV_ITEMS} active={privateRoute} onSelect={(route) => setPrivateRoute(route)} />
         ) : null}
         <View style={styles.content}>{authedScreen}</View>
       </View>
@@ -175,7 +171,7 @@ export function AppNavigator() {
           <Pressable style={styles.backdrop} onPress={closeMenu} />
           <Animated.View style={[styles.mobileSidebarWrap, { transform: [{ translateX: mobileSidebarX }] }]} {...closePan.panHandlers}>
             <Sidebar
-              items={items}
+              items={NAV_ITEMS}
               active={privateRoute}
               onSelect={(route) => {
                 setPrivateRoute(route);
