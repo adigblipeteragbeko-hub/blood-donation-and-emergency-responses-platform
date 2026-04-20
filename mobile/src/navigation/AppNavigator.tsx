@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -14,6 +14,8 @@ import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
 type PublicRoute = 'DonorLogin' | 'DonorRegister' | 'VerifyEmail';
 type PrivateRoute = 'Dashboard' | 'EmergencyAlerts' | 'Appointments' | 'DonationHistory' | 'Profile';
 const SIDEBAR_WIDTH = 250;
+const MOBILE_TOP_INSET = Platform.OS === 'ios' ? 52 : 14;
+const MOBILE_BAR_HEIGHT = MOBILE_TOP_INSET + 42;
 const NAV_ITEMS: Array<{ key: PrivateRoute; label: string }> = [
   { key: 'Dashboard', label: 'Dashboard' },
   { key: 'EmergencyAlerts', label: 'Emergency Alerts' },
@@ -151,7 +153,7 @@ export function AppNavigator() {
     <View style={styles.root}>
       {!isDesktop && !menuOpen ? <View style={styles.edgeSwipeArea} {...edgePan.panHandlers} /> : null}
       {!isDesktop ? (
-        <View style={styles.mobileBar}>
+        <View style={[styles.mobileBar, { paddingTop: MOBILE_TOP_INSET, minHeight: MOBILE_BAR_HEIGHT }]}>
           <Pressable style={styles.menuButton} onPress={openMenu}>
             <Text style={styles.menuButtonText}>Menu</Text>
           </Pressable>
@@ -286,7 +288,7 @@ const styles = StyleSheet.create({
   },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
   mobileSidebarWrap: {
-    marginTop: 56,
+    marginTop: MOBILE_BAR_HEIGHT,
     width: SIDEBAR_WIDTH,
     height: '100%',
     backgroundColor: '#fff',
