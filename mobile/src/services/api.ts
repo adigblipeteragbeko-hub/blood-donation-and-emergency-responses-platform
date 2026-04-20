@@ -27,6 +27,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const healthApi = axios.create({
+  baseURL:
+    process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
+    process.env.MOBILE_API_BASE_URL ??
+    getAutoBaseUrl(),
+  timeout: 2500,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem(authStorageKeys.ACCESS_KEY);
   if (token) {
@@ -79,6 +88,13 @@ export const authApi = {
   },
   async logout(refreshToken: string) {
     await api.post('/auth/logout', { refreshToken });
+  },
+};
+
+export const connectivityApi = {
+  async pingBackend() {
+    await healthApi.get('/health');
+    return true;
   },
 };
 
