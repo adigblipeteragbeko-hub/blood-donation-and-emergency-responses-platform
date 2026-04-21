@@ -7,12 +7,36 @@ import { authStorageKeys } from '../constants/storageKeys';
 type ApiEnvelope<T> = { success: boolean; data: T };
 const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
 
-function getAutoBaseUrl() {
+const localhostHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+function getScriptHost() {
   const scriptURL: string = NativeModules?.SourceCode?.scriptURL ?? '';
   const match = scriptURL.match(/https?:\/\/([^/:]+)/);
-  const hostFromScript = match?.[1] ?? '';
-  const hostFromEnv = process.env.REACT_NATIVE_PACKAGER_HOSTNAME ?? '';
-  const host = hostFromScript || hostFromEnv;
+  const hostFromScript = match?.[1]?.trim() ?? '';
+  const hostFromEnv = process.env.REACT_NATIVE_PACKAGER_HOSTNAME?.trim() ?? '';
+  return hostFromScript || hostFromEnv;
+}
+
+function resolveBaseUrl() {
+  const scriptHost = getScriptHost();
+  const explicitBaseUrl =
+    process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL?.trim() ??
+    process.env.MOBILE_API_BASE_URL?.trim() ??
+    '';
+
+  if (explicitBaseUrl) {
+    try {
+      const explicit = new URL(explicitBaseUrl);
+      if (localhostHosts.has(explicit.hostname) && scriptHost && !localhostHosts.has(scriptHost)) {
+        return `${explicit.protocol}//${scriptHost}:${explicit.port || '4000'}`;
+      }
+      return explicitBaseUrl;
+    } catch {
+      // ignore invalid env URL and fall back to script host auto-detection
+    }
+  }
+
+  const host = scriptHost;
   if (!host) {
     return 'http://localhost:4000';
   }
@@ -20,9 +44,7 @@ function getAutoBaseUrl() {
 }
 
 export const MOBILE_API_BASE_URL =
-  process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL ??
-  process.env.MOBILE_API_BASE_URL ??
-  getAutoBaseUrl();
+  resolveBaseUrl();
 
 const api = axios.create({
   baseURL: MOBILE_API_BASE_URL,
