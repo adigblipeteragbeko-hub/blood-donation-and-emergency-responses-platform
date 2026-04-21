@@ -40,7 +40,13 @@ const env = {
 console.log(`Using LAN IP: ${ip}`);
 console.log(`API base: ${env.EXPO_PUBLIC_MOBILE_API_BASE_URL}`);
 
-const child = spawn('npx.cmd', ['expo', 'start', '--lan', '--port', '8081', '-c'], {
+const command = process.platform === 'win32' ? 'cmd.exe' : 'npx';
+const args =
+  process.platform === 'win32'
+    ? ['/d', '/s', '/c', 'npx expo start --lan --port 8081 -c']
+    : ['expo', 'start', '--lan', '--port', '8081', '-c'];
+
+const child = spawn(command, args, {
   stdio: 'inherit',
   env,
   shell: false,
