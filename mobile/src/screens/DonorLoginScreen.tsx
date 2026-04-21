@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { connectivityApi, MOBILE_API_BASE_URL } from '../services/api';
+import { connectivityApi, getMobileApiBaseUrl } from '../services/api';
 
 type Props = {
   onGoRegister: () => void;
@@ -15,9 +15,11 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
   const [error, setError] = useState('');
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [apiBaseUrl, setApiBaseUrl] = useState(getMobileApiBaseUrl());
 
   const checkConnection = async () => {
     setIsCheckingConnection(true);
+    setApiBaseUrl(getMobileApiBaseUrl());
     try {
       await connectivityApi.pingBackend();
       setIsBackendConnected(true);
@@ -111,7 +113,7 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
           </Pressable>
         </View>
         {!isBackendConnected && !isCheckingConnection ? (
-          <Text style={styles.statusHint}>API: {MOBILE_API_BASE_URL}</Text>
+          <Text style={styles.statusHint}>API: {apiBaseUrl}</Text>
         ) : null}
       </View>
       {!!error && <Text style={styles.error}>{error}</Text>}

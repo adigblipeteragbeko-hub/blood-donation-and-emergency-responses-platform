@@ -43,28 +43,33 @@ function resolveBaseUrl() {
   return `http://${host}:4000`;
 }
 
-export const MOBILE_API_BASE_URL =
-  resolveBaseUrl();
-
 const api = axios.create({
-  baseURL: MOBILE_API_BASE_URL,
   timeout: 4000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 const healthApi = axios.create({
-  baseURL: MOBILE_API_BASE_URL,
   timeout: 1500,
   headers: { 'Content-Type': 'application/json' },
 });
 
 api.interceptors.request.use(async (config) => {
+  config.baseURL = resolveBaseUrl();
   const token = await AsyncStorage.getItem(authStorageKeys.ACCESS_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+healthApi.interceptors.request.use((config) => {
+  config.baseURL = resolveBaseUrl();
+  return config;
+});
+
+export function getMobileApiBaseUrl() {
+  return resolveBaseUrl();
+}
 
 export type AuthSession = {
   user: { id: string; email: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' };
