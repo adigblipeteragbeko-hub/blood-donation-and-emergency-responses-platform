@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "expo start"
+    "start": "expo start",
+    "start:lan": "node scripts/start-lan.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { connectivityApi, getMobileApiBaseUrl } from '../services/api';
 
 type Props = {
   onGoRegister: () => void;
@@ -13,53 +12,6 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
-  const [isBackendConnected, setIsBackendConnected] = useState(false);
-  const [apiBaseUrl, setApiBaseUrl] = useState(getMobileApiBaseUrl());
-
-  const checkConnection = async () => {
-    setIsCheckingConnection(true);
-    setApiBaseUrl(getMobileApiBaseUrl());
-    try {
-      await connectivityApi.pingBackend();
-      setIsBackendConnected(true);
-    } catch {
-      setIsBackendConnected(false);
-    } finally {
-      setIsCheckingConnection(false);
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-
-    const check = async () => {
-      try {
-        await connectivityApi.pingBackend();
-        if (active) {
-          setIsBackendConnected(true);
-        }
-      } catch {
-        if (active) {
-          setIsBackendConnected(false);
-        }
-      } finally {
-        if (active) {
-          setIsCheckingConnection(false);
-        }
-      }
-    };
-
-    void checkConnection();
-    const timer = setInterval(() => {
-      void check();
-    }, 8000);
-
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, []);
 
   const onLogin = async () => {
     setError('');
@@ -99,23 +51,6 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
         value={password}
         onChangeText={setPassword}
       />
-      <View style={[styles.statusBox, isBackendConnected ? styles.statusOk : styles.statusBad]}>
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusText, isBackendConnected ? styles.statusTextOk : styles.statusTextBad]}>
-            {isCheckingConnection
-              ? 'Checking backend connection...'
-              : isBackendConnected
-              ? 'Backend Connected'
-              : 'Backend Not Connected'}
-          </Text>
-          <Pressable style={styles.retryButton} onPress={() => void checkConnection()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </Pressable>
-        </View>
-        {!isBackendConnected && !isCheckingConnection ? (
-          <Text style={styles.statusHint}>API: {apiBaseUrl}</Text>
-        ) : null}
-      </View>
       {!!error && <Text style={styles.error}>{error}</Text>}
       <Pressable style={styles.button} onPress={onLogin} disabled={submitting}>
         <Text style={styles.buttonText}>{submitting ? 'Signing in...' : 'Sign In'}</Text>
@@ -138,20 +73,4 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', textAlign: 'center', fontWeight: '700' },
   link: { textAlign: 'center', color: '#c8102e', textDecorationLine: 'underline', marginTop: 8 },
   error: { color: '#b91c1c' },
-  statusBox: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 2,
-  },
-  statusOk: { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
-  statusBad: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  statusText: { fontWeight: '600' },
-  statusTextOk: { color: '#166534' },
-  statusTextBad: { color: '#991b1b' },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  statusHint: { marginTop: 4, fontSize: 12, color: '#6b7280' },
-  retryButton: { borderWidth: 1, borderColor: '#c8102e', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  retryButtonText: { color: '#c8102e', fontWeight: '700' },
 });
