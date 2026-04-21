@@ -12,6 +12,13 @@ body {
   margin: 0;
 }
 
+input::placeholder,
+textarea::placeholder {
+  color: #4b5563;
+  opacity: 1;
+  font-weight: 600;
+}
+
 .card {
   @apply rounded-xl border border-gray-200 bg-white p-5 shadow-sm;
 }

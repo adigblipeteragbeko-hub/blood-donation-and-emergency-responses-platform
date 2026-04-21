@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 type Props = {
   onGoRegister: () => void;
 };
+const PLACEHOLDER_COLOR = '#6b7280';
 
 export function DonorLoginScreen({ onGoRegister }: Props) {
   const { login } = useAuth();
@@ -37,6 +38,7 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
       <Text style={styles.label}>Email Address</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter your email address"
         autoCapitalize="none"
         keyboardType="email-address"
@@ -46,6 +48,7 @@ export function DonorLoginScreen({ onGoRegister }: Props) {
       <Text style={styles.label}>Password</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter your password"
         secureTextEntry
         value={password}

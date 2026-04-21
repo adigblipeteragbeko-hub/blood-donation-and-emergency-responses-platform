@@ -27,6 +27,7 @@ const initialState: FormState = {
   notificationEmailEnabled: true,
   notificationSmsEnabled: false,
 };
+const PLACEHOLDER_COLOR = '#6b7280';
 
 export function ProfileScreen() {
   const [form, setForm] = useState<FormState>(initialState);
@@ -109,12 +110,13 @@ export function ProfileScreen() {
       <Text style={styles.title}>My Profile</Text>
 
       <Text style={styles.label}>Full Name</Text>
-      <TextInput style={styles.input} placeholder="Enter your full name" value={form.fullName} onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))} />
+      <TextInput style={styles.input} placeholderTextColor={PLACEHOLDER_COLOR} placeholder="Enter your full name" value={form.fullName} onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))} />
       <Text style={styles.label}>Location</Text>
-      <TextInput style={styles.input} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <TextInput style={styles.input} placeholderTextColor={PLACEHOLDER_COLOR} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
       <Text style={styles.label}>Emergency Contact Name</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter emergency contact full name"
         value={form.emergencyContactName}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactName: v }))}
@@ -138,6 +140,7 @@ export function ProfileScreen() {
       </View>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder={`${selectedCountry.name}: ${
           selectedCountry.nationalLength + 1
         } digits if starting with 0, else ${selectedCountry.nationalLength}`}

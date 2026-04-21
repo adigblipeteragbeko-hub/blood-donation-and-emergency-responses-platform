@@ -45,52 +45,89 @@ enum PriorityLevel {
 
 enum AppointmentStatus {
   SCHEDULED
+  CONFIRMED
   COMPLETED
   CANCELLED
+  MISSED
   NO_SHOW
 }
 
+enum RequestProgressStatus {
+  PENDING
+  MATCHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryChangeType {
+  ADDED
+  USED
+  EXPIRED
+  ADJUSTED
+}
+
+enum DonorResponseStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  DONATED
+}
+
+enum NotificationType {
+  EMERGENCY_REQUEST
+  REMINDER
+  APPOINTMENT
+  INVENTORY_ALERT
+  SYSTEM
+}
+
 model User {
-  id               String          @id @default(cuid())
-  email            String          @unique
-  passwordHash     String
-  role             Role
-  emailVerified    Boolean         @default(false)
-  isActive         Boolean         @default(true)
-  failedLoginCount Int             @default(0)
-  lockedUntil      DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  donorProfile     Donor?
-  hospitalProfile  Hospital?
-  refreshTokens    RefreshToken[]
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  passwordHash            String
+  role                    Role
+  emailVerified           Boolean                  @default(false)
+  isActive                Boolean                  @default(true)
+  failedLoginCount        Int                      @default(0)
+  lockedUntil             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  donorProfile            Donor?
+  hospitalProfile         Hospital?
+  refreshTokens           RefreshToken[]
   emailVerificationTokens EmailVerificationToken[]
-  notifications    Notification[]
-  auditLogs        AuditLog[]      @relation("AuditActor")
+  notifications           Notification[]
+  auditLogs               AuditLog[]               @relation("AuditActor")
+  bloodRequestUpdates     BloodRequestUpdate[]     @relation("RequestUpdateActor")
+  inventoryUpdates        InventoryItem[]          @relation("InventoryUpdatedBy")
+  inventoryLogs           InventoryLog[]           @relation("InventoryLogActor")
+  donorResponses          DonorResponse[]
 
   @@index([createdAt])
 }
 
 model Donor {
-  id                      String         @id @default(cuid())
-  userId                   String         @unique
+  id                       String          @id @default(cuid())
+  userId                   String          @unique
   fullName                 String
   bloodGroup               BloodGroup
   location                 String
   latitude                 Float?
   longitude                Float?
-  eligibilityStatus        Boolean        @default(true)
-  availabilityStatus       Boolean        @default(true)
+  eligibilityStatus        Boolean         @default(true)
+  availabilityStatus       Boolean         @default(true)
   emergencyContactName     String
   emergencyContactPhone    String
-  notificationEmailEnabled Boolean        @default(true)
-  notificationSmsEnabled   Boolean        @default(false)
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
-  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationEmailEnabled Boolean         @default(true)
+  notificationSmsEnabled   Boolean         @default(false)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   donationHistory          Donation[]
   appointments             Appointment[]
-  donorMatches             BloodRequest[] @relation("MatchedDonors")
+  donorMatches             BloodRequest[]  @relation("MatchedDonors")
+  donorResponses           DonorResponse[]
 
   @@index([bloodGroup])
   @@index([location])
@@ -98,43 +135,52 @@ model Donor {
 }
 
 model Hospital {
-  id               String         @id @default(cuid())
-  userId            String         @unique
-  hospitalName      String
-  registrationCode  String         @unique
-  address           String
-  location          String
-  latitude          Float?
-  longitude         Float?
-  contactName       String
-  contactPhone      String
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bloodRequests     BloodRequest[]
-  inventoryItems    InventoryItem[]
-  appointments      Appointment[]
+  id               String          @id @default(cuid())
+  userId           String          @unique
+  hospitalName     String
+  registrationCode String          @unique
+  address          String
+  location         String
+  latitude         Float?
+  longitude        Float?
+  contactName      String
+  contactPhone     String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodRequests    BloodRequest[]
+  inventoryItems   InventoryItem[]
+  appointments     Appointment[]
+  donations        Donation[]
 
   @@index([location])
   @@index([createdAt])
 }
 
 model BloodRequest {
-  id                     String        @id @default(cuid())
+  id                     String                @id @default(cuid())
   hospitalId             String
+  patientName            String?
+  patientCode            String?
   bloodGroup             BloodGroup
   unitsNeeded            Int
   type                   RequestType
-  priority               PriorityLevel @default(MEDIUM)
-  status                 RequestStatus @default(OPEN)
+  priority               PriorityLevel         @default(MEDIUM)
+  status                 RequestStatus         @default(OPEN)
+  trackingStatus         RequestProgressStatus @default(PENDING)
   location               String
   notes                  String?
+  requestDate            DateTime              @default(now())
   requiredBy             DateTime
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-  hospital               Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  matchedDonors          Donor[]       @relation("MatchedDonors")
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  hospital               Hospital              @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  matchedDonors          Donor[]               @relation("MatchedDonors")
   notificationDispatches Notification[]
+  updates                BloodRequestUpdate[]
+  donorResponses         DonorResponse[]
+  appointments           Appointment[]
+  donations              Donation[]
 
   @@index([status])
   @@index([location])
@@ -143,13 +189,16 @@ model BloodRequest {
 }
 
 model InventoryItem {
-  id            String     @id @default(cuid())
-  hospitalId    String
-  bloodGroup    BloodGroup
+  id             String         @id @default(cuid())
+  hospitalId     String
+  bloodGroup     BloodGroup
   availableUnits Int
-  lastUpdated   DateTime   @updatedAt
-  createdAt     DateTime   @default(now())
-  hospital      Hospital   @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  updatedById    String?
+  lastUpdated    DateTime       @updatedAt
+  createdAt      DateTime       @default(now())
+  hospital       Hospital       @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  updatedBy      User?          @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  logs           InventoryLog[]
 
   @@unique([hospitalId, bloodGroup])
   @@index([bloodGroup])
@@ -157,82 +206,93 @@ model InventoryItem {
 }
 
 model Appointment {
-  id              String            @id @default(cuid())
-  donorId          String
-  hospitalId       String
-  scheduledAt      DateTime
-  status           AppointmentStatus @default(SCHEDULED)
-  notes            String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  donor            Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
-  hospital         Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  id             String            @id @default(cuid())
+  donorId        String
+  hospitalId     String
+  bloodRequestId String?
+  scheduledAt    DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  donor          Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  hospital       Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  bloodRequest   BloodRequest?     @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
   @@index([scheduledAt])
   @@index([createdAt])
 }
 
 model Donation {
-  id            String   @id @default(cuid())
-  donorId        String
-  donatedAt      DateTime
-  unitsDonated   Int
-  location       String
-  notes          String?
-  createdAt      DateTime @default(now())
-  donor          Donor    @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  donorId         String
+  hospitalId      String?
+  bloodRequestId  String?
+  bloodGroup      BloodGroup?
+  donatedAt       DateTime
+  unitsDonated    Int
+  location        String
+  screeningResult String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  donor           Donor         @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  hospital        Hospital?     @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
+  bloodRequest    BloodRequest? @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
 }
 
 model Notification {
-  id              String       @id @default(cuid())
-  userId           String
-  bloodRequestId   String?
-  title            String
-  body             String
-  channel          String
-  delivered        Boolean      @default(false)
-  createdAt        DateTime     @default(now())
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bloodRequest     BloodRequest? @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
+  id             String           @id @default(cuid())
+  userId         String
+  bloodRequestId String?
+  type           NotificationType @default(SYSTEM)
+  title          String
+  body           String
+  channel        String
+  isRead         Boolean          @default(false)
+  delivered      Boolean          @default(false)
+  sentAt         DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodRequest   BloodRequest?    @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
 }
 
 model RefreshToken {
-  id          String   @id @default(cuid())
-  userId      String
-  tokenHash   String
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
   @@index([createdAt])
 }
 
 model PasswordResetToken {
-  id          String   @id @default(cuid())
-  userId      String
-  tokenHash   String   @unique
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([expiresAt])
   @@index([createdAt])
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   codeHash  String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([expiresAt])
@@ -244,10 +304,63 @@ model AuditLog {
   action      String
   entityType  String
   entityId    String?
+  description String?
+  ipAddress   String?
   metadata    Json?
   createdAt   DateTime @default(now())
   actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([action])
+}
+
+model BloodRequestUpdate {
+  id             String                 @id @default(cuid())
+  bloodRequestId String
+  updatedById    String?
+  oldStatus      RequestProgressStatus?
+  newStatus      RequestProgressStatus
+  comment        String?
+  createdAt      DateTime               @default(now())
+  bloodRequest   BloodRequest           @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
+  updatedBy      User?                  @relation("RequestUpdateActor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([bloodRequestId, createdAt])
+  @@index([createdAt])
+}
+
+model InventoryLog {
+  id            String              @id @default(cuid())
+  inventoryId   String
+  changeType    InventoryChangeType
+  unitsChanged  Int
+  previousUnits Int
+  newUnits      Int
+  reason        String?
+  changedById   String?
+  createdAt     DateTime            @default(now())
+  inventory     InventoryItem       @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  changedBy     User?               @relation("InventoryLogActor", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId, createdAt])
+  @@index([createdAt])
+}
+
+model DonorResponse {
+  id             String              @id @default(cuid())
+  bloodRequestId String
+  donorId        String
+  responseStatus DonorResponseStatus @default(PENDING)
+  responseTime   DateTime?
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  bloodRequest   BloodRequest        @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
+  donor          Donor               @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  User           User?               @relation(fields: [userId], references: [id])
+  userId         String?
+
+  @@unique([bloodRequestId, donorId])
+  @@index([responseStatus])
+  @@index([createdAt])
 }

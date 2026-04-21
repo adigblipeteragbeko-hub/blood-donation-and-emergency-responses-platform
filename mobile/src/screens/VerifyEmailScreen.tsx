@@ -7,6 +7,7 @@ type Props = {
   onBackToLogin: () => void;
 };
 const EXPIRY_SECONDS = 10 * 60;
+const PLACEHOLDER_COLOR = '#6b7280';
 
 export function VerifyEmailScreen({ email, onBackToLogin }: Props) {
   const { verifyEmail, resendVerification } = useAuth();
@@ -70,6 +71,7 @@ export function VerifyEmailScreen({ email, onBackToLogin }: Props) {
 
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         keyboardType="number-pad"
         maxLength={6}
         placeholder="Enter code"

@@ -8,6 +8,7 @@ type Props = {
   onRegistered: (email: string) => void;
   onBackToLogin: () => void;
 };
+const PLACEHOLDER_COLOR = '#6b7280';
 
 export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
   const { registerDonor } = useAuth();
@@ -76,6 +77,7 @@ export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
       <Text style={styles.label}>Full Name</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter your full name"
         value={form.fullName}
         onChangeText={(v) => setForm((p) => ({ ...p, fullName: v }))}
@@ -83,6 +85,7 @@ export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
       <Text style={styles.label}>Email Address</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter your email address"
         autoCapitalize="none"
         keyboardType="email-address"
@@ -92,6 +95,7 @@ export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
       <Text style={styles.label}>Password</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Create a password (minimum 8 characters)"
         secureTextEntry
         value={form.password}
@@ -112,10 +116,11 @@ export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
       </View>
 
       <Text style={styles.label}>Location</Text>
-      <TextInput style={styles.input} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
+      <TextInput style={styles.input} placeholderTextColor={PLACEHOLDER_COLOR} placeholder="Enter your city or town" value={form.location} onChangeText={(v) => setForm((p) => ({ ...p, location: v }))} />
       <Text style={styles.label}>Emergency Contact Name</Text>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder="Enter emergency contact full name"
         value={form.emergencyContactName}
         onChangeText={(v) => setForm((p) => ({ ...p, emergencyContactName: v }))}
@@ -139,6 +144,7 @@ export function DonorRegisterScreen({ onRegistered, onBackToLogin }: Props) {
       </View>
       <TextInput
         style={styles.input}
+        placeholderTextColor={PLACEHOLDER_COLOR}
         placeholder={`${selectedCountry.name}: ${
           selectedCountry.nationalLength + 1
         } digits if starting with 0, else ${selectedCountry.nationalLength}`}
