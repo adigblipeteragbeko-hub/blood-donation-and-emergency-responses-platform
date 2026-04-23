@@ -1,6 +1,16 @@
 import { FormEvent, useEffect, useState } from 'react';
 import api from '../services/api';
 import { countryCodes } from '../constants/country-codes';
+import {
+  BloodRequestItem,
+  DonorResponseStatus,
+  InventoryLogItem,
+  RequestProgressStatus,
+  createBloodRequestUpdate,
+  getAllBloodRequests,
+  getInventoryLogs,
+  updateDonorResponse,
+} from '../services/hospital-portal';
 
 type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
 
@@ -52,6 +62,8 @@ export default function AdminManagementPage() {
   const [hospitals, setHospitals] = useState<HospitalItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [requestTracking, setRequestTracking] = useState<BloodRequestItem[]>([]);
+  const [inventoryLogs, setInventoryLogs] = useState<InventoryLogItem[]>([]);
 
   const [accountRole, setAccountRole] = useState<Role>('DONOR');
   const [accountForm, setAccountForm] = useState({
@@ -85,19 +97,45 @@ export default function AdminManagementPage() {
     setLoading(true);
     setError('');
     try {
-      const [usersRes, donorsRes, hospitalsRes] = await Promise.all([
+      const [usersRes, donorsRes, hospitalsRes, requestsData, inventoryLogData] = await Promise.all([
         api.get('/users'),
         api.get('/donors/admin'),
         api.get('/hospitals/admin'),
+        getAllBloodRequests(),
+        getInventoryLogs(),
       ]);
 
       setUsers(usersRes.data.data);
       setDonors(donorsRes.data.data);
       setHospitals(hospitalsRes.data.data);
+      setRequestTracking(requestsData);
+      setInventoryLogs(inventoryLogData);
     } catch {
       setError('Failed to load admin data. Make sure you are logged in as admin.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const addTrackingUpdate = async (requestId: string, newStatus: RequestProgressStatus) => {
+    try {
+      await createBloodRequestUpdate(requestId, { newStatus });
+      await loadAll();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not add tracking update.');
+    }
+  };
+
+  const patchDonorResponse = async (responseId: string, responseStatus: DonorResponseStatus) => {
+    try {
+      await updateDonorResponse(responseId, { responseStatus });
+      await loadAll();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not update donor response.');
     }
   };
 
@@ -617,6 +655,99 @@ export default function AdminManagementPage() {
             </div>
           </form>
         ) : null}
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="text-xl font-semibold">Request Tracking</h2>
+        {requestTracking.length === 0 ? (
+          <p className="text-sm text-muted">No blood request tracking records found.</p>
+        ) : (
+          <div className="space-y-3">
+            {requestTracking.slice(0, 12).map((request) => (
+              <article key={request.id} className="rounded border p-3">
+                <p className="text-sm font-semibold">
+                  {request.hospital?.hospitalName ?? 'Hospital'}: {request.bloodGroup} ({request.unitsNeeded} units)
+                </p>
+                <p className="text-xs text-gray-600">
+                  Workflow {request.status} | Tracking {request.trackingStatus} | Need by{' '}
+                  {new Date(request.requiredBy).toLocaleString()}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(['PENDING', 'MATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as RequestProgressStatus[]).map((status) => (
+                    <button
+                      key={status}
+                      className="rounded border border-red-200 px-2 py-1 text-xs text-red-700"
+                      onClick={() => void addTrackingUpdate(request.id, status)}
+                      type="button"
+                    >
+                      Set {status}
+                    </button>
+                  ))}
+                </div>
+                {request.donorResponses?.length ? (
+                  <div className="mt-3 space-y-2">
+                    {request.donorResponses.map((response) => (
+                      <div key={response.id} className="flex flex-wrap items-center gap-2 rounded border border-gray-100 p-2">
+                        <span className="text-xs">{response.donor.fullName}</span>
+                        <span className="text-xs text-gray-500">{response.responseStatus}</span>
+                        <select
+                          className="rounded border p-1 text-xs"
+                          value={response.responseStatus}
+                          onChange={(e) =>
+                            void patchDonorResponse(response.id, e.target.value as DonorResponseStatus)
+                          }
+                        >
+                          {(['PENDING', 'ACCEPTED', 'DECLINED', 'DONATED'] as DonorResponseStatus[]).map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="text-xl font-semibold">Inventory Log Tracking</h2>
+        {inventoryLogs.length === 0 ? (
+          <p className="text-sm text-muted">No inventory log entries found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2">Hospital</th>
+                  <th className="py-2">Blood Group</th>
+                  <th className="py-2">Type</th>
+                  <th className="py-2">Units</th>
+                  <th className="py-2">By</th>
+                  <th className="py-2">At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventoryLogs.slice(0, 30).map((log) => (
+                  <tr key={log.id} className="border-b">
+                    <td className="py-2">{log.inventory.hospital?.hospitalName ?? '-'}</td>
+                    <td className="py-2">{log.inventory.bloodGroup}</td>
+                    <td className="py-2">{log.changeType}</td>
+                    <td className="py-2">
+                      {log.previousUnits} to {log.newUnits} ({log.unitsChanged >= 0 ? '+' : ''}
+                      {log.unitsChanged})
+                    </td>
+                    <td className="py-2">{log.changedBy?.email ?? 'system'}</td>
+                    <td className="py-2">{new Date(log.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </section>
   );

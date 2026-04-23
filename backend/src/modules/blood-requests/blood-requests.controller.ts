@@ -6,6 +6,8 @@ import { ActiveUserGuard } from '../../common/guards/active-user.guard';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateBloodRequestDto } from './dto/create-blood-request.dto';
+import { CreateBloodRequestUpdateDto } from './dto/create-blood-request-update.dto';
+import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
 import { BloodRequestsService } from './blood-requests.service';
 
@@ -22,8 +24,8 @@ export class BloodRequestsController {
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
   @Get()
-  listAll() {
-    return this.bloodRequestsService.listAll();
+  listAll(@CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.listAll(user.id, user.role);
   }
 
   @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -32,13 +34,51 @@ export class BloodRequestsController {
     return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF');
   }
 
+  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Get(':id')
+  getById(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.getById(id, user.id, user.role);
+  }
+
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: Role },
     @Body() dto: UpdateBloodRequestStatusDto,
   ) {
-    return this.bloodRequestsService.updateStatus(id, user.id, dto);
+    return this.bloodRequestsService.updateStatus(id, user.id, user.role, dto);
+  }
+
+  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Get(':id/updates')
+  listUpdates(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.listUpdates(id, user.id, user.role);
+  }
+
+  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+  @Post(':id/updates')
+  createUpdate(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: Role },
+    @Body() dto: CreateBloodRequestUpdateDto,
+  ) {
+    return this.bloodRequestsService.createUpdate(id, user.id, user.role, dto);
+  }
+
+  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Get(':id/donor-responses')
+  listDonorResponses(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.listDonorResponses(id, user.id, user.role);
+  }
+
+  @Roles(Role.DONOR)
+  @Post(':id/respond')
+  respondToRequest(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() dto: RespondToBloodRequestDto,
+  ) {
+    return this.bloodRequestsService.respondToRequest(id, user.id, dto);
   }
 }
