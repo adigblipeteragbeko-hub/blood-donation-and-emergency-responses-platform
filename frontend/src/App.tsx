@@ -5,6 +5,8 @@ import { HospitalPortalLayout } from './layouts/HospitalPortalLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import DonorLoginPage from './pages/DonorLoginPage';
 import HospitalLoginPage from './pages/HospitalLoginPage';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -44,6 +46,7 @@ import HospitalStaffManagementPage from './pages/HospitalStaffManagementPage';
 import HospitalProfilePage from './pages/HospitalProfilePage';
 import HospitalSettingsPage from './pages/HospitalSettingsPage';
 import HospitalSupportPage from './pages/HospitalSupportPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 function App() {
   return (
@@ -51,15 +54,20 @@ function App() {
       <Route element={<MainLayout />}>
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route path="/donor-login" element={<DonorLoginPage />} />
         <Route path="/donor-register" element={<DonorRegisterPage />} />
         <Route path="/hospital-login" element={<HospitalLoginPage />} />
         <Route path="/hospital-register" element={<HospitalRegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route path="/admin-login" element={<Navigate to="/admin/login" replace />} />
         <Route path="/request" element={<RequestPage />} />
         <Route path="/how-to-donate" element={<HowToDonatePage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/dashboard/donor" element={<Navigate to="/donor/dashboard" replace />} />
+        <Route path="/dashboard/hospital" element={<Navigate to="/hospital/dashboard" replace />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -108,6 +116,7 @@ function App() {
         </Route>
 
         <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
           <Route path="/admin/management" element={<AdminManagementPage />} />
         </Route>
 

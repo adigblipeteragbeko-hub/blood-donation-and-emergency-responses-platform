@@ -16,8 +16,8 @@ export function MainLayout() {
           <nav className="flex flex-wrap items-center gap-2 text-sm">
             {[
               ['/', 'Home'],
-              ['/donor-login', 'Donors'],
-              ['/hospital-login', 'Hospitals'],
+              ['/login', 'Login'],
+              ['/register', 'Register'],
               ['/request', 'Request'],
               ['/how-to-donate', 'How To Donate'],
               ['/about', 'About Us'],
@@ -33,14 +33,6 @@ export function MainLayout() {
                 {label}
               </NavLink>
             ))}
-            <NavLink
-              to="/admin-login"
-              className={({ isActive }) =>
-                `${isActive ? 'bg-black/30' : 'bg-white/20'} rounded-md px-3 py-2 font-semibold text-white hover:bg-black/20`
-              }
-            >
-              Admin
-            </NavLink>
             {isAuthenticated ? (
               <button className="rounded-md bg-white px-3 py-2 font-semibold text-primary" onClick={logout}>
                 Logout

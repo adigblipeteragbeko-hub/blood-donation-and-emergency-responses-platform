@@ -8,6 +8,7 @@ import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
 
 @Injectable()
 export class BloodRequestsService {
@@ -15,6 +16,7 @@ export class BloodRequestsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly alerts: AlertsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private getCompatibleGroups(group: BloodGroup): BloodGroup[] {
@@ -185,6 +187,15 @@ export class BloodRequestsService {
       ),
     );
 
+    this.realtime.broadcastEmergencyRequest({
+      requestId: request.id,
+      status: request.status,
+      trackingStatus: request.trackingStatus,
+      bloodGroup: request.bloodGroup,
+      hospitalId: request.hospitalId,
+      matchedDonorCount: matchedDonors.length,
+    });
+
     return request;
   }
 
@@ -325,6 +336,12 @@ export class BloodRequestsService {
     });
 
     await this.audit.log('BLOOD_REQUEST_STATUS_UPDATED', 'BLOOD_REQUEST', userId, id, dto);
+    this.realtime.broadcastEmergencyRequest({
+      requestId: id,
+      status: updated.status,
+      trackingStatus: updated.trackingStatus,
+      changedBy: userId,
+    });
     return updated;
   }
 
@@ -375,6 +392,13 @@ export class BloodRequestsService {
       oldStatus: request.trackingStatus,
       newStatus: dto.newStatus,
       comment: dto.comment,
+    });
+
+    this.realtime.broadcastEmergencyRequest({
+      requestId: id,
+      trackingStatus: dto.newStatus,
+      changedBy: userId,
+      comment: dto.comment ?? null,
     });
 
     return {
@@ -493,6 +517,13 @@ export class BloodRequestsService {
       responseStatus: dto.responseStatus,
     });
 
+    this.realtime.broadcastDonorResponse({
+      responseId: response.id,
+      bloodRequestId: id,
+      donorId: donor.id,
+      responseStatus: response.responseStatus,
+    });
+
     return response;
   }
 
@@ -541,6 +572,13 @@ export class BloodRequestsService {
     });
 
     await this.audit.log('DONOR_RESPONSE_UPDATED', 'DONOR_RESPONSE', userId, responseId, dto);
+    this.realtime.broadcastDonorResponse({
+      responseId: updated.id,
+      bloodRequestId: response.bloodRequestId,
+      donorId: updated.donor.id,
+      responseStatus: updated.responseStatus,
+      updatedBy: userId,
+    });
     return updated;
   }
 }

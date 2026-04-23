@@ -1,21 +1,17 @@
 # Blood Donation and Emergency Response Platform
 
-## 1. Project Overview
-Production-ready monorepo for a hospital blood donation and emergency response system with:
-- Responsive website for donors, hospital staff, and admins.
-- Mobile app architecture (React Native) using shared backend APIs.
-- Secure NestJS backend with PostgreSQL + Prisma.
-- Emergency request matching by blood group and location.
+Production-ready monorepo for a hospital-grade blood donation and emergency response system with separated public site, role-based dashboards, secure backend APIs, and realtime tracking events.
 
-## 2. Tech Stack
-- Frontend Web: React, TypeScript, Tailwind CSS, React Router, Axios, Vite.
-- Mobile: React Native (Expo) with TypeScript.
-- Backend: Node.js, NestJS, TypeScript.
-- Database: PostgreSQL + Prisma ORM.
-- Auth: JWT access + refresh tokens, role-based guards.
-- DevOps: Docker, docker-compose, `.env` driven config.
+## Stack
+- Frontend: React + TypeScript + Tailwind CSS + React Router + Axios
+- Backend: NestJS + TypeScript
+- Database: PostgreSQL
+- ORM: Prisma
+- Auth: JWT access + refresh token
+- Realtime: NestJS WebSocket Gateway (`/realtime`)
+- Security: RBAC, CORS allowlist, validation, sanitization, throttling, centralized exception handling
 
-## 3. Folder Structure
+## Current Folder Structure
 ```txt
 FINAL PROJECT/
   backend/
@@ -31,8 +27,11 @@ FINAL PROJECT/
         filters/
         guards/
         interceptors/
+        mail/
+        realtime/
         sanitization/
       config/
+      core/
       modules/
         appointments/
         auth/
@@ -46,12 +45,10 @@ FINAL PROJECT/
       app.module.ts
       main.ts
       prisma.service.ts
-    .env.example
-    Dockerfile
-    package.json
   frontend/
     src/
       components/
+      constants/
       context/
       hooks/
       layouts/
@@ -60,197 +57,66 @@ FINAL PROJECT/
       types/
       App.tsx
       main.tsx
-    .env.example
-    package.json
-    tailwind.config.js
-    vite.config.ts
   mobile/
-    src/
-      navigation/
-      screens/
-      services/
-      types/
-    .env.example
-    App.tsx
-    package.json
   docs/
-    CHALLENGES_SOLVED.md
-    MOBILE_VISION.md
-    ROLLBACK.md
     SECURITY.md
-  docker-compose.yml
-  README.md
+    ROLLBACK.md
+    ROUTE_MAP.md
 ```
 
-## 4. Database Schema
-Implemented in `backend/prisma/schema.prisma` with these models:
-- `User` (`ADMIN`, `DONOR`, `HOSPITAL_STAFF`)
-- `Donor`
-- `Hospital`
-- `BloodRequest`
-- `InventoryItem`
-- `Appointment`
-- `Donation`
-- `Notification`
-- `RefreshToken`
-- `PasswordResetToken`
-- `AuditLog`
+## Prisma Schema Coverage
+Implemented tracking schema in [backend/prisma/schema.prisma](backend/prisma/schema.prisma):
+- `User`, `Donor`, `Hospital`
+- `BloodRequest`, `BloodRequestUpdate`, `DonorResponse`
+- `InventoryItem`, `InventoryLog`
+- `Appointment`, `Donation`
+- `Notification`, `AuditLog`
+- token tables (`RefreshToken`, `PasswordResetToken`, `EmailVerificationToken`)
 
-Relationships include:
-- User one-to-one with Donor/Hospital profile.
-- Hospital one-to-many BloodRequest/Inventory/Appointment.
-- Donor one-to-many Donation/Appointment.
-- BloodRequest many-to-many matched Donors.
+Enums include:
+- `Role`: `ADMIN`, `DONOR`, `HOSPITAL_STAFF`
+- `RequestStatus`, `RequestProgressStatus`
+- `DonorResponseStatus`
+- `AppointmentStatus`
+- `InventoryChangeType`
+- `NotificationType`
 
-Indexes implemented:
-- `email` (unique on `User.email`)
-- `bloodGroup` (Donor, BloodRequest, InventoryItem)
-- `location` (Donor, Hospital, BloodRequest)
-- `request status` (`BloodRequest.status`)
-- `appointment date` (`Appointment.scheduledAt`)
-- `createdAt` across major entities
+## Auth + RBAC
+Implemented in `backend/src/modules/auth` and guards/decorators:
+- register, login, verify email, refresh token, logout
+- forgot/reset password + change password
+- JWT access + refresh strategies
+- `@Roles(...)` decorator + `RolesGuard`
+- admin route enforcement at backend controller level
+- failed admin access security alert logging
 
-Migration scaffold included at:
-- `backend/prisma/migrations/20260416130000_init/migration.sql`
+## Frontend Route Design (Spec-Aligned)
+- Public pages:
+  - `/`
+  - `/about`
+  - `/contact`
+  - `/register`
+- Login pages:
+  - `/login` (donor + hospital only)
+  - `/admin/login` (hidden from public nav)
+- Role redirects after login:
+  - donor -> `/dashboard/donor`
+  - hospital -> `/dashboard/hospital`
+  - admin -> `/admin/dashboard`
 
-Seed file:
-- `backend/prisma/seed.ts`
+The public navigation does not expose an admin button.
 
-## 5. Backend Implementation
-Core backend modules:
-- `AuthModule`: register, login, logout, refresh, forgot/reset/change password.
-- `UsersModule`: admin user management.
-- `DonorsModule`: donor profile, eligibility, availability, donation history.
-- `HospitalsModule`: hospital profile management.
-- `BloodRequestsModule`: request creation, emergency priority, donor matching, status updates.
-- `InventoryModule`: hospital blood inventory updates and listing.
-- `AppointmentsModule`: appointment booking and status updates.
-- `NotificationsModule`: in-app notification feed and delivery status updates.
-- `ReportsModule`: blood stock, donation activity, request, emergency summaries.
+## Realtime Events
+Gateway namespace: `/realtime`
 
-Research-challenge upgrades now included:
-- Smarter emergency donor matching using blood compatibility + location strategy.
-- Low match coverage critical alerts for emergency requests.
-- Predictive shortage analytics (30-day demand window + 7-day projection + risk by blood group).
+Broadcast channels:
+- `emergency.request.updated`
+- `donor.response.updated`
+- `inventory.updated`
+- `notification.created`
 
-API route summary:
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/verify-email`
-- `POST /auth/resend-verification`
-- `POST /auth/refresh`
-- `POST /auth/logout`
-- `POST /auth/forgot-password`
-- `POST /auth/reset-password`
-- `POST /auth/change-password`
-- `POST /auth/me`
-- `GET /users`
-- `PATCH /users/:id`
-- `POST /donors/profile`
-- `GET /donors/profile`
-- `POST /donors/donations`
-- `POST /hospitals/profile`
-- `GET /hospitals/profile`
-- `POST /blood-requests`
-- `GET /blood-requests`
-- `PATCH /blood-requests/:id/status`
-- `POST /inventory`
-- `GET /inventory`
-- `POST /appointments`
-- `GET /appointments`
-- `PATCH /appointments/:id/status`
-- `GET /notifications`
-- `PATCH /notifications/delivery`
-- `GET /reports/summary`
-
-Validation and DTOs:
-- DTO files are under each module `dto/` folder.
-- Uses `class-validator` + `class-transformer` + global validation pipe.
-
-Auth + Authorization:
-- JWT access/refresh strategy.
-- Guard-based route protection.
-- Role restrictions via `@Roles(...)` and `RolesGuard`.
-- Refresh token rotation with revocation.
-
-## 6. Frontend Implementation
-Website includes pages for:
-- Landing
-- About
-- Donor login
-- Hospital login
-- Dashboard by role
-- Emergency requests
-- Blood inventory
-- Appointments
-- Notifications
-- Profile
-- Admin management
-- Reports
-
-UI direction implemented:
-- White background
-- Red accent (`#c1121f`)
-- Dark gray text
-- Large clear action buttons
-- Mobile responsive layout with accessible form controls
-
-Routing:
-- Configured in `frontend/src/App.tsx` with protected routes and role checks.
-
-API integration:
-- Axios instance in `frontend/src/services/api.ts`
-- Auth state context in `frontend/src/context/AuthContext.tsx`
-
-## 7. Security Implementation
-Implemented controls:
-- Environment-based config (`backend/.env.example`, `frontend/.env.example`, `mobile/.env.example`).
-- Global input validation and sanitization.
-- Guard-based authorization checks.
-- Role-based route protection.
-- Secure password hashing (Argon2).
-- Password reset tokens hashed with expiry.
-- Email verification code workflow with SMTP delivery before account access.
-- CORS whitelist configuration.
-- Global rate limiting (`ThrottlerModule`).
-- Centralized exception filter with safe error output.
-- Audit logging for sensitive operations.
-- Security alerts for repeated failed logins and critical emergencies.
-
-Detailed notes:
-- `docs/SECURITY.md`
-
-## 8. Logging and Alerting
-Implemented logging:
-- Request logging interceptor (method/path/ip/duration).
-- Exception logging through global filter.
-- Security event logging through `AlertsService`.
-- Audit logs persisted via `AuditService` and `AuditLog` model.
-
-Alert design includes:
-- Repeated failed logins.
-- Unusual emergency spikes (extend `AlertsService` thresholds).
-- Server failures from exception logs and incident pipeline hooks.
-
-## 9. Rollback Strategy
-Included practical rollback strategy in:
-- `docs/ROLLBACK.md`
-
-Highlights:
-- Safe additive migrations.
-- Backup before major schema changes.
-- Blue/green or canary deployment rollback steps.
-- Last-known-good artifact strategy.
-- Feature flags for risky releases.
-
-## 10. README Setup Guide
-### Prerequisites
-- Node.js 20+
-- PostgreSQL 15+
-- npm 10+
-- Docker (optional)
-
-### Backend setup
+## Setup
+### 1. Backend
 ```bash
 cd backend
 cp .env.example .env
@@ -261,7 +127,7 @@ npm run prisma:seed
 npm run start:dev
 ```
 
-### Frontend setup
+### 2. Frontend
 ```bash
 cd frontend
 cp .env.example .env
@@ -269,36 +135,41 @@ npm install
 npm run dev
 ```
 
-### Mobile setup
+### 3. Docker Postgres Option
 ```bash
-cd mobile
-cp .env.example .env
-npm install
-npm run start
+cd ..
+docker compose up -d postgres
 ```
 
-### Docker setup
+## Build Verification
+Backend:
 ```bash
-docker compose up --build
+cd backend
+npm run build
 ```
 
-### Production safety checklist
-1. Replace all default JWT secrets and database credentials.
-2. Disable password reset token preview in API response.
-3. Configure real email/SMS providers.
-  - SMTP is required for signup verification (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`).
-4. Enable centralized log shipping and incident alert integrations.
-5. Validate migration backups before applying schema changes.
+Frontend:
+```bash
+cd frontend
+npm run build
+```
 
-## Mobile App Vision Structure and Screen List
-See:
-- `docs/MOBILE_VISION.md`
-- `docs/CHALLENGES_SOLVED.md` for mapped challenge-to-solution implementation.
+## Seed Data Verification Notes
+Seed script now inserts/updates representative records for:
+- admin, donor, hospital users
+- donor + hospital profiles with geolocation
+- emergency blood request
+- request tracking update
+- donor response
+- inventory + inventory log
+- appointment
+- donation history
+- notifications
+- audit log
 
-Current screens scaffolded:
-- Donor Login/Register
-- Dashboard
-- Emergency Alerts
-- Appointments
-- Donation History
-- Profile and Availability
+Seed script is idempotent for core records and safe to rerun.
+
+## Additional Docs
+- Security hardening: [docs/SECURITY.md](docs/SECURITY.md)
+- Rollback strategy: [docs/ROLLBACK.md](docs/ROLLBACK.md)
+- Route map: [docs/ROUTE_MAP.md](docs/ROUTE_MAP.md)

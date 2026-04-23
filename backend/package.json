@@ -24,6 +24,7 @@
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.4.2",
     "@nestjs/throttler": "^6.2.1",
+    "@nestjs/websockets": "^10.4.2",
     "@prisma/client": "^5.18.0",
     "argon2": "^0.41.1",
     "class-transformer": "^0.5.1",
@@ -36,7 +37,8 @@
     "pino": "^9.3.2",
     "pino-pretty": "^11.2.2",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.7.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",

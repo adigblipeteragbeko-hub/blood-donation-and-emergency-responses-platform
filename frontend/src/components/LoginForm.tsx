@@ -7,11 +7,13 @@ type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
 export function LoginForm({
   title,
   expectedRole,
+  allowedRoles,
   subtitle,
   footer,
 }: {
   title: string;
   expectedRole?: Role;
+  allowedRoles?: Role[];
   subtitle?: string;
   footer?: ReactNode;
 }) {
@@ -46,14 +48,20 @@ export function LoginForm({
         return;
       }
 
+      if (allowedRoles && nextRole && !allowedRoles.includes(nextRole as Role)) {
+        logout();
+        setError('This login is not available for your account role.');
+        return;
+      }
+
       if (nextRole === 'ADMIN') {
-        navigate('/admin/management');
+        navigate('/admin/dashboard');
       } else if (nextRole === 'DONOR') {
-        navigate('/donor/dashboard');
+        navigate('/dashboard/donor');
       } else if (nextRole === 'HOSPITAL_STAFF') {
-        navigate('/hospital/dashboard');
+        navigate('/dashboard/hospital');
       } else {
-        navigate('/dashboard');
+        navigate('/login');
       }
     } catch (err: any) {
       const apiError = err?.response?.data?.error;

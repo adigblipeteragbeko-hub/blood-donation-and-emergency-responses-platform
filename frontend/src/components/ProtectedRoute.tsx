@@ -6,7 +6,7 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
   const { user } = useAuth();
 
   if (!user) {
-    return <Navigate to="/donor-login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (roles && !roles.includes(user.role)) {

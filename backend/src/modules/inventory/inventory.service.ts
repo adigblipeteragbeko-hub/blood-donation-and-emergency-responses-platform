@@ -5,12 +5,14 @@ import { CreateInventoryLogDto } from './dto/create-inventory-log.dto';
 import { UpsertInventoryDto } from './dto/upsert-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { AuditService } from '../../common/audit/audit.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
 
 @Injectable()
 export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private async getHospitalForUser(userId: string) {
@@ -72,6 +74,13 @@ export class InventoryService {
     });
 
     await this.audit.log('INVENTORY_UPDATED', 'INVENTORY', userId, item.id, dto);
+    this.realtime.broadcastInventoryUpdate({
+      inventoryId: item.id,
+      hospitalId: item.hospitalId,
+      bloodGroup: item.bloodGroup,
+      availableUnits: item.availableUnits,
+      updatedBy: userId,
+    });
     return item;
   }
 
@@ -137,6 +146,11 @@ export class InventoryService {
       previousUnits,
       newUnits: dto.availableUnits,
       reason: dto.reason,
+    });
+    this.realtime.broadcastInventoryUpdate({
+      inventoryId: id,
+      availableUnits: updated.availableUnits,
+      updatedBy: userId,
     });
     return updated;
   }
@@ -223,6 +237,14 @@ export class InventoryService {
       unitsChanged: dto.unitsChanged,
       previousUnits,
       newUnits,
+    });
+
+    this.realtime.broadcastInventoryUpdate({
+      inventoryId: id,
+      availableUnits: result.updatedInventory.availableUnits,
+      changeType: dto.changeType,
+      unitsChanged: dto.unitsChanged,
+      updatedBy: userId,
     });
 
     return result;

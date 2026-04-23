@@ -1,25 +1,49 @@
 # Rollback Strategy
 
-## Database Migrations
-- Use additive migrations first (new nullable columns, backfill, then enforce constraints).
-- Create backup snapshots before major schema migrations.
-- Test migrations in staging using production-like data volume.
-- If migration fails, stop deployment and restore from backup snapshot.
+## Deployment Model Assumptions
+- Backend and frontend are versioned and deployed independently.
+- Database uses Prisma migrations.
+- Containers or release artifacts are tagged with immutable versions.
 
-## Application Deployment Rollback
-- Use blue/green or canary deployments for backend and frontend.
-- Keep last known-good image tags available.
-- Rollback plan:
-  1. Route traffic back to previous stable release.
-  2. Verify core endpoints (`/auth/login`, `/blood-requests`, `/reports/summary`).
-  3. Run smoke tests and incident review.
+## Safe Migration Strategy
+1. Prefer additive DB changes first:
+   - add nullable columns/tables
+   - backfill data
+   - enforce constraints in follow-up migration
+2. Run migrations in staging with production-like volume before production.
+3. Snapshot/backup DB immediately before production migration.
 
-## Feature Flags
-- Place high-risk modules (new matching algorithm, emergency broadcasts) behind feature flags.
-- Default to disabled in production until validation is complete.
+## Migration Rollback Guidance
+- Prisma migrate is forward-focused; rollback should use:
+  1. restore from pre-migration backup for severe schema/data corruption
+  2. or deploy corrective migration for non-destructive issues
+- Keep SQL migration artifacts in version control for auditability.
 
-## Operational Checklist
-- Confirm backups completed.
-- Confirm migration script reviewed.
-- Confirm incident channel subscriptions for alerts.
-- Confirm rollback owner and runbook on-call.
+## Application Rollback Steps
+1. Stop traffic to failing release (or drain via load balancer).
+2. Route traffic back to last known good backend/frontend artifacts.
+3. Verify critical endpoints:
+   - `/auth/login`
+   - `/blood-requests`
+   - `/inventory`
+   - `/reports/summary`
+4. Validate DB connectivity and key business workflows.
+5. Monitor logs, alerts, and error rates for stabilization.
+
+## Data Protection Checklist
+- Daily automated backups + point-in-time recovery enabled.
+- Backup restore drill tested periodically.
+- Backup retention policy documented and enforced.
+- Encryption at rest and in transit verified.
+
+## Incident Ownership
+- Assign rollback owner before release window.
+- Keep on-call list and escalation path documented.
+- Capture incident timeline and postmortem actions after rollback.
+
+## Release Gates (Pre-Deploy)
+1. Backend build success.
+2. Frontend build success.
+3. Migration scripts reviewed.
+4. Security checks reviewed.
+5. Rollback plan acknowledged by release owner.
