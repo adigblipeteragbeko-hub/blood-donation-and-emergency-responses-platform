@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
 
 const adminSections = [
-  'Manage Donors',
-  'Manage Hospitals',
-  'Manage Requests',
-  'Manage Inventory',
-  'Reports and Analytics',
-  'Audit Logs',
-  'Settings',
+  { label: 'Manage Donors', to: '/admin/management#donors' },
+  { label: 'Manage Hospitals', to: '/admin/management#hospitals' },
+  { label: 'Manage Requests', to: '/admin/management#request-tracking' },
+  { label: 'Manage Inventory', to: '/admin/management#inventory-tracking' },
+  { label: 'Reports and Analytics', to: '/reports' },
+  { label: 'Audit Logs', to: '/admin/management#audit' },
+  { label: 'Settings', to: '/admin/management#settings' },
 ];
 
 export default function AdminDashboardPage() {
@@ -19,9 +19,9 @@ export default function AdminDashboardPage() {
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {adminSections.map((section) => (
-          <article key={section} className="card">
-            <p className="text-sm font-semibold">{section}</p>
-          </article>
+          <Link key={section.label} to={section.to} className="card block transition hover:border-red-300 hover:shadow-sm">
+            <p className="text-sm font-semibold">{section.label}</p>
+          </Link>
         ))}
       </div>
       <div className="card">

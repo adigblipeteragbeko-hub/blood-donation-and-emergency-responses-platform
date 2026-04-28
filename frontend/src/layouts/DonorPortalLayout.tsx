@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 const donorLinks = [
   { to: '/donor/dashboard', label: 'Dashboard' },
   { to: '/donor/profile', label: 'My Profile' },
+  { to: '/donor/card', label: 'Digital Donor Card' },
   { to: '/donor/eligibility', label: 'Eligibility Status' },
   { to: '/donor/history', label: 'Donation History' },
   { to: '/donor/appointments', label: 'Appointments' },

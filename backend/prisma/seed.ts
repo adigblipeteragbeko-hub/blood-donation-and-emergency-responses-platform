@@ -23,7 +23,12 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@hospital.org' },
-    update: { emailVerified: true },
+    update: {
+      passwordHash: adminPassword,
+      role: Role.ADMIN,
+      emailVerified: true,
+      isActive: true,
+    },
     create: {
       email: 'admin@hospital.org',
       passwordHash: adminPassword,
@@ -34,7 +39,12 @@ async function main() {
 
   const donorUser = await prisma.user.upsert({
     where: { email: 'donor1@example.com' },
-    update: { emailVerified: true },
+    update: {
+      passwordHash: donorPassword,
+      role: Role.DONOR,
+      emailVerified: true,
+      isActive: true,
+    },
     create: {
       email: 'donor1@example.com',
       passwordHash: donorPassword,
@@ -45,7 +55,12 @@ async function main() {
 
   const hospitalUser = await prisma.user.upsert({
     where: { email: 'cityhospital@example.com' },
-    update: { emailVerified: true },
+    update: {
+      passwordHash: hospitalPassword,
+      role: Role.HOSPITAL_STAFF,
+      emailVerified: true,
+      isActive: true,
+    },
     create: {
       email: 'cityhospital@example.com',
       passwordHash: hospitalPassword,

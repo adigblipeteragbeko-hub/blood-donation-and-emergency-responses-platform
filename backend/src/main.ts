@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -15,6 +16,8 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ limit: '10mb', extended: true }));
 
   const origins = config.get<string[]>('cors.origins', []);
   app.enableCors({
@@ -38,4 +41,9 @@ async function bootstrap() {
   await app.listen(config.get<number>('app.port', 4000), '0.0.0.0');
 }
 
-void bootstrap();
+bootstrap().catch((error) => {
+  // Surface startup failures clearly (database/CORS/config) instead of silent process exit.
+  // eslint-disable-next-line no-console
+  console.error('BOOTSTRAP_FAILED', error);
+  process.exit(1);
+});

@@ -39,6 +39,11 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
+  private buildDonorNumber() {
+    const serial = Date.now().toString().slice(-8);
+    return `DON-${serial}`;
+  }
+
   async register(payload: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: payload.email } });
     if (existing) {
@@ -63,11 +68,18 @@ export class AuthService {
         await tx.donor.create({
           data: {
             userId: createdUser.id,
+            donorNumber: this.buildDonorNumber(),
             fullName: payload.donorProfile.fullName,
+            phone: payload.donorProfile.phone,
+            dateOfBirth: payload.donorProfile.dateOfBirth ? new Date(payload.donorProfile.dateOfBirth) : undefined,
             bloodGroup: payload.donorProfile.bloodGroup,
             location: payload.donorProfile.location,
-            eligibilityStatus: true,
-            availabilityStatus: true,
+            postalAddress: payload.donorProfile.postalAddress,
+            signature: payload.donorProfile.signature,
+            passportPhotoUrl: payload.donorProfile.passportPhotoUrl,
+            dateIssued: new Date(),
+            eligibilityStatus: false,
+            availabilityStatus: false,
             emergencyContactName: payload.donorProfile.emergencyContactName,
             emergencyContactPhone: payload.donorProfile.emergencyContactPhone,
           },

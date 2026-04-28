@@ -110,9 +110,16 @@ model User {
 model Donor {
   id                       String          @id @default(cuid())
   userId                   String          @unique
+  donorNumber              String?         @unique
   fullName                 String
+  phone                    String?
+  dateOfBirth              DateTime?
   bloodGroup               BloodGroup
   location                 String
+  postalAddress            String?
+  signature                String?
+  passportPhotoUrl         String?
+  dateIssued               DateTime?
   latitude                 Float?
   longitude                Float?
   eligibilityStatus        Boolean         @default(true)
@@ -131,6 +138,7 @@ model Donor {
 
   @@index([bloodGroup])
   @@index([location])
+  @@index([donorNumber])
   @@index([createdAt])
 }
 

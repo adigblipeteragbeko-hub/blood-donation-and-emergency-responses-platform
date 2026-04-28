@@ -1,5 +1,5 @@
 import { BloodGroup } from '@prisma/client';
-import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateDonorAdminDto {
   @IsEmail()
@@ -16,11 +16,36 @@ export class CreateDonorAdminDto {
   @Matches(/^[A-Za-z\s'-]+$/, { message: 'Full name should contain letters only' })
   fullName!: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Phone must be digits with country code' })
+  phone?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
+
   @IsEnum(BloodGroup)
   bloodGroup!: BloodGroup;
 
   @IsString()
   location!: string;
+
+  @IsOptional()
+  @IsString()
+  postalAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  signature?: string;
+
+  @IsOptional()
+  @IsString()
+  passportPhotoUrl?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateIssued?: string;
 
   @IsBoolean()
   eligibilityStatus!: boolean;

@@ -17,11 +17,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
 
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const isPrismaInitError =
+      exception instanceof Error &&
+      ((exception as { code?: string }).code === 'P1001' ||
+        exception.name === 'PrismaClientInitializationError' ||
+        exception.message.includes("Can't reach database server"));
 
-    const message =
-      exception instanceof HttpException
+    const status = isPrismaInitError
+      ? HttpStatus.SERVICE_UNAVAILABLE
+      : exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    const message = isPrismaInitError
+      ? 'Database unavailable. Please ensure PostgreSQL is running and reachable.'
+      : exception instanceof HttpException
         ? exception.getResponse()
         : 'An unexpected error occurred';
 

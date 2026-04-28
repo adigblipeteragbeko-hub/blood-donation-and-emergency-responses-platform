@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { MainLayout } from './layouts/MainLayout';
 import { DonorPortalLayout } from './layouts/DonorPortalLayout';
 import { HospitalPortalLayout } from './layouts/HospitalPortalLayout';
+import { AdminPortalLayout } from './layouts/AdminPortalLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
@@ -25,6 +26,7 @@ import ProfilePage from './pages/ProfilePage';
 import AdminManagementPage from './pages/AdminManagementPage';
 import ReportsPage from './pages/ReportsPage';
 import DonorDashboardPage from './pages/DonorDashboardPage';
+import DonorCardPage from './pages/DonorCardPage';
 import EligibilityPage from './pages/EligibilityPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
@@ -51,18 +53,26 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 function App() {
   return (
     <Routes>
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin-login" element={<Navigate to="/admin/login" replace />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/donor-login" element={<DonorLoginPage />} />
+      <Route path="/hospital-login" element={<HospitalLoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+      <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+        <Route path="/admin" element={<AdminPortalLayout />}>
+          <Route path="dashboard" element={<AdminDashboardPage />} />
+          <Route path="management" element={<AdminManagementPage />} />
+        </Route>
+      </Route>
+
       <Route element={<MainLayout />}>
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/admin/login" element={<AdminLoginPage />} />
-        <Route path="/donor-login" element={<DonorLoginPage />} />
         <Route path="/donor-register" element={<DonorRegisterPage />} />
-        <Route path="/hospital-login" element={<HospitalLoginPage />} />
         <Route path="/hospital-register" element={<HospitalRegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/admin-login" element={<Navigate to="/admin/login" replace />} />
         <Route path="/request" element={<RequestPage />} />
         <Route path="/how-to-donate" element={<HowToDonatePage />} />
         <Route path="/contact" element={<ContactPage />} />
@@ -83,6 +93,7 @@ function App() {
           <Route path="/donor" element={<DonorPortalLayout />}>
             <Route path="dashboard" element={<DonorDashboardPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="card" element={<DonorCardPage />} />
             <Route path="eligibility" element={<EligibilityPage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
@@ -113,11 +124,6 @@ function App() {
             <Route path="settings" element={<HospitalSettingsPage />} />
             <Route path="support" element={<HospitalSupportPage />} />
           </Route>
-        </Route>
-
-        <Route element={<ProtectedRoute roles={['ADMIN']} />}>
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin/management" element={<AdminManagementPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

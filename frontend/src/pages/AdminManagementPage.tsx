@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { countryCodes } from '../constants/country-codes';
 import {
@@ -23,6 +24,7 @@ type UserItem = {
 
 type DonorItem = {
   id: string;
+  donorNumber?: string;
   fullName: string;
   bloodGroup: string;
   location: string;
@@ -57,6 +59,8 @@ const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const nameRule = /^[A-Za-z\s'-]+$/;
 
 export default function AdminManagementPage() {
+  const location = useLocation();
+  const activeSection = location.hash?.replace('#', '') || 'settings';
   const [users, setUsers] = useState<UserItem[]>([]);
   const [donors, setDonors] = useState<DonorItem[]>([]);
   const [hospitals, setHospitals] = useState<HospitalItem[]>([]);
@@ -305,6 +309,17 @@ export default function AdminManagementPage() {
     }
   };
 
+  const setDonorApproval = async (id: string, approved: boolean) => {
+    try {
+      await api.patch(`/donors/admin/${id}/eligibility`, { approved });
+      await loadAll();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not update donor approval.');
+    }
+  };
+
   const editHospital = (hospital: HospitalItem) => {
     setEditingHospital({
       id: hospital.id,
@@ -351,6 +366,7 @@ export default function AdminManagementPage() {
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
 
+      {activeSection === 'settings' ? (
       <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
         <h2 className="text-xl font-semibold">Add Account</h2>
         <p className="text-sm text-muted">Allowed account types: Donor, Hospital, Admin.</p>
@@ -445,8 +461,10 @@ export default function AdminManagementPage() {
 
         <button className="btn-primary" type="submit">Create Account</button>
       </form>
+      ) : null}
 
-      <div className="card space-y-3">
+      {activeSection === 'settings' ? (
+      <div id="settings" className="card space-y-3">
         <h2 className="text-xl font-semibold">Users</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -510,29 +528,48 @@ export default function AdminManagementPage() {
           </form>
         ) : null}
       </div>
+      ) : null}
 
-      <div className="card space-y-3">
+      {activeSection === 'donors' ? (
+      <div id="donors" className="card space-y-3">
         <h2 className="text-xl font-semibold">Donors</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b">
+                <th className="py-2">Serial Number</th>
                 <th className="py-2">Name</th>
                 <th className="py-2">Email</th>
                 <th className="py-2">Blood Group</th>
                 <th className="py-2">Location</th>
+                <th className="py-2">Approval</th>
                 <th className="py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
               {donors.map((donor) => (
                 <tr key={donor.id} className="border-b">
+                  <td className="py-2">{donor.donorNumber ?? '-'}</td>
                   <td className="py-2">{donor.fullName}</td>
                   <td className="py-2">{donor.user.email}</td>
                   <td className="py-2">{bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}</td>
                   <td className="py-2">{donor.location}</td>
                   <td className="py-2">
+                    <span className={`rounded px-2 py-1 text-xs font-semibold ${donor.eligibilityStatus ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {donor.eligibilityStatus ? 'Approved' : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="py-2">
                     <div className="flex gap-2">
+                      {donor.eligibilityStatus ? (
+                        <button className="rounded bg-amber-100 px-3 py-1 text-amber-700" onClick={() => void setDonorApproval(donor.id, false)}>
+                          Revoke
+                        </button>
+                      ) : (
+                        <button className="rounded bg-green-100 px-3 py-1 text-green-700" onClick={() => void setDonorApproval(donor.id, true)}>
+                          Approve
+                        </button>
+                      )}
                       <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editDonor(donor)}>Edit</button>
                       <button className="rounded bg-red-100 px-3 py-1 text-red-700" onClick={() => void deleteDonor(donor.id)}>Delete</button>
                     </div>
@@ -583,8 +620,10 @@ export default function AdminManagementPage() {
           </form>
         ) : null}
       </div>
+      ) : null}
 
-      <div className="card space-y-3">
+      {activeSection === 'hospitals' ? (
+      <div id="hospitals" className="card space-y-3">
         <h2 className="text-xl font-semibold">Hospitals</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -656,8 +695,10 @@ export default function AdminManagementPage() {
           </form>
         ) : null}
       </div>
+      ) : null}
 
-      <div className="card space-y-3">
+      {activeSection === 'request-tracking' ? (
+      <div id="request-tracking" className="card space-y-3">
         <h2 className="text-xl font-semibold">Request Tracking</h2>
         {requestTracking.length === 0 ? (
           <p className="text-sm text-muted">No blood request tracking records found.</p>
@@ -712,8 +753,10 @@ export default function AdminManagementPage() {
           </div>
         )}
       </div>
+      ) : null}
 
-      <div className="card space-y-3">
+      {activeSection === 'inventory-tracking' ? (
+      <div id="inventory-tracking" className="card space-y-3">
         <h2 className="text-xl font-semibold">Inventory Log Tracking</h2>
         {inventoryLogs.length === 0 ? (
           <p className="text-sm text-muted">No inventory log entries found.</p>
@@ -749,6 +792,16 @@ export default function AdminManagementPage() {
           </div>
         )}
       </div>
+      ) : null}
+
+      {activeSection === 'audit' ? (
+      <div id="audit" className="card space-y-2">
+        <h2 className="text-xl font-semibold">Audit Logs</h2>
+        <p className="text-sm text-muted">
+          Audit records are tracked in backend and available for extension in a dedicated admin audit table view.
+        </p>
+      </div>
+      ) : null}
     </section>
   );
 }
