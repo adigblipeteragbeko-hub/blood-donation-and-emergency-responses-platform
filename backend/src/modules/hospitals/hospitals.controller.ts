@@ -10,6 +10,8 @@ import { HospitalsService } from './hospitals.service';
 import { CreateHospitalAdminDto } from './dto/admin/create-hospital-admin.dto';
 import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import { DonorSearchDto } from './dto/donor-search.dto';
+import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
+import { ApproveDonorEligibilityDto } from './dto/approve-donor-eligibility.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -30,6 +32,29 @@ export class HospitalsController {
   @Get('donor-search')
   donorSearch(@CurrentUser() user: { id: string }, @Query() query: DonorSearchDto) {
     return this.hospitalsService.searchDonors(user.id, query);
+  }
+
+  @Get('eligibility-submissions')
+  getEligibilitySubmissions(@CurrentUser() user: { id: string }) {
+    return this.hospitalsService.getEligibilitySubmissions(user.id);
+  }
+
+  @Post('eligibility-submissions/:donorId/office-use')
+  submitOfficeUse(
+    @CurrentUser() user: { id: string },
+    @Param('donorId') donorId: string,
+    @Body() dto: SubmitOfficeUseDto,
+  ) {
+    return this.hospitalsService.submitOfficeUse(user.id, donorId, dto.officeUseOnly);
+  }
+
+  @Patch('eligibility-submissions/:donorId/approve')
+  approveEligibility(
+    @CurrentUser() user: { id: string },
+    @Param('donorId') donorId: string,
+    @Body() dto: ApproveDonorEligibilityDto,
+  ) {
+    return this.hospitalsService.approveEligibility(user.id, donorId, dto.approved);
   }
 
   @Roles(Role.ADMIN)

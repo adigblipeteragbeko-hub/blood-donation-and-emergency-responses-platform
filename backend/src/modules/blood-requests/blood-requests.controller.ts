@@ -34,6 +34,12 @@ export class BloodRequestsController {
     return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF');
   }
 
+  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Post('escalation/check')
+  runEscalationCheck(@CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.runEscalationCheck(user.id, user.role);
+  }
+
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
   @Get(':id')
   getById(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {

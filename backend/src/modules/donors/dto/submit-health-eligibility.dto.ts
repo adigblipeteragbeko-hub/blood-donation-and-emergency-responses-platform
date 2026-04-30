@@ -1,22 +1,21 @@
-import { IsIn, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsObject, IsString } from 'class-validator';
 
 export class SubmitHealthEligibilityDto {
-  @IsNumber()
-  @Min(0)
-  @Max(300)
-  weightKg!: number;
-
-  @IsIn(['Yes', 'No'])
-  hadFeverRecently!: 'Yes' | 'No';
-
-  @IsIn(['Yes', 'No'])
-  currentlyOnMedication!: 'Yes' | 'No';
-
-  @IsIn(['Yes', 'No'])
-  recentTravel!: 'Yes' | 'No';
-
-  @IsOptional()
   @IsString()
-  chronicCondition?: string;
-}
+  selectedHospitalId!: string;
 
+  @IsObject()
+  personalInformation!: Record<string, unknown>;
+
+  @IsObject()
+  donationHistory!: Record<string, unknown>;
+
+  @IsObject()
+  replacementFamilyDonor!: Record<string, unknown>;
+
+  @IsObject()
+  healthQuestionnaire!: Record<string, unknown>;
+
+  @IsBoolean()
+  donorDeclarationAccepted!: boolean;
+}

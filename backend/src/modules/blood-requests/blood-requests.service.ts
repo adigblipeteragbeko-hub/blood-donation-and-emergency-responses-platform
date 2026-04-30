@@ -187,6 +187,12 @@ export class BloodRequestsService {
       ),
     );
 
+    await this.audit.log('REQUEST_SLA_INITIALIZED', 'BLOOD_REQUEST', userId, request.id, {
+      reminderMinutes: [3, 6],
+      escalationMinutes: 10,
+      matchedDonorCount: matchedDonors.length,
+    });
+
     this.realtime.broadcastEmergencyRequest({
       requestId: request.id,
       status: request.status,
@@ -206,7 +212,7 @@ export class BloodRequestsService {
         throw new NotFoundException('Donor profile not found');
       }
 
-      return this.prisma.bloodRequest.findMany({
+      const donorRequests = await this.prisma.bloodRequest.findMany({
         where: { matchedDonors: { some: { id: donor.id } } },
         include: {
           hospital: { select: { hospitalName: true, location: true } },
@@ -220,6 +226,13 @@ export class BloodRequestsService {
         },
         orderBy: { createdAt: 'desc' },
       });
+
+      return donorRequests.map((request) => ({
+        ...request,
+        patientName: null,
+        patientCode: null,
+        notes: null,
+      }));
     }
 
     return this.prisma.bloodRequest.findMany({
@@ -368,6 +381,14 @@ export class BloodRequestsService {
       throw new BadRequestException('Tracking status is already set to this value');
     }
 
+    if (dto.newStatus === RequestProgressStatus.COMPLETED) {
+      if (!dto.transfusedByStaffId || !dto.unitDin || !dto.patientEncounterId) {
+        throw new BadRequestException(
+          'COMPLETED update requires transfusedByStaffId, unitDin, and patientEncounterId.',
+        );
+      }
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const nextRequest = await tx.bloodRequest.update({
         where: { id },
@@ -392,6 +413,9 @@ export class BloodRequestsService {
       oldStatus: request.trackingStatus,
       newStatus: dto.newStatus,
       comment: dto.comment,
+      transfusedByStaffId: dto.transfusedByStaffId,
+      unitDin: dto.unitDin,
+      patientEncounterId: dto.patientEncounterId,
     });
 
     this.realtime.broadcastEmergencyRequest({
@@ -404,6 +428,73 @@ export class BloodRequestsService {
     return {
       request: updated.nextRequest,
       update: updated.entry,
+    };
+  }
+
+  async runEscalationCheck(userId: string, role: Role) {
+    const now = new Date();
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+    const sixMinutesAgo = new Date(now.getTime() - 6 * 60 * 1000);
+    const threeMinutesAgo = new Date(now.getTime() - 3 * 60 * 1000);
+
+    const whereScope =
+      role === Role.ADMIN
+        ? {}
+        : {
+            hospital: {
+              is: { userId },
+            },
+          };
+
+    const openRequests = await this.prisma.bloodRequest.findMany({
+      where: {
+        ...whereScope,
+        status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+        createdAt: { gte: tenMinutesAgo },
+      },
+      include: {
+        donorResponses: true,
+        hospital: { select: { hospitalName: true, id: true } },
+      },
+    });
+
+    let remindersTriggered = 0;
+    let escalationsTriggered = 0;
+
+    for (const request of openRequests) {
+      const hasAccepted = request.donorResponses.some(
+        (r) => r.responseStatus === DonorResponseStatus.ACCEPTED || r.responseStatus === DonorResponseStatus.DONATED,
+      );
+      if (hasAccepted) {
+        continue;
+      }
+
+      if (request.createdAt <= tenMinutesAgo) {
+        escalationsTriggered += 1;
+        await this.alerts.notifyCritical('REQUEST_AUTO_ESCALATED', {
+          requestId: request.id,
+          hospitalId: request.hospitalId,
+          hospitalName: request.hospital.hospitalName,
+          elapsedMinutes: 10,
+        });
+        await this.audit.log('REQUEST_AUTO_ESCALATED', 'BLOOD_REQUEST', userId, request.id, {
+          elapsedMinutes: 10,
+          reason: 'No accepted donor response in 10 minutes',
+        });
+        continue;
+      }
+
+      if (request.createdAt <= sixMinutesAgo) {
+        remindersTriggered += 1;
+      } else if (request.createdAt <= threeMinutesAgo) {
+        remindersTriggered += 1;
+      }
+    }
+
+    return {
+      scanned: openRequests.length,
+      remindersTriggered,
+      escalationsTriggered,
     };
   }
 

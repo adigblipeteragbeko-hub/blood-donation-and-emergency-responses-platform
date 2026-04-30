@@ -60,7 +60,8 @@ const nameRule = /^[A-Za-z\s'-]+$/;
 
 export default function AdminManagementPage() {
   const location = useLocation();
-  const activeSection = location.hash?.replace('#', '') || 'settings';
+  const activeSection =
+    new URLSearchParams(location.search).get('section') || location.hash?.replace('#', '') || 'settings';
   const [users, setUsers] = useState<UserItem[]>([]);
   const [donors, setDonors] = useState<DonorItem[]>([]);
   const [hospitals, setHospitals] = useState<HospitalItem[]>([]);

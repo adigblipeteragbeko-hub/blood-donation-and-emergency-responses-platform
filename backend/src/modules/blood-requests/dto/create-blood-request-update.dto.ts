@@ -8,5 +8,16 @@ export class CreateBloodRequestUpdateDto {
   @IsOptional()
   @IsString()
   comment?: string;
-}
 
+  @IsOptional()
+  @IsString()
+  transfusedByStaffId?: string;
+
+  @IsOptional()
+  @IsString()
+  unitDin?: string;
+
+  @IsOptional()
+  @IsString()
+  patientEncounterId?: string;
+}

@@ -124,6 +124,11 @@ export class DonorsService {
       throw new NotFoundException('Donor profile not found');
     }
 
+    const selectedHospital = await this.prisma.hospital.findUnique({ where: { id: dto.selectedHospitalId } });
+    if (!selectedHospital) {
+      throw new BadRequestException('Selected hospital is invalid.');
+    }
+
     await this.prisma.donor.update({
       where: { userId },
       data: {
@@ -133,7 +138,9 @@ export class DonorsService {
 
     await this.audit.log('DONOR_HEALTH_FORM_SUBMITTED', 'DONOR', userId, donor.id, dto);
     return {
-      message: 'Health form submitted. Waiting for admin approval.',
+      message: 'Health form submitted. Waiting for hospital approval.',
+      selectedHospitalId: selectedHospital.id,
+      selectedHospitalName: selectedHospital.hospitalName,
       pendingAdminApproval: true,
     };
   }
@@ -293,5 +300,17 @@ export class DonorsService {
 
     await this.audit.log('DONOR_ELIGIBILITY_APPROVAL_UPDATED', 'DONOR', actorUserId, donorId, { approved });
     return updated;
+  }
+
+  async getHospitalOptions() {
+    return this.prisma.hospital.findMany({
+      select: {
+        id: true,
+        hospitalName: true,
+        location: true,
+        registrationCode: true,
+      },
+      orderBy: { hospitalName: 'asc' },
+    });
   }
 }

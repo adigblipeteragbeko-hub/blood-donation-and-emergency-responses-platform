@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
 
 const adminSections = [
-  { label: 'Manage Donors', to: '/admin/management#donors' },
-  { label: 'Manage Hospitals', to: '/admin/management#hospitals' },
-  { label: 'Manage Requests', to: '/admin/management#request-tracking' },
-  { label: 'Manage Inventory', to: '/admin/management#inventory-tracking' },
+  { label: 'Manage Donors', to: '/admin/management?section=donors' },
+  { label: 'Manage Hospitals', to: '/admin/management?section=hospitals' },
+  { label: 'Manage Requests', to: '/admin/management?section=request-tracking' },
+  { label: 'Manage Inventory', to: '/admin/management?section=inventory-tracking' },
   { label: 'Reports and Analytics', to: '/reports' },
-  { label: 'Audit Logs', to: '/admin/management#audit' },
-  { label: 'Settings', to: '/admin/management#settings' },
+  { label: 'Audit Logs', to: '/admin/management?section=audit' },
+  { label: 'Settings', to: '/admin/management?section=settings' },
 ];
 
 export default function AdminDashboardPage() {

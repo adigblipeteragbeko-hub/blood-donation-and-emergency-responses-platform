@@ -5,6 +5,7 @@ import { CreateInventoryLogDto } from './dto/create-inventory-log.dto';
 import { UpsertInventoryDto } from './dto/upsert-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { AuditService } from '../../common/audit/audit.service';
+import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly alerts: AlertsService,
     private readonly realtime: RealtimeService,
   ) {}
 
@@ -33,6 +35,33 @@ export class InventoryService {
     }
 
     return unitsChanged;
+  }
+
+  private getCriticalThreshold(bloodGroup: string): number {
+    if (bloodGroup === 'O_NEG') {
+      return 12;
+    }
+    if (bloodGroup === 'B_NEG' || bloodGroup === 'AB_NEG') {
+      return 5;
+    }
+    return 8;
+  }
+
+  private async evaluateInventoryRisk(hospitalId: string, bloodGroup: string, availableUnits: number, actorUserId: string) {
+    const criticalThreshold = this.getCriticalThreshold(bloodGroup);
+    if (availableUnits <= criticalThreshold) {
+      this.alerts.notifyCritical('INVENTORY_CRITICAL_THRESHOLD', {
+        hospitalId,
+        bloodGroup,
+        availableUnits,
+        criticalThreshold,
+      });
+      await this.audit.log('INVENTORY_CRITICAL_THRESHOLD', 'INVENTORY', actorUserId, hospitalId, {
+        bloodGroup,
+        availableUnits,
+        criticalThreshold,
+      });
+    }
   }
 
   async upsert(userId: string, dto: UpsertInventoryDto) {
@@ -74,6 +103,7 @@ export class InventoryService {
     });
 
     await this.audit.log('INVENTORY_UPDATED', 'INVENTORY', userId, item.id, dto);
+    await this.evaluateInventoryRisk(item.hospitalId, item.bloodGroup, item.availableUnits, userId);
     this.realtime.broadcastInventoryUpdate({
       inventoryId: item.id,
       hospitalId: item.hospitalId,
@@ -147,6 +177,7 @@ export class InventoryService {
       newUnits: dto.availableUnits,
       reason: dto.reason,
     });
+    await this.evaluateInventoryRisk(item.hospitalId, item.bloodGroup, updated.availableUnits, userId);
     this.realtime.broadcastInventoryUpdate({
       inventoryId: id,
       availableUnits: updated.availableUnits,
@@ -238,6 +269,7 @@ export class InventoryService {
       previousUnits,
       newUnits,
     });
+    await this.evaluateInventoryRisk(inventory.hospitalId, inventory.bloodGroup, result.updatedInventory.availableUnits, userId);
 
     this.realtime.broadcastInventoryUpdate({
       inventoryId: id,

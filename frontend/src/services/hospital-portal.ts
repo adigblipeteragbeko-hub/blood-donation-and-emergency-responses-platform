@@ -110,6 +110,31 @@ export type HospitalProfile = {
   contactPhone: string;
 };
 
+export type EligibilitySubmissionItem = {
+  donorId: string;
+  submittedAt: string;
+  selectedHospitalId: string;
+  donor: {
+    fullName: string;
+    bloodGroup: BloodGroup;
+    location: string;
+    email: string;
+    eligibilityStatus: boolean;
+    availabilityStatus: boolean;
+  } | null;
+  donorForm: {
+    personalInformation: Record<string, unknown>;
+    donationHistory: Record<string, unknown>;
+    replacementFamilyDonor: Record<string, unknown>;
+    healthQuestionnaire: Record<string, unknown>;
+    donorDeclarationAccepted: boolean;
+  };
+  officeUse: {
+    createdAt: string;
+    officeUseOnly: Record<string, unknown>;
+  } | null;
+};
+
 type ApiEnvelope<T> = { success: boolean; data: T };
 
 const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
@@ -262,3 +287,19 @@ export async function getHospitalReportsSummary(from?: string, to?: string) {
   return unwrap(response.data);
 }
 
+export async function getEligibilitySubmissions() {
+  const response = await api.get<ApiEnvelope<EligibilitySubmissionItem[]>>('/hospitals/eligibility-submissions');
+  return unwrap(response.data);
+}
+
+export async function submitOfficeUseForm(donorId: string, officeUseOnly: Record<string, unknown>) {
+  const response = await api.post<ApiEnvelope<{ message: string }>>(`/hospitals/eligibility-submissions/${donorId}/office-use`, {
+    officeUseOnly,
+  });
+  return unwrap(response.data);
+}
+
+export async function approveDonorEligibilityByHospital(donorId: string, approved: boolean) {
+  const response = await api.patch<ApiEnvelope<any>>(`/hospitals/eligibility-submissions/${donorId}/approve`, { approved });
+  return unwrap(response.data);
+}

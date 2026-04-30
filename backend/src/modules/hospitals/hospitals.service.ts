@@ -151,4 +151,154 @@ export class HospitalsService {
 
     return { message: 'Hospital deleted successfully' };
   }
+
+  private async getHospitalByUser(userId: string) {
+    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
+    if (!hospital) {
+      throw new NotFoundException('Hospital profile not found');
+    }
+    return hospital;
+  }
+
+  async getEligibilitySubmissions(userId: string) {
+    const hospital = await this.getHospitalByUser(userId);
+
+    const submissionLogs = await this.prisma.auditLog.findMany({
+      where: { action: 'DONOR_HEALTH_FORM_SUBMITTED', entityType: 'DONOR' },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    const officeUseLogs = await this.prisma.auditLog.findMany({
+      where: { action: 'HOSPITAL_OFFICE_USE_SUBMITTED', entityType: 'DONOR' },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    const officeUseByDonor = new Map<string, any>();
+    for (const entry of officeUseLogs) {
+      const md = (entry.metadata as any) ?? {};
+      if (md?.hospitalId !== hospital.id) {
+        continue;
+      }
+      const donorId = entry.entityId ?? md?.donorId;
+      if (donorId && !officeUseByDonor.has(donorId)) {
+        officeUseByDonor.set(donorId, { createdAt: entry.createdAt, officeUseOnly: md?.officeUseOnly ?? null });
+      }
+    }
+
+    const selectedForHospital = submissionLogs.filter((log) => {
+      const md = (log.metadata as any) ?? {};
+      return md?.selectedHospitalId === hospital.id;
+    });
+
+    const donorIds = [...new Set(selectedForHospital.map((log) => log.entityId).filter(Boolean))] as string[];
+    const donors = donorIds.length
+      ? await this.prisma.donor.findMany({
+          where: { id: { in: donorIds } },
+          include: { user: { select: { email: true } } },
+        })
+      : [];
+    const donorMap = new Map(donors.map((d) => [d.id, d]));
+
+    return selectedForHospital.map((log) => {
+      const md = (log.metadata as any) ?? {};
+      const donorId = log.entityId ?? '';
+      const donor = donorMap.get(donorId);
+      return {
+        donorId,
+        submittedAt: log.createdAt,
+        selectedHospitalId: md?.selectedHospitalId,
+        donorForm: {
+          personalInformation: md?.personalInformation ?? {},
+          donationHistory: md?.donationHistory ?? {},
+          replacementFamilyDonor: md?.replacementFamilyDonor ?? {},
+          healthQuestionnaire: md?.healthQuestionnaire ?? {},
+          donorDeclarationAccepted: md?.donorDeclarationAccepted ?? false,
+        },
+        donor: donor
+          ? {
+              fullName: donor.fullName,
+              bloodGroup: donor.bloodGroup,
+              location: donor.location,
+              email: donor.user.email,
+              eligibilityStatus: donor.eligibilityStatus,
+              availabilityStatus: donor.availabilityStatus,
+            }
+          : null,
+        officeUse: officeUseByDonor.get(donorId) ?? null,
+      };
+    });
+  }
+
+  async submitOfficeUse(userId: string, donorId: string, officeUseOnly: Record<string, unknown>) {
+    const hospital = await this.getHospitalByUser(userId);
+    const donor = await this.prisma.donor.findUnique({ where: { id: donorId } });
+    if (!donor) {
+      throw new NotFoundException('Donor not found');
+    }
+
+    const donorSubmission = await this.prisma.auditLog.findFirst({
+      where: { action: 'DONOR_HEALTH_FORM_SUBMITTED', entityType: 'DONOR', entityId: donorId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!donorSubmission) {
+      throw new BadRequestException('No donor form submission found.');
+    }
+    const submissionMd = (donorSubmission.metadata as any) ?? {};
+    if (submissionMd?.selectedHospitalId !== hospital.id) {
+      throw new BadRequestException('This donor did not submit to your hospital.');
+    }
+
+    await this.audit.log('HOSPITAL_OFFICE_USE_SUBMITTED', 'DONOR', userId, donorId, {
+      hospitalId: hospital.id,
+      officeUseOnly,
+    });
+
+    return { message: 'Office-use section saved for donor.' };
+  }
+
+  async approveEligibility(userId: string, donorId: string, approved: boolean) {
+    const hospital = await this.getHospitalByUser(userId);
+    const donor = await this.prisma.donor.findUnique({ where: { id: donorId } });
+    if (!donor) {
+      throw new NotFoundException('Donor not found');
+    }
+
+    const donorSubmission = await this.prisma.auditLog.findFirst({
+      where: { action: 'DONOR_HEALTH_FORM_SUBMITTED', entityType: 'DONOR', entityId: donorId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!donorSubmission) {
+      throw new BadRequestException('No donor form submission found.');
+    }
+    const submissionMd = (donorSubmission.metadata as any) ?? {};
+    if (submissionMd?.selectedHospitalId !== hospital.id) {
+      throw new BadRequestException('This donor did not submit to your hospital.');
+    }
+
+    const officeUse = await this.prisma.auditLog.findFirst({
+      where: { action: 'HOSPITAL_OFFICE_USE_SUBMITTED', entityType: 'DONOR', entityId: donorId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const officeUseMd = (officeUse?.metadata as any) ?? {};
+    if (!officeUse || officeUseMd?.hospitalId !== hospital.id) {
+      throw new BadRequestException('Hospital must complete Office Use Only form before approval.');
+    }
+
+    const updated = await this.prisma.donor.update({
+      where: { id: donorId },
+      data: {
+        eligibilityStatus: approved,
+        availabilityStatus: approved ? donor.availabilityStatus : false,
+      },
+    });
+
+    await this.audit.log('HOSPITAL_DONOR_ELIGIBILITY_DECISION', 'DONOR', userId, donorId, {
+      hospitalId: hospital.id,
+      approved,
+    });
+
+    return updated;
+  }
 }

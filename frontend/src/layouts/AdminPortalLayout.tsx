@@ -3,12 +3,12 @@ import { useAuth } from '../hooks/useAuth';
 
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard Overview' },
-  { to: '/admin/management#settings', label: 'Manage Users' },
-  { to: '/admin/management#donors', label: 'Manage Donors' },
-  { to: '/admin/management#hospitals', label: 'Manage Hospitals' },
-  { to: '/admin/management#request-tracking', label: 'Manage Requests' },
-  { to: '/admin/management#inventory-tracking', label: 'Manage Inventory' },
-  { to: '/admin/management#audit', label: 'Audit Logs' },
+  { to: '/admin/management?section=settings', label: 'Manage Users' },
+  { to: '/admin/management?section=donors', label: 'Manage Donors' },
+  { to: '/admin/management?section=hospitals', label: 'Manage Hospitals' },
+  { to: '/admin/management?section=request-tracking', label: 'Manage Requests' },
+  { to: '/admin/management?section=inventory-tracking', label: 'Manage Inventory' },
+  { to: '/admin/management?section=audit', label: 'Audit Logs' },
 ];
 
 export function AdminPortalLayout() {
@@ -16,16 +16,17 @@ export function AdminPortalLayout() {
   const location = useLocation();
 
   const isItemActive = (to: string) => {
-    const [path, hash] = to.split('#');
+    const [pathWithQuery] = to.split('#');
+    const [path, query] = pathWithQuery.split('?');
     if (location.pathname !== path) {
       return false;
     }
-    const currentHash = location.hash.replace('#', '');
-    const targetHash = hash ?? '';
-    if (!targetHash) {
-      return currentHash === '';
+    const currentSection = new URLSearchParams(location.search).get('section') ?? location.hash.replace('#', '');
+    const targetSection = query ? new URLSearchParams(query).get('section') ?? '' : '';
+    if (!targetSection) {
+      return currentSection === '';
     }
-    return currentHash === targetHash;
+    return currentSection === targetSection;
   };
 
   return (

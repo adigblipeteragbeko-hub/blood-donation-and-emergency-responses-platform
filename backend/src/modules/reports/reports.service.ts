@@ -24,7 +24,7 @@ export class ReportsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [bloodStock, donations, requests, emergencies, demandByGroup] = await Promise.all([
+    const [bloodStock, donations, requests, emergencies, demandByGroup, acceptedResponses, emergencyCompleted] = await Promise.all([
       this.prisma.inventoryItem.groupBy({ by: ['bloodGroup'], _sum: { availableUnits: true } }),
       this.prisma.donation.count({ where }),
       this.prisma.bloodRequest.count({ where }),
@@ -33,6 +33,12 @@ export class ReportsService {
         by: ['bloodGroup'],
         where: { createdAt: { gte: thirtyDaysAgo } },
         _count: { _all: true },
+      }),
+      this.prisma.donorResponse.count({
+        where: { responseStatus: 'ACCEPTED', ...(where as object) },
+      }),
+      this.prisma.bloodRequest.count({
+        where: { type: 'EMERGENCY', trackingStatus: 'COMPLETED', ...(where as object) },
       }),
     ]);
 
@@ -60,6 +66,10 @@ export class ReportsService {
         windowDays: 30,
         projected7DayDemand,
         shortageRisk,
+      },
+      operationalKpis: {
+        acceptedDonorResponses: acceptedResponses,
+        emergencyFulfillmentRate: emergencies === 0 ? 0 : Number(((emergencyCompleted / emergencies) * 100).toFixed(2)),
       },
     };
   }

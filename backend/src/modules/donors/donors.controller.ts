@@ -56,6 +56,11 @@ export class DonorsController {
     return this.donorsService.updateAvailability(user.id, dto.available);
   }
 
+  @Get('hospital-options')
+  hospitalOptions() {
+    return this.donorsService.getHospitalOptions();
+  }
+
   @Roles(Role.ADMIN)
   @Get('admin')
   listAllForAdmin() {
