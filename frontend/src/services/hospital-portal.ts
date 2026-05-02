@@ -38,6 +38,10 @@ export type BloodRequestUpdateItem = {
   oldStatus?: RequestProgressStatus | null;
   newStatus: RequestProgressStatus;
   comment?: string | null;
+  transfusedByStaffId?: string | null;
+  unitDin?: string | null;
+  patientEncounterId?: string | null;
+  overrideReason?: string | null;
   createdAt: string;
   updatedBy?: { email: string; role: string } | null;
 };
@@ -222,10 +226,32 @@ export async function getBloodRequestUpdates(id: string) {
 
 export async function createBloodRequestUpdate(
   id: string,
-  payload: { newStatus: RequestProgressStatus; comment?: string },
+  payload: {
+    newStatus: RequestProgressStatus;
+    comment?: string;
+    transfusedByStaffId?: string;
+    unitDin?: string;
+    patientEncounterId?: string;
+  },
 ) {
   const response = await api.post<ApiEnvelope<{ request: BloodRequestItem; update: BloodRequestUpdateItem }>>(
     `/blood-requests/${id}/updates`,
+    payload,
+  );
+  return unwrap(response.data);
+}
+
+export async function adminCorrectCompletionEvidence(
+  id: string,
+  payload: {
+    transfusedByStaffId: string;
+    unitDin: string;
+    patientEncounterId: string;
+    overrideReason: string;
+  },
+) {
+  const response = await api.post<ApiEnvelope<{ message: string; update: BloodRequestUpdateItem }>>(
+    `/blood-requests/${id}/completion-correction`,
     payload,
   );
   return unwrap(response.data);

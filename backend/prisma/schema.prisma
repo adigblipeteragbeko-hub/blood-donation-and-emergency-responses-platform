@@ -329,6 +329,10 @@ model BloodRequestUpdate {
   oldStatus      RequestProgressStatus?
   newStatus      RequestProgressStatus
   comment        String?
+  transfusedByStaffId String?
+  unitDin             String?
+  patientEncounterId  String?
+  overrideReason      String?
   createdAt      DateTime               @default(now())
   bloodRequest   BloodRequest           @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
   updatedBy      User?                  @relation("RequestUpdateActor", fields: [updatedById], references: [id], onDelete: SetNull)

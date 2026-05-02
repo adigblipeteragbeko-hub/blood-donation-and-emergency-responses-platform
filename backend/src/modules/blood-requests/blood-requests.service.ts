@@ -1,11 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BloodGroup, DonorResponseStatus, RequestProgressStatus, RequestStatus, Role } from '@prisma/client';
+import {
+  BloodGroup,
+  DonorResponseStatus,
+  InventoryChangeType,
+  RequestProgressStatus,
+  RequestStatus,
+  Role,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { CreateBloodRequestDto } from './dto/create-blood-request.dto';
 import { CreateBloodRequestUpdateDto } from './dto/create-blood-request-update.dto';
 import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
+import { AdminCorrectCompletionDto } from './dto/admin-correct-completion.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
@@ -56,6 +64,45 @@ export class BloodRequestsService {
     if (role !== Role.ADMIN && hospitalUserId !== userId) {
       throw new NotFoundException('Blood request not found');
     }
+  }
+
+  private async applyInventoryCreditForCompletion(
+    tx: PrismaService,
+    request: { id: string; hospitalId: string; bloodGroup: BloodGroup; unitsNeeded: number },
+    actorUserId: string,
+    reason: string,
+  ) {
+    const inventory = await tx.inventoryItem.upsert({
+      where: {
+        hospitalId_bloodGroup: {
+          hospitalId: request.hospitalId,
+          bloodGroup: request.bloodGroup,
+        },
+      },
+      update: {
+        availableUnits: { increment: request.unitsNeeded },
+        updatedById: actorUserId,
+      },
+      create: {
+        hospitalId: request.hospitalId,
+        bloodGroup: request.bloodGroup,
+        availableUnits: request.unitsNeeded,
+        updatedById: actorUserId,
+      },
+    });
+
+    const previousUnits = Math.max(0, inventory.availableUnits - request.unitsNeeded);
+    await tx.inventoryLog.create({
+      data: {
+        inventoryId: inventory.id,
+        changeType: InventoryChangeType.ADDED,
+        unitsChanged: request.unitsNeeded,
+        previousUnits,
+        newUnits: inventory.availableUnits,
+        reason,
+        changedById: actorUserId,
+      },
+    });
   }
 
   async create(userId: string, dto: CreateBloodRequestDto) {
@@ -216,7 +263,7 @@ export class BloodRequestsService {
         where: { matchedDonors: { some: { id: donor.id } } },
         include: {
           hospital: { select: { hospitalName: true, location: true } },
-          updates: { orderBy: { createdAt: 'desc' }, take: 3 },
+          updates: { orderBy: { createdAt: 'desc' }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
           donorResponses: {
             where: { donorId: donor.id },
             include: {
@@ -239,7 +286,7 @@ export class BloodRequestsService {
       include: {
         hospital: { select: { hospitalName: true, location: true } },
         matchedDonors: { select: { id: true, fullName: true, bloodGroup: true, location: true } },
-        updates: { orderBy: { createdAt: 'desc' }, take: 3 },
+        updates: { orderBy: { createdAt: 'desc' }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
         donorResponses: {
           include: {
             donor: { select: { fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
@@ -265,7 +312,7 @@ export class BloodRequestsService {
       include: {
         hospital: { select: { hospitalName: true, location: true } },
         matchedDonors: { select: { id: true, fullName: true, bloodGroup: true, location: true } },
-        updates: { orderBy: { createdAt: 'desc' }, take: 3 },
+        updates: { orderBy: { createdAt: 'desc' }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
         donorResponses: {
           include: { donor: { select: { fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } } },
         },
@@ -345,6 +392,20 @@ export class BloodRequestsService {
         },
       });
 
+      if (mappedTrackingStatus === RequestProgressStatus.COMPLETED && oldTrackingStatus !== RequestProgressStatus.COMPLETED) {
+        await this.applyInventoryCreditForCompletion(
+          tx as unknown as PrismaService,
+          {
+            id: request.id,
+            hospitalId: request.hospitalId,
+            bloodGroup: request.bloodGroup,
+            unitsNeeded: request.unitsNeeded,
+          },
+          userId,
+          `Auto-added from completed request ${request.id}`,
+        );
+      }
+
       return nextRequest;
     });
 
@@ -382,6 +443,9 @@ export class BloodRequestsService {
     }
 
     if (dto.newStatus === RequestProgressStatus.COMPLETED) {
+      if (role !== Role.HOSPITAL_STAFF) {
+        throw new BadRequestException('Only hospital staff can mark request as COMPLETED. Admin may use completion correction.');
+      }
       if (!dto.transfusedByStaffId || !dto.unitDin || !dto.patientEncounterId) {
         throw new BadRequestException(
           'COMPLETED update requires transfusedByStaffId, unitDin, and patientEncounterId.',
@@ -402,9 +466,26 @@ export class BloodRequestsService {
           oldStatus: request.trackingStatus,
           newStatus: dto.newStatus,
           comment: dto.comment,
+          transfusedByStaffId: dto.transfusedByStaffId,
+          unitDin: dto.unitDin,
+          patientEncounterId: dto.patientEncounterId,
         },
         include: { updatedBy: { select: { email: true, role: true } } },
       });
+
+      if (dto.newStatus === RequestProgressStatus.COMPLETED) {
+        await this.applyInventoryCreditForCompletion(
+          tx as unknown as PrismaService,
+          {
+            id: request.id,
+            hospitalId: request.hospitalId,
+            bloodGroup: request.bloodGroup,
+            unitsNeeded: request.unitsNeeded,
+          },
+          userId,
+          `Auto-added from completed request ${request.id}`,
+        );
+      }
 
       return { nextRequest, entry };
     });
@@ -429,6 +510,35 @@ export class BloodRequestsService {
       request: updated.nextRequest,
       update: updated.entry,
     };
+  }
+
+  async adminCorrectCompletion(id: string, adminUserId: string, dto: AdminCorrectCompletionDto) {
+    const request = await this.prisma.bloodRequest.findUnique({ where: { id } });
+    if (!request) {
+      throw new NotFoundException('Blood request not found');
+    }
+    if (request.trackingStatus !== RequestProgressStatus.COMPLETED) {
+      throw new BadRequestException('Completion correction is allowed only when tracking status is COMPLETED.');
+    }
+
+    const entry = await this.prisma.bloodRequestUpdate.create({
+      data: {
+        bloodRequestId: id,
+        updatedById: adminUserId,
+        oldStatus: RequestProgressStatus.COMPLETED,
+        newStatus: RequestProgressStatus.COMPLETED,
+        comment: 'Admin completion correction',
+        transfusedByStaffId: dto.transfusedByStaffId,
+        unitDin: dto.unitDin,
+        patientEncounterId: dto.patientEncounterId,
+        overrideReason: dto.overrideReason,
+      },
+      include: { updatedBy: { select: { email: true, role: true } } },
+    });
+
+    await this.audit.log('BLOOD_REQUEST_COMPLETION_CORRECTED_BY_ADMIN', 'BLOOD_REQUEST', adminUserId, id, dto);
+
+    return { message: 'Completion evidence corrected by admin.', update: entry };
   }
 
   async runEscalationCheck(userId: string, role: Role) {

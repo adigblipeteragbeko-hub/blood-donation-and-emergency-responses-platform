@@ -16,9 +16,28 @@ export class DonorsService {
     private readonly audit: AuditService,
   ) {}
 
-  private buildDonorNumber() {
-    const serial = Date.now().toString().slice(-8);
-    return `DON-${serial}`;
+  private async buildDonorNumber() {
+    const donors = await this.prisma.donor.findMany({
+      where: { donorNumber: { not: null } },
+      select: { donorNumber: true },
+    });
+
+    let maxSerial = 0;
+    for (const donor of donors) {
+      const value = donor.donorNumber ?? '';
+      const prefixedMatch = /^DON-(\d+)$/i.exec(value);
+      const plainMatch = /^(\d+)$/.exec(value);
+      const numeric = prefixedMatch
+        ? Number.parseInt(prefixedMatch[1], 10)
+        : plainMatch
+          ? Number.parseInt(plainMatch[1], 10)
+          : Number.NaN;
+      if (!Number.isNaN(numeric) && numeric > maxSerial) {
+        maxSerial = numeric;
+      }
+    }
+
+    return String(maxSerial + 1).padStart(6, '0');
   }
 
   private normalizeDate(value?: string) {
@@ -57,7 +76,7 @@ export class DonorsService {
       create: {
         ...payload,
         userId,
-        donorNumber: this.buildDonorNumber(),
+        donorNumber: await this.buildDonorNumber(),
         dateIssued: user.createdAt,
         eligibilityStatus: false,
         availabilityStatus: false,
@@ -221,7 +240,7 @@ export class DonorsService {
       const donor = await tx.donor.create({
         data: {
           userId: user.id,
-          donorNumber: this.buildDonorNumber(),
+          donorNumber: await this.buildDonorNumber(),
           fullName: dto.fullName,
           phone: dto.phone,
           dateOfBirth: this.normalizeDate(dto.dateOfBirth),
@@ -256,10 +275,25 @@ export class DonorsService {
       throw new NotFoundException('Donor not found');
     }
 
+    const normalizedDonorNumber = dto.donorNumber?.trim().toUpperCase();
+    if (normalizedDonorNumber) {
+      const existingNumber = await this.prisma.donor.findFirst({
+        where: {
+          donorNumber: normalizedDonorNumber,
+          id: { not: donorId },
+        },
+        select: { id: true },
+      });
+      if (existingNumber) {
+        throw new BadRequestException('Donor serial number already exists. Use a unique value.');
+      }
+    }
+
     const updated = await this.prisma.donor.update({
       where: { id: donorId },
       data: {
         ...dto,
+        donorNumber: normalizedDonorNumber ?? donor.donorNumber ?? (await this.buildDonorNumber()),
         dateOfBirth: this.normalizeDate(dto.dateOfBirth),
         dateIssued: this.normalizeDate(dto.dateIssued),
       },

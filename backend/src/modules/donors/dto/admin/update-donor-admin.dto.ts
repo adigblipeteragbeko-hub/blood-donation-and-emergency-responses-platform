@@ -4,6 +4,10 @@ import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, Matches } from '
 export class UpdateDonorAdminDto {
   @IsOptional()
   @IsString()
+  donorNumber?: string;
+
+  @IsOptional()
+  @IsString()
   fullName?: string;
 
   @IsOptional()

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { countryCodes } from '../constants/country-codes';
 import {
+  adminCorrectCompletionEvidence,
   BloodRequestItem,
   DonorResponseStatus,
   InventoryLogItem,
@@ -69,6 +70,9 @@ export default function AdminManagementPage() {
   const [loading, setLoading] = useState(false);
   const [requestTracking, setRequestTracking] = useState<BloodRequestItem[]>([]);
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLogItem[]>([]);
+  const [completionCorrection, setCompletionCorrection] = useState<
+    Record<string, { transfusedByStaffId: string; unitDin: string; patientEncounterId: string; overrideReason: string }>
+  >({});
 
   const [accountRole, setAccountRole] = useState<Role>('DONOR');
   const [accountForm, setAccountForm] = useState({
@@ -90,7 +94,13 @@ export default function AdminManagementPage() {
     contactPhone: '',
   });
   const [editingUser, setEditingUser] = useState<{ id: string; role: Role; isActive: boolean } | null>(null);
-  const [editingDonor, setEditingDonor] = useState<{ id: string; fullName: string; location: string; bloodGroup: string } | null>(null);
+  const [editingDonor, setEditingDonor] = useState<{
+    id: string;
+    donorNumber: string;
+    fullName: string;
+    location: string;
+    bloodGroup: string;
+  } | null>(null);
   const [editingHospital, setEditingHospital] = useState<{
     id: string;
     hospitalName: string;
@@ -125,11 +135,39 @@ export default function AdminManagementPage() {
   const addTrackingUpdate = async (requestId: string, newStatus: RequestProgressStatus) => {
     try {
       await createBloodRequestUpdate(requestId, { newStatus });
+      setError('');
       await loadAll();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
       setError(extracted ?? 'Could not add tracking update.');
+    }
+  };
+
+  const applyCompletionCorrection = async (requestId: string) => {
+    const correction = completionCorrection[requestId];
+    if (
+      !correction?.transfusedByStaffId?.trim() ||
+      !correction?.unitDin?.trim() ||
+      !correction?.patientEncounterId?.trim() ||
+      !correction?.overrideReason?.trim()
+    ) {
+      setError('Admin correction requires staff ID, unit DIN, patient encounter ID, and override reason.');
+      return;
+    }
+    try {
+      await adminCorrectCompletionEvidence(requestId, {
+        transfusedByStaffId: correction.transfusedByStaffId.trim(),
+        unitDin: correction.unitDin.trim(),
+        patientEncounterId: correction.patientEncounterId.trim(),
+        overrideReason: correction.overrideReason.trim(),
+      });
+      setError('');
+      await loadAll();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not apply completion correction.');
     }
   };
 
@@ -273,6 +311,7 @@ export default function AdminManagementPage() {
   const editDonor = (donor: DonorItem) => {
     setEditingDonor({
       id: donor.id,
+      donorNumber: donor.donorNumber ?? '',
       fullName: donor.fullName,
       location: donor.location,
       bloodGroup: donor.bloodGroup,
@@ -292,8 +331,10 @@ export default function AdminManagementPage() {
       });
       setEditingDonor(null);
       await loadAll();
-    } catch {
-      setError('Could not update donor.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not update donor.');
     }
   };
 
@@ -585,6 +626,12 @@ export default function AdminManagementPage() {
             <h3 className="mb-2 font-semibold">Edit Donor</h3>
             <div className="grid gap-2 md:grid-cols-4">
               <input
+                className="rounded border bg-gray-100 p-2"
+                placeholder="Donor Serial Number (Auto)"
+                value={editingDonor.donorNumber}
+                readOnly
+              />
+              <input
                 className="rounded border p-2"
                 placeholder="Full Name"
                 value={editingDonor.fullName}
@@ -715,7 +762,7 @@ export default function AdminManagementPage() {
                   {new Date(request.requiredBy).toLocaleString()}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(['PENDING', 'MATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as RequestProgressStatus[]).map((status) => (
+                  {(['PENDING', 'MATCHED', 'IN_PROGRESS', 'CANCELLED'] as RequestProgressStatus[]).map((status) => (
                     <button
                       key={status}
                       className="rounded border border-red-200 px-2 py-1 text-xs text-red-700"
@@ -725,6 +772,101 @@ export default function AdminManagementPage() {
                       Set {status}
                     </button>
                   ))}
+                </div>
+                {(() => {
+                  const completionEvidence = request.updates?.find((update) => update.newStatus === 'COMPLETED');
+                  return completionEvidence ? (
+                    <div className="mt-3 rounded border border-green-200 bg-green-50 p-3 text-xs text-green-900">
+                      <p className="font-semibold">Completion Evidence (Hospital Entered)</p>
+                      <p>transfusedByStaffId: {completionEvidence.transfusedByStaffId ?? '-'}</p>
+                      <p>unitDin: {completionEvidence.unitDin ?? '-'}</p>
+                      <p>patientEncounterId: {completionEvidence.patientEncounterId ?? '-'}</p>
+                      <p>
+                        enteredBy: {completionEvidence.updatedBy?.email ?? '-'} at{' '}
+                        {new Date(completionEvidence.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-amber-700">
+                      No completion evidence captured yet. Hospital must mark COMPLETED with required fields.
+                    </p>
+                  );
+                })()}
+                <div className="mt-3 rounded border p-3">
+                  <p className="text-xs font-semibold text-primary">Admin Override / Correction (Audit Logged)</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-4">
+                    <input
+                      className="rounded border p-2 text-xs"
+                      placeholder="transfusedByStaffId"
+                      value={completionCorrection[request.id]?.transfusedByStaffId ?? ''}
+                      onChange={(e) =>
+                        setCompletionCorrection((prev) => ({
+                          ...prev,
+                          [request.id]: {
+                            transfusedByStaffId: e.target.value,
+                            unitDin: prev[request.id]?.unitDin ?? '',
+                            patientEncounterId: prev[request.id]?.patientEncounterId ?? '',
+                            overrideReason: prev[request.id]?.overrideReason ?? '',
+                          },
+                        }))
+                      }
+                    />
+                    <input
+                      className="rounded border p-2 text-xs"
+                      placeholder="unitDin"
+                      value={completionCorrection[request.id]?.unitDin ?? ''}
+                      onChange={(e) =>
+                        setCompletionCorrection((prev) => ({
+                          ...prev,
+                          [request.id]: {
+                            transfusedByStaffId: prev[request.id]?.transfusedByStaffId ?? '',
+                            unitDin: e.target.value,
+                            patientEncounterId: prev[request.id]?.patientEncounterId ?? '',
+                            overrideReason: prev[request.id]?.overrideReason ?? '',
+                          },
+                        }))
+                      }
+                    />
+                    <input
+                      className="rounded border p-2 text-xs"
+                      placeholder="patientEncounterId"
+                      value={completionCorrection[request.id]?.patientEncounterId ?? ''}
+                      onChange={(e) =>
+                        setCompletionCorrection((prev) => ({
+                          ...prev,
+                          [request.id]: {
+                            transfusedByStaffId: prev[request.id]?.transfusedByStaffId ?? '',
+                            unitDin: prev[request.id]?.unitDin ?? '',
+                            patientEncounterId: e.target.value,
+                            overrideReason: prev[request.id]?.overrideReason ?? '',
+                          },
+                        }))
+                      }
+                    />
+                    <input
+                      className="rounded border p-2 text-xs"
+                      placeholder="overrideReason (required)"
+                      value={completionCorrection[request.id]?.overrideReason ?? ''}
+                      onChange={(e) =>
+                        setCompletionCorrection((prev) => ({
+                          ...prev,
+                          [request.id]: {
+                            transfusedByStaffId: prev[request.id]?.transfusedByStaffId ?? '',
+                            unitDin: prev[request.id]?.unitDin ?? '',
+                            patientEncounterId: prev[request.id]?.patientEncounterId ?? '',
+                            overrideReason: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                  <button
+                    className="mt-2 rounded border border-red-300 px-3 py-2 text-xs font-semibold text-red-700"
+                    type="button"
+                    onClick={() => void applyCompletionCorrection(request.id)}
+                  >
+                    Apply Admin Correction
+                  </button>
                 </div>
                 {request.donorResponses?.length ? (
                   <div className="mt-3 space-y-2">

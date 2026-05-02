@@ -20,6 +20,9 @@ export default function HospitalActiveRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, { newStatus: RequestProgressStatus; comment: string }>>({});
+  const [completionDrafts, setCompletionDrafts] = useState<
+    Record<string, { transfusedByStaffId: string; unitDin: string; patientEncounterId: string }>
+  >({});
   const [responseDrafts, setResponseDrafts] = useState<Record<string, DonorResponseStatus>>({});
 
   const load = async () => {
@@ -149,9 +152,36 @@ export default function HospitalActiveRequestsPage() {
                           onClick={async () => {
                             setMessage('');
                             try {
+                              const completion = completionDrafts[item.id] ?? {
+                                transfusedByStaffId: '',
+                                unitDin: '',
+                                patientEncounterId: '',
+                              };
+                              if (trackingDraft.newStatus === 'COMPLETED') {
+                                if (
+                                  !completion.transfusedByStaffId.trim() ||
+                                  !completion.unitDin.trim() ||
+                                  !completion.patientEncounterId.trim()
+                                ) {
+                                  setMessage(
+                                    'For COMPLETED: fill staff ID, unit DIN, and patient encounter ID before saving.',
+                                  );
+                                  return;
+                                }
+                              }
                               await createBloodRequestUpdate(item.id, {
                                 newStatus: trackingDraft.newStatus,
                                 comment: trackingDraft.comment || undefined,
+                                transfusedByStaffId:
+                                  trackingDraft.newStatus === 'COMPLETED'
+                                    ? completion.transfusedByStaffId.trim()
+                                    : undefined,
+                                unitDin:
+                                  trackingDraft.newStatus === 'COMPLETED' ? completion.unitDin.trim() : undefined,
+                                patientEncounterId:
+                                  trackingDraft.newStatus === 'COMPLETED'
+                                    ? completion.patientEncounterId.trim()
+                                    : undefined,
                               });
                               setMessage('Tracking update added.');
                               await load();
@@ -163,6 +193,55 @@ export default function HospitalActiveRequestsPage() {
                           Add
                         </button>
                       </div>
+                      {trackingDraft.newStatus === 'COMPLETED' ? (
+                        <div className="mt-2 grid gap-2 md:grid-cols-3">
+                          <input
+                            className="legacy-input"
+                            placeholder="transfusedByStaffId"
+                            value={completionDrafts[item.id]?.transfusedByStaffId ?? ''}
+                            onChange={(e) =>
+                              setCompletionDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  transfusedByStaffId: e.target.value,
+                                  unitDin: prev[item.id]?.unitDin ?? '',
+                                  patientEncounterId: prev[item.id]?.patientEncounterId ?? '',
+                                },
+                              }))
+                            }
+                          />
+                          <input
+                            className="legacy-input"
+                            placeholder="unitDin"
+                            value={completionDrafts[item.id]?.unitDin ?? ''}
+                            onChange={(e) =>
+                              setCompletionDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  transfusedByStaffId: prev[item.id]?.transfusedByStaffId ?? '',
+                                  unitDin: e.target.value,
+                                  patientEncounterId: prev[item.id]?.patientEncounterId ?? '',
+                                },
+                              }))
+                            }
+                          />
+                          <input
+                            className="legacy-input"
+                            placeholder="patientEncounterId"
+                            value={completionDrafts[item.id]?.patientEncounterId ?? ''}
+                            onChange={(e) =>
+                              setCompletionDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  transfusedByStaffId: prev[item.id]?.transfusedByStaffId ?? '',
+                                  unitDin: prev[item.id]?.unitDin ?? '',
+                                  patientEncounterId: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

@@ -9,6 +9,7 @@ import { CreateBloodRequestDto } from './dto/create-blood-request.dto';
 import { CreateBloodRequestUpdateDto } from './dto/create-blood-request-update.dto';
 import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
+import { AdminCorrectCompletionDto } from './dto/admin-correct-completion.dto';
 import { BloodRequestsService } from './blood-requests.service';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
@@ -70,6 +71,16 @@ export class BloodRequestsController {
     @Body() dto: CreateBloodRequestUpdateDto,
   ) {
     return this.bloodRequestsService.createUpdate(id, user.id, user.role, dto);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':id/completion-correction')
+  correctCompletion(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: Role },
+    @Body() dto: AdminCorrectCompletionDto,
+  ) {
+    return this.bloodRequestsService.adminCorrectCompletion(id, user.id, dto);
   }
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
