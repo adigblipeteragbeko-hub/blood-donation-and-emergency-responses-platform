@@ -7,6 +7,7 @@ import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class InventoryService {
@@ -114,7 +115,9 @@ export class InventoryService {
     return item;
   }
 
-  async list(userId: string, role: Role) {
+  async list(userId: string, role: Role, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     if (role === Role.ADMIN) {
       return this.prisma.inventoryItem.findMany({
         include: {
@@ -122,6 +125,8 @@ export class InventoryService {
           updatedBy: { select: { email: true } },
         },
         orderBy: { lastUpdated: 'desc' },
+        skip,
+        take,
       });
     }
 
@@ -133,6 +138,8 @@ export class InventoryService {
         updatedBy: { select: { email: true } },
       },
       orderBy: { lastUpdated: 'desc' },
+      skip,
+      take,
     });
   }
 
@@ -186,7 +193,9 @@ export class InventoryService {
     return updated;
   }
 
-  async listLogs(userId: string, role: Role) {
+  async listLogs(userId: string, role: Role, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     if (role === Role.ADMIN) {
       return this.prisma.inventoryLog.findMany({
         include: {
@@ -198,6 +207,8 @@ export class InventoryService {
           changedBy: { select: { email: true, role: true } },
         },
         orderBy: { createdAt: 'desc' },
+        skip,
+        take,
       });
     }
 
@@ -215,6 +226,8 @@ export class InventoryService {
         changedBy: { select: { email: true, role: true } },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 

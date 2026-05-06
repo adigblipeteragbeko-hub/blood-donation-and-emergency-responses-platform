@@ -4,6 +4,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class AppointmentsService {
@@ -58,11 +59,15 @@ export class AppointmentsService {
     return appointment;
   }
 
-  listForUser(userId: string, role: 'DONOR' | 'HOSPITAL_STAFF' | 'ADMIN') {
+  listForUser(userId: string, role: 'DONOR' | 'HOSPITAL_STAFF' | 'ADMIN', query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     if (role === 'ADMIN') {
       return this.prisma.appointment.findMany({
         include: { donor: true, hospital: true },
         orderBy: { scheduledAt: 'asc' },
+        skip,
+        take,
       });
     }
 
@@ -70,18 +75,36 @@ export class AppointmentsService {
       return this.prisma.appointment.findMany({
         where: { donor: { userId } },
         include: { hospital: true },
+        orderBy: { scheduledAt: 'asc' },
+        skip,
+        take,
       });
     }
 
     return this.prisma.appointment.findMany({
       where: { hospital: { userId } },
       include: { donor: true },
+      orderBy: { scheduledAt: 'asc' },
+      skip,
+      take,
     });
   }
 
-  async updateStatus(id: string, userId: string, dto: UpdateAppointmentStatusDto) {
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+  async updateStatus(
+    id: string,
+    userId: string,
+    role: 'DONOR' | 'HOSPITAL_STAFF' | 'ADMIN',
+    dto: UpdateAppointmentStatusDto,
+  ) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: { hospital: { select: { userId: true } } },
+    });
     if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    if (role !== 'ADMIN' && appointment.hospital.userId !== userId) {
       throw new NotFoundException('Appointment not found');
     }
 

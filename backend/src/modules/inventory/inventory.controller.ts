@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -9,6 +9,7 @@ import { CreateInventoryLogDto } from './dto/create-inventory-log.dto';
 import { UpsertInventoryDto } from './dto/upsert-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { InventoryService } from './inventory.service';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -22,8 +23,8 @@ export class InventoryController {
   }
 
   @Get()
-  list(@CurrentUser() user: { id: string; role: Role }) {
-    return this.inventoryService.list(user.id, user.role);
+  list(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.inventoryService.list(user.id, user.role, query);
   }
 
   @Patch(':id')
@@ -36,8 +37,8 @@ export class InventoryController {
   }
 
   @Get('logs')
-  listLogs(@CurrentUser() user: { id: string; role: Role }) {
-    return this.inventoryService.listLogs(user.id, user.role);
+  listLogs(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.inventoryService.listLogs(user.id, user.role, query);
   }
 
   @Post(':id/logs')

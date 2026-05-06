@@ -9,8 +9,11 @@ function defaultRequiredBy() {
 }
 
 export default function HospitalRequestBloodPage() {
+  const [patientName, setPatientName] = useState('');
+  const [patientCode, setPatientCode] = useState('');
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O_POS');
   const [unitsNeeded, setUnitsNeeded] = useState(1);
+  const [requestType, setRequestType] = useState<'STANDARD' | 'EMERGENCY'>('STANDARD');
   const [priority, setPriority] = useState<PriorityLevel>('MEDIUM');
   const [location, setLocation] = useState('');
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
@@ -36,16 +39,21 @@ export default function HospitalRequestBloodPage() {
     setMessage('');
     try {
       await createHospitalRequest({
+        patientName: patientName || undefined,
+        patientCode: patientCode || undefined,
         bloodGroup,
         unitsNeeded,
-        type: 'STANDARD',
+        type: requestType,
         priority,
         location,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
       setMessage('Blood request created successfully.');
+      setPatientName('');
+      setPatientCode('');
       setUnitsNeeded(1);
+      setRequestType('STANDARD');
       setPriority('MEDIUM');
       setRequiredBy(defaultRequiredBy());
       setNotes('');
@@ -64,6 +72,27 @@ export default function HospitalRequestBloodPage() {
       </div>
 
       <form className="card grid gap-3 md:grid-cols-2" onSubmit={submit}>
+        <label className="text-sm font-semibold">
+          Patient Name
+          <input
+            className="legacy-input mt-1"
+            maxLength={120}
+            type="text"
+            value={patientName}
+            onChange={(e) => setPatientName(e.target.value)}
+          />
+        </label>
+        <label className="text-sm font-semibold">
+          Patient Code
+          <input
+            className="legacy-input mt-1"
+            maxLength={64}
+            placeholder="Use a hospital-safe patient reference"
+            type="text"
+            value={patientCode}
+            onChange={(e) => setPatientCode(e.target.value)}
+          />
+        </label>
         <label className="text-sm font-semibold">
           Blood Group
           <select className="legacy-input mt-1" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}>
@@ -84,6 +113,17 @@ export default function HospitalRequestBloodPage() {
             value={unitsNeeded}
             onChange={(e) => setUnitsNeeded(Number(e.target.value))}
           />
+        </label>
+        <label className="text-sm font-semibold">
+          Request Type
+          <select
+            className="legacy-input mt-1"
+            value={requestType}
+            onChange={(e) => setRequestType(e.target.value as 'STANDARD' | 'EMERGENCY')}
+          >
+            <option value="STANDARD">STANDARD</option>
+            <option value="EMERGENCY">EMERGENCY</option>
+          </select>
         </label>
         <label className="text-sm font-semibold">
           Priority
@@ -120,4 +160,3 @@ export default function HospitalRequestBloodPage() {
     </section>
   );
 }
-

@@ -140,6 +140,7 @@ export type EligibilitySubmissionItem = {
 };
 
 type ApiEnvelope<T> = { success: boolean; data: T };
+type PaginationParams = { skip?: number; take?: number };
 
 const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
 
@@ -153,8 +154,8 @@ export async function upsertHospitalProfile(payload: Omit<HospitalProfile, 'id'>
   return unwrap(response.data);
 }
 
-export async function getHospitalInventory() {
-  const response = await api.get<ApiEnvelope<InventoryItem[]>>('/inventory');
+export async function getHospitalInventory(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<InventoryItem[]>>('/inventory', { params });
   return unwrap(response.data);
 }
 
@@ -168,8 +169,8 @@ export async function patchInventoryItem(id: string, payload: { availableUnits: 
   return unwrap(response.data);
 }
 
-export async function getInventoryLogs() {
-  const response = await api.get<ApiEnvelope<InventoryLogItem[]>>('/inventory/logs');
+export async function getInventoryLogs(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<InventoryLogItem[]>>('/inventory/logs', { params });
   return unwrap(response.data);
 }
 
@@ -199,13 +200,13 @@ export async function createHospitalRequest(payload: {
   return unwrap(response.data);
 }
 
-export async function getHospitalRequests() {
-  const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests/mine');
+export async function getHospitalRequests(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests/mine', { params });
   return unwrap(response.data);
 }
 
-export async function getAllBloodRequests() {
-  const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests');
+export async function getAllBloodRequests(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests', { params });
   return unwrap(response.data);
 }
 
@@ -283,8 +284,8 @@ export async function searchHospitalDonors(payload: { bloodGroup?: BloodGroup; l
   return unwrap(response.data);
 }
 
-export async function getHospitalAppointments() {
-  const response = await api.get<ApiEnvelope<AppointmentItem[]>>('/appointments');
+export async function getHospitalAppointments(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<AppointmentItem[]>>('/appointments', { params });
   return unwrap(response.data);
 }
 
@@ -298,8 +299,8 @@ export async function updateHospitalAppointmentStatus(id: string, status: Appoin
   return unwrap(response.data);
 }
 
-export async function getHospitalNotifications() {
-  const response = await api.get<ApiEnvelope<NotificationItem[]>>('/notifications');
+export async function getHospitalNotifications(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<NotificationItem[]>>('/notifications', { params });
   return unwrap(response.data);
 }
 

@@ -1,14 +1,19 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { bloodGroups } from '../constants/blood-groups';
 import { BloodGroup, DonorMatch, searchHospitalDonors } from '../services/hospital-portal';
+import { FilterBox, Pager } from '../components/TableControls';
 
 export default function HospitalDonorSearchPage() {
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O_POS');
   const [location, setLocation] = useState('');
   const [radiusKm, setRadiusKm] = useState(25);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [results, setResults] = useState<DonorMatch[]>([]);
+  const pageSize = 25;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -26,6 +31,31 @@ export default function HospitalDonorSearchPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredResults = useMemo(
+    () =>
+      results.filter(
+        (donor) =>
+          !searchTerm ||
+          donor.fullName.toLowerCase().includes(searchTerm) ||
+          donor.location.toLowerCase().includes(searchTerm) ||
+          donor.emergencyContactPhone.toLowerCase().includes(searchTerm),
+      ),
+    [results, searchTerm],
+  );
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, results]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredResults.length / pageSize));
+  const start = page * pageSize;
+  const pagedResults = filteredResults.slice(start, start + pageSize);
 
   return (
     <section className="space-y-5">
@@ -66,34 +96,48 @@ export default function HospitalDonorSearchPage() {
 
       {message ? <p className="text-sm text-primary">{message}</p> : null}
 
+      <FilterBox
+        label="Filter results (debounced)"
+        placeholder="Filter by donor name, location, or contact"
+        value={searchInput}
+        onChange={setSearchInput}
+      />
+
       <div className="card overflow-x-auto">
         <h2 className="text-lg font-bold text-primary">Matching Donors</h2>
-        {results.length === 0 ? (
+        {filteredResults.length === 0 ? (
           <p className="mt-2 text-sm text-muted">No donors matched this search yet.</p>
         ) : (
-          <table className="mt-3 min-w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Name</th>
-                <th className="py-2 pr-3">Blood Group</th>
-                <th className="py-2 pr-3">Location</th>
-                <th className="py-2 pr-3">Contact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((donor) => (
-                <tr key={donor.id} className="border-b last:border-b-0">
-                  <td className="py-2 pr-3">{donor.fullName}</td>
-                  <td className="py-2 pr-3">{bloodGroups.find((group) => group.value === donor.bloodGroup)?.label ?? donor.bloodGroup}</td>
-                  <td className="py-2 pr-3">{donor.location}</td>
-                  <td className="py-2 pr-3">{donor.emergencyContactPhone}</td>
+          <>
+            <table className="mt-3 min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Blood Group</th>
+                  <th className="py-2 pr-3">Location</th>
+                  <th className="py-2 pr-3">Contact</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pagedResults.map((donor) => (
+                  <tr key={donor.id} className="border-b last:border-b-0">
+                    <td className="py-2 pr-3">{donor.fullName}</td>
+                    <td className="py-2 pr-3">{bloodGroups.find((group) => group.value === donor.bloodGroup)?.label ?? donor.bloodGroup}</td>
+                    <td className="py-2 pr-3">{donor.location}</td>
+                    <td className="py-2 pr-3">{donor.emergencyContactPhone}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Pager
+              page={Math.min(page, Math.max(0, totalPages - 1))}
+              hasMore={page + 1 < totalPages}
+              onPrev={() => setPage((value) => Math.max(0, value - 1))}
+              onNext={() => setPage((value) => value + 1)}
+            />
+          </>
         )}
       </div>
     </section>
   );
 }
-

@@ -16,8 +16,8 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
+  app.use(json({ limit: '5mb' }));
+  app.use(urlencoded({ limit: '2mb', extended: true }));
 
   const origins = config.get<string[]>('cors.origins', []);
   app.enableCors({

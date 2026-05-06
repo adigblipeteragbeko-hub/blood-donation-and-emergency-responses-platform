@@ -12,6 +12,7 @@ import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import { DonorSearchDto } from './dto/donor-search.dto';
 import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
 import { ApproveDonorEligibilityDto } from './dto/approve-donor-eligibility.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -59,8 +60,8 @@ export class HospitalsController {
 
   @Roles(Role.ADMIN)
   @Get('admin')
-  listAllForAdmin() {
-    return this.hospitalsService.listAllForAdmin();
+  listAllForAdmin(@Query() query: PaginationQueryDto) {
+    return this.hospitalsService.listAllForAdmin(query);
   }
 
   @Roles(Role.ADMIN)

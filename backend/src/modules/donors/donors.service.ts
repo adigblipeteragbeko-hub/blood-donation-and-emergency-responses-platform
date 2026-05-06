@@ -8,6 +8,7 @@ import { UpdateDonorAdminDto } from './dto/admin/update-donor-admin.dto';
 import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto';
 import * as argon2 from 'argon2';
 import { Role } from '@prisma/client';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class DonorsService {
@@ -17,27 +18,22 @@ export class DonorsService {
   ) {}
 
   private async buildDonorNumber() {
-    const donors = await this.prisma.donor.findMany({
+    const latest = await this.prisma.donor.findFirst({
       where: { donorNumber: { not: null } },
       select: { donorNumber: true },
+      orderBy: { donorNumber: 'desc' },
     });
 
-    let maxSerial = 0;
-    for (const donor of donors) {
-      const value = donor.donorNumber ?? '';
-      const prefixedMatch = /^DON-(\d+)$/i.exec(value);
-      const plainMatch = /^(\d+)$/.exec(value);
-      const numeric = prefixedMatch
-        ? Number.parseInt(prefixedMatch[1], 10)
-        : plainMatch
-          ? Number.parseInt(plainMatch[1], 10)
-          : Number.NaN;
-      if (!Number.isNaN(numeric) && numeric > maxSerial) {
-        maxSerial = numeric;
-      }
-    }
+    const value = latest?.donorNumber ?? '000000';
+    const prefixedMatch = /^DON-(\d+)$/i.exec(value);
+    const plainMatch = /^(\d+)$/.exec(value);
+    const numeric = prefixedMatch
+      ? Number.parseInt(prefixedMatch[1], 10)
+      : plainMatch
+        ? Number.parseInt(plainMatch[1], 10)
+        : 0;
 
-    return String(maxSerial + 1).padStart(6, '0');
+    return String((Number.isNaN(numeric) ? 0 : numeric) + 1).padStart(6, '0');
   }
 
   private normalizeDate(value?: string) {
@@ -107,6 +103,14 @@ export class DonorsService {
       throw new NotFoundException('Donor profile not found');
     }
 
+    if (
+      !passportPhotoUrl.startsWith('data:image/jpeg;base64,') &&
+      !passportPhotoUrl.startsWith('data:image/png;base64,') &&
+      !passportPhotoUrl.startsWith('data:image/webp;base64,')
+    ) {
+      throw new BadRequestException('Passport photo must be a base64 image (jpeg, png, or webp).');
+    }
+
     const updated = await this.prisma.donor.update({
       where: { userId },
       data: { passportPhotoUrl },
@@ -146,6 +150,11 @@ export class DonorsService {
     const selectedHospital = await this.prisma.hospital.findUnique({ where: { id: dto.selectedHospitalId } });
     if (!selectedHospital) {
       throw new BadRequestException('Selected hospital is invalid.');
+    }
+
+    const payloadSize = JSON.stringify(dto).length;
+    if (payloadSize > 120_000) {
+      throw new BadRequestException('Health form payload is too large.');
     }
 
     await this.prisma.donor.update({
@@ -212,12 +221,16 @@ export class DonorsService {
     return updated;
   }
 
-  listAllForAdmin() {
+  listAllForAdmin(query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     return this.prisma.donor.findMany({
       include: {
         user: { select: { id: true, email: true, role: true, isActive: true } },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 

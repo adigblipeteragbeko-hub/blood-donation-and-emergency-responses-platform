@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { bloodGroups } from '../constants/blood-groups';
 import {
   BloodGroup,
@@ -9,6 +9,7 @@ import {
   getInventoryLogs,
   upsertHospitalInventory,
 } from '../services/hospital-portal';
+import { FilterBox, Pager } from '../components/TableControls';
 
 export default function HospitalInventoryPage() {
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O_POS');
@@ -23,11 +24,20 @@ export default function HospitalInventoryPage() {
     [],
   );
   const [logs, setLogs] = useState<InventoryLogItem[]>([]);
+  const [logsPage, setLogsPage] = useState(0);
+  const [hasMoreLogs, setHasMoreLogs] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 50;
 
-  const loadInventory = async () => {
-    const [inventoryData, inventoryLogs] = await Promise.all([getHospitalInventory(), getInventoryLogs()]);
+  const loadInventory = async (nextPage = logsPage) => {
+    const [inventoryData, inventoryLogs] = await Promise.all([
+      getHospitalInventory({ skip: 0, take: 200 }),
+      getInventoryLogs({ skip: nextPage * pageSize, take: pageSize }),
+    ]);
     setItems(inventoryData);
     setLogs(inventoryLogs);
+    setHasMoreLogs(inventoryLogs.length === pageSize);
     if (!logInventoryId && inventoryData[0]?.id) {
       setLogInventoryId(inventoryData[0].id);
     }
@@ -35,7 +45,35 @@ export default function HospitalInventoryPage() {
 
   useEffect(() => {
     void loadInventory();
-  }, []);
+  }, [logsPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          !searchTerm ||
+          item.bloodGroup.toLowerCase().includes(searchTerm) ||
+          String(item.availableUnits).includes(searchTerm),
+      ),
+    [items, searchTerm],
+  );
+
+  const filteredLogs = useMemo(
+    () =>
+      logs.filter(
+        (log) =>
+          !searchTerm ||
+          log.inventory.bloodGroup.toLowerCase().includes(searchTerm) ||
+          log.changeType.toLowerCase().includes(searchTerm) ||
+          (log.reason ?? '').toLowerCase().includes(searchTerm),
+      ),
+    [logs, searchTerm],
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -80,6 +118,12 @@ export default function HospitalInventoryPage() {
         <h1 className="text-2xl font-bold text-primary">Blood Inventory</h1>
         <p className="text-sm text-muted">Manage blood units, view levels, and track last updates.</p>
       </div>
+      <FilterBox
+        label="Filter inventory/logs (debounced)"
+        placeholder="Filter by blood group, units, reason, change type..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
 
       <form className="card grid gap-3 md:grid-cols-2" onSubmit={submit}>
         <label className="text-sm font-semibold">
@@ -111,7 +155,7 @@ export default function HospitalInventoryPage() {
 
       <div className="card overflow-x-auto">
         <h2 className="text-lg font-bold text-primary">Current Levels</h2>
-        {items.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <p className="mt-2 text-sm text-muted">No inventory records yet.</p>
         ) : (
           <table className="mt-3 min-w-full text-left text-sm">
@@ -123,7 +167,7 @@ export default function HospitalInventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <tr key={item.id} className="border-b last:border-b-0">
                   <td className="py-2 pr-4">{bloodGroups.find((group) => group.value === item.bloodGroup)?.label ?? item.bloodGroup}</td>
                   <td className="py-2 pr-4">{item.availableUnits}</td>
@@ -180,7 +224,7 @@ export default function HospitalInventoryPage() {
         </button>
 
         <div className="md:col-span-4 overflow-x-auto">
-          {logs.length === 0 ? (
+          {filteredLogs.length === 0 ? (
             <p className="text-sm text-muted">No log entries yet.</p>
           ) : (
             <table className="min-w-full text-left text-sm">
@@ -194,7 +238,7 @@ export default function HospitalInventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {logs.slice(0, 20).map((log) => (
+                {filteredLogs.map((log) => (
                   <tr key={log.id} className="border-b last:border-b-0">
                     <td className="py-2 pr-4">{log.inventory.bloodGroup}</td>
                     <td className="py-2 pr-4">{log.changeType}</td>
@@ -208,6 +252,12 @@ export default function HospitalInventoryPage() {
               </tbody>
             </table>
           )}
+          <Pager
+            page={logsPage}
+            hasMore={hasMoreLogs}
+            onPrev={() => setLogsPage((value) => Math.max(0, value - 1))}
+            onNext={() => setLogsPage((value) => value + 1)}
+          />
         </div>
       </form>
     </section>

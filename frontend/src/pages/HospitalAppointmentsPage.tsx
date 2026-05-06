@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   AppointmentItem,
   AppointmentStatus,
@@ -7,6 +7,7 @@ import {
   updateHospitalAppointmentStatus,
 } from '../services/hospital-portal';
 import { bloodGroups } from '../constants/blood-groups';
+import { FilterBox, Pager } from '../components/TableControls';
 
 const statusOptions: AppointmentStatus[] = ['SCHEDULED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
 
@@ -14,16 +15,22 @@ export default function HospitalAppointmentsPage() {
   const [items, setItems] = useState<AppointmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 25;
 
   const [donorId, setDonorId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = async (nextPage = page) => {
     try {
-      const data = await getHospitalAppointments();
+      const data = await getHospitalAppointments({ skip: nextPage * pageSize, take: pageSize });
       setItems(data);
+      setHasMore(data.length === pageSize);
     } finally {
       setLoading(false);
     }
@@ -31,7 +38,24 @@ export default function HospitalAppointmentsPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          !searchTerm ||
+          (item.donor?.fullName ?? '').toLowerCase().includes(searchTerm) ||
+          (item.donor?.bloodGroup ?? '').toLowerCase().includes(searchTerm) ||
+          item.status.toLowerCase().includes(searchTerm),
+      ),
+    [items, searchTerm],
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -67,6 +91,12 @@ export default function HospitalAppointmentsPage() {
         <h1 className="text-2xl font-bold text-primary">Appointments</h1>
         <p className="text-sm text-muted">Schedule, confirm, and cancel donor appointments.</p>
       </div>
+      <FilterBox
+        label="Filter appointments (debounced)"
+        placeholder="Filter by donor name, blood group, or status"
+        value={searchInput}
+        onChange={setSearchInput}
+      />
 
       <form className="card grid gap-3 md:grid-cols-3" onSubmit={submit}>
         <label className="text-sm font-semibold">
@@ -97,8 +127,8 @@ export default function HospitalAppointmentsPage() {
       <div className="card overflow-x-auto">
         <h2 className="text-lg font-bold text-primary">Scheduled Appointments</h2>
         {loading ? <p className="mt-2 text-sm text-muted">Loading appointments...</p> : null}
-        {!loading && items.length === 0 ? <p className="mt-2 text-sm text-muted">No appointments found.</p> : null}
-        {!loading && items.length > 0 ? (
+        {!loading && filteredItems.length === 0 ? <p className="mt-2 text-sm text-muted">No appointments found.</p> : null}
+        {!loading && filteredItems.length > 0 ? (
           <table className="mt-3 min-w-full text-left text-sm">
             <thead>
               <tr className="border-b">
@@ -110,7 +140,7 @@ export default function HospitalAppointmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <tr key={item.id} className="border-b last:border-b-0">
                   <td className="py-2 pr-3">{item.donor?.fullName ?? '-'}</td>
                   <td className="py-2 pr-3">
@@ -138,8 +168,13 @@ export default function HospitalAppointmentsPage() {
             </tbody>
           </table>
         ) : null}
+        <Pager
+          page={page}
+          hasMore={hasMore}
+          onPrev={() => setPage((value) => Math.max(0, value - 1))}
+          onNext={() => setPage((value) => value + 1)}
+        />
       </div>
     </section>
   );
 }
-

@@ -14,6 +14,7 @@ import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
 import { AdminCorrectCompletionDto } from './dto/admin-correct-completion.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
@@ -252,7 +253,9 @@ export class BloodRequestsService {
     return request;
   }
 
-  async listAll(userId: string, role: Role) {
+  async listAll(userId: string, role: Role, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     if (role === Role.DONOR) {
       const donor = await this.prisma.donor.findUnique({ where: { userId }, select: { id: true } });
       if (!donor) {
@@ -272,6 +275,8 @@ export class BloodRequestsService {
           },
         },
         orderBy: { createdAt: 'desc' },
+        skip,
+        take,
       });
 
       return donorRequests.map((request) => ({
@@ -294,12 +299,16 @@ export class BloodRequestsService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 
-  async listMine(userId: string, role: 'ADMIN' | 'HOSPITAL_STAFF') {
+  async listMine(userId: string, role: 'ADMIN' | 'HOSPITAL_STAFF', query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     if (role === 'ADMIN') {
-      return this.listAll(userId, Role.ADMIN);
+      return this.listAll(userId, Role.ADMIN, query);
     }
 
     const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
@@ -318,6 +327,8 @@ export class BloodRequestsService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 
@@ -419,12 +430,16 @@ export class BloodRequestsService {
     return updated;
   }
 
-  async listUpdates(id: string, userId: string, role: Role) {
+  async listUpdates(id: string, userId: string, role: Role, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     await this.getById(id, userId, role);
     return this.prisma.bloodRequestUpdate.findMany({
       where: { bloodRequestId: id },
       include: { updatedBy: { select: { email: true, role: true } } },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 
@@ -608,11 +623,15 @@ export class BloodRequestsService {
     };
   }
 
-  async listDonorResponses(id: string, userId: string, role: Role) {
+  async listDonorResponses(id: string, userId: string, role: Role, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     await this.getById(id, userId, role);
     return this.prisma.donorResponse.findMany({
       where: { bloodRequestId: id },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
       include: {
         donor: {
           select: {

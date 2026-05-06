@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -9,6 +9,7 @@ import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Controller('appointments')
@@ -29,17 +30,20 @@ export class AppointmentsController {
 
   @Roles(Role.ADMIN, Role.DONOR, Role.HOSPITAL_STAFF)
   @Get()
-  listForUser(@CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' }) {
-    return this.appointmentsService.listForUser(user.id, user.role);
+  listForUser(
+    @CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' },
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.appointmentsService.listForUser(user.id, user.role, query);
   }
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' },
     @Body() dto: UpdateAppointmentStatusDto,
   ) {
-    return this.appointmentsService.updateStatus(id, user.id, dto);
+    return this.appointmentsService.updateStatus(id, user.id, user.role, dto);
   }
 }

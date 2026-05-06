@@ -1,19 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   NotificationItem,
   getHospitalNotifications,
   markNotificationDelivered,
 } from '../services/hospital-portal';
+import { FilterBox, Pager } from '../components/TableControls';
 
 export default function HospitalNotificationsPage() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 25;
 
-  const load = async () => {
+  const load = async (nextPage = page) => {
     try {
-      const data = await getHospitalNotifications();
+      const data = await getHospitalNotifications({ skip: nextPage * pageSize, take: pageSize });
       setItems(data);
+      setHasMore(data.length === pageSize);
     } finally {
       setLoading(false);
     }
@@ -21,7 +28,24 @@ export default function HospitalNotificationsPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          !searchTerm ||
+          item.title.toLowerCase().includes(searchTerm) ||
+          item.body.toLowerCase().includes(searchTerm) ||
+          (item.delivered ? 'delivered' : 'pending').includes(searchTerm),
+      ),
+    [items, searchTerm],
+  );
 
   const markDelivered = async (notificationId: string) => {
     setMessage('');
@@ -40,14 +64,20 @@ export default function HospitalNotificationsPage() {
         <h1 className="text-2xl font-bold text-primary">Notifications</h1>
         <p className="text-sm text-muted">Review donor responses, system updates, and emergency alerts.</p>
       </div>
+      <FilterBox
+        label="Filter notifications (debounced)"
+        placeholder="Filter by title/body/status..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
 
       {message ? <p className="text-sm text-primary">{message}</p> : null}
 
       <div className="card space-y-3">
         {loading ? <p className="text-sm text-muted">Loading notifications...</p> : null}
-        {!loading && items.length === 0 ? <p className="text-sm text-muted">No notifications right now.</p> : null}
+        {!loading && filteredItems.length === 0 ? <p className="text-sm text-muted">No notifications right now.</p> : null}
         {!loading &&
-          items.map((item) => (
+          filteredItems.map((item) => (
             <article key={item.id} className="rounded border border-red-100 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-base font-bold text-primary">{item.title}</h2>
@@ -66,8 +96,13 @@ export default function HospitalNotificationsPage() {
               </div>
             </article>
           ))}
+        <Pager
+          page={page}
+          hasMore={hasMore}
+          onPrev={() => setPage((value) => Math.max(0, value - 1))}
+          onNext={() => setPage((value) => value + 1)}
+        />
       </div>
     </section>
   );
 }
-

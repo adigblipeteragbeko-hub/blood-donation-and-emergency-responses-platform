@@ -4,6 +4,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateUserAdminDto } from './dto/admin/create-user-admin.dto';
 import * as argon2 from 'argon2';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class UsersService {
@@ -12,9 +13,14 @@ export class UsersService {
     private readonly audit: AuditService,
   ) {}
 
-  findAll() {
+  findAll(query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     return this.prisma.user.findMany({
       select: { id: true, email: true, role: true, isActive: true, createdAt: true },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
     });
   }
 

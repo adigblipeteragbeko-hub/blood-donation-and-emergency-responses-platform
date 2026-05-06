@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BloodRequestItem,
   DonorResponseStatus,
@@ -10,6 +10,7 @@ import {
   updateHospitalRequestStatus,
 } from '../services/hospital-portal';
 import { bloodGroups } from '../constants/blood-groups';
+import { FilterBox, Pager } from '../components/TableControls';
 
 const statusOptions: RequestStatus[] = ['OPEN', 'MATCHING', 'FULFILLED', 'CANCELLED'];
 const trackingOptions: RequestProgressStatus[] = ['PENDING', 'MATCHED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
@@ -19,16 +20,22 @@ export default function HospitalActiveRequestsPage() {
   const [items, setItems] = useState<BloodRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, { newStatus: RequestProgressStatus; comment: string }>>({});
   const [completionDrafts, setCompletionDrafts] = useState<
     Record<string, { transfusedByStaffId: string; unitDin: string; patientEncounterId: string }>
   >({});
   const [responseDrafts, setResponseDrafts] = useState<Record<string, DonorResponseStatus>>({});
+  const pageSize = 25;
 
-  const load = async () => {
+  const load = async (nextPage = page) => {
     try {
-      const data = await getHospitalRequests();
+      const data = await getHospitalRequests({ skip: nextPage * pageSize, take: pageSize });
       setItems(data);
+      setHasMore(data.length === pageSize);
     } finally {
       setLoading(false);
     }
@@ -36,7 +43,27 @@ export default function HospitalActiveRequestsPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          !searchTerm ||
+          item.bloodGroup.toLowerCase().includes(searchTerm) ||
+          item.priority.toLowerCase().includes(searchTerm) ||
+          item.status.toLowerCase().includes(searchTerm) ||
+          item.trackingStatus.toLowerCase().includes(searchTerm) ||
+          item.location.toLowerCase().includes(searchTerm) ||
+          (item.hospital?.hospitalName ?? '').toLowerCase().includes(searchTerm),
+      ),
+    [items, searchTerm],
+  );
 
   const changeStatus = async (id: string, status: RequestStatus) => {
     setMessage('');
@@ -68,13 +95,19 @@ export default function HospitalActiveRequestsPage() {
         <h1 className="text-2xl font-bold text-primary">Active Requests</h1>
         <p className="text-sm text-muted">Track ongoing requests, donor responses, and fulfillment progress.</p>
       </div>
+      <FilterBox
+        label="Filter requests (debounced)"
+        placeholder="Filter by blood group, status, priority, location..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
 
       <div className="card">
         {loading ? <p className="text-sm text-muted">Loading requests...</p> : null}
-        {!loading && items.length === 0 ? <p className="text-sm text-muted">No requests found yet.</p> : null}
-        {!loading && items.length > 0 ? (
+        {!loading && filteredItems.length === 0 ? <p className="text-sm text-muted">No requests found yet.</p> : null}
+        {!loading && filteredItems.length > 0 ? (
           <div className="space-y-4">
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const trackingDraft = ensureTrackingDraft(item);
               return (
                 <article key={item.id} className="rounded-xl border border-red-100 p-4">
@@ -322,6 +355,12 @@ export default function HospitalActiveRequestsPage() {
             })}
           </div>
         ) : null}
+        <Pager
+          page={page}
+          hasMore={hasMore}
+          onPrev={() => setPage((value) => Math.max(0, value - 1))}
+          onNext={() => setPage((value) => value + 1)}
+        />
       </div>
       {message ? <p className="text-sm text-primary">{message}</p> : null}
     </section>

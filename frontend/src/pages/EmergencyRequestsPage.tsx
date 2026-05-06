@@ -5,6 +5,7 @@ import {
   getAllBloodRequests,
   respondToBloodRequest,
 } from '../services/hospital-portal';
+import { FilterBox, Pager } from '../components/TableControls';
 
 const bloodGroupLabel: Record<string, string> = {
   O_POS: 'O_POS (O+)',
@@ -22,16 +23,30 @@ export default function EmergencyRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 25;
 
   const emergencyRequests = useMemo(
-    () => requests.filter((item) => item.type === 'EMERGENCY' || item.priority === 'CRITICAL'),
-    [requests],
+    () =>
+      requests.filter(
+        (item) =>
+          (item.type === 'EMERGENCY' || item.priority === 'CRITICAL') &&
+          (!searchTerm ||
+            item.bloodGroup.toLowerCase().includes(searchTerm) ||
+            (item.hospital?.hospitalName ?? '').toLowerCase().includes(searchTerm) ||
+            item.trackingStatus.toLowerCase().includes(searchTerm)),
+      ),
+    [requests, searchTerm],
   );
 
-  const loadRequests = async () => {
+  const loadRequests = async (nextPage = page) => {
     try {
-      const data = await getAllBloodRequests();
+      const data = await getAllBloodRequests({ skip: nextPage * pageSize, take: pageSize });
       setRequests(data);
+      setHasMore(data.length === pageSize);
     } catch {
       setMessage('Unable to load emergency requests right now.');
     } finally {
@@ -41,7 +56,12 @@ export default function EmergencyRequestsPage() {
 
   useEffect(() => {
     void loadRequests();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const respond = async (id: string, responseStatus: DonorResponseStatus) => {
     try {
@@ -57,6 +77,12 @@ export default function EmergencyRequestsPage() {
     <section className="space-y-3">
       <h1 className="text-2xl font-bold text-primary">Emergency Requests</h1>
       <p className="text-sm text-gray-600">View urgent blood requests and respond (accept/decline).</p>
+      <FilterBox
+        label="Filter emergency requests (debounced)"
+        placeholder="Filter by hospital, blood group, or tracking status..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
       {loading ? (
         <div className="card">
           <p className="text-sm text-gray-600">Loading requests...</p>
@@ -109,6 +135,12 @@ export default function EmergencyRequestsPage() {
           </article>
         ))
       )}
+      <Pager
+        page={page}
+        hasMore={hasMore}
+        onPrev={() => setPage((value) => Math.max(0, value - 1))}
+        onNext={() => setPage((value) => value + 1)}
+      />
       {message ? <p className="text-sm text-primary">{message}</p> : null}
     </section>
   );

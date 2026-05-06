@@ -7,6 +7,7 @@ import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import * as argon2 from 'argon2';
 import { Role } from '@prisma/client';
 import { DonorSearchDto } from './dto/donor-search.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class HospitalsService {
@@ -73,12 +74,16 @@ export class HospitalsService {
     });
   }
 
-  listAllForAdmin() {
+  listAllForAdmin(query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = query.take ?? 100;
     return this.prisma.hospital.findMany({
       include: {
         user: { select: { id: true, email: true, role: true, isActive: true } },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take,
     });
   }
 

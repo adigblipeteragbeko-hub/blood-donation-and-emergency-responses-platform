@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { FilterBox, Pager } from '../components/TableControls';
 import { countryCodes } from '../constants/country-codes';
 import {
   adminCorrectCompletionEvidence,
@@ -58,6 +59,8 @@ const bloodGroupLabel: Record<string, string> = {
 };
 const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const nameRule = /^[A-Za-z\s'-]+$/;
+const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function AdminManagementPage() {
   const location = useLocation();
@@ -107,24 +110,72 @@ export default function AdminManagementPage() {
     location: string;
     contactName: string;
   } | null>(null);
+  const [usersPage, setUsersPage] = useState(0);
+  const [donorsPage, setDonorsPage] = useState(0);
+  const [hospitalsPage, setHospitalsPage] = useState(0);
+  const [requestsPage, setRequestsPage] = useState(0);
+  const [inventoryLogsPage, setInventoryLogsPage] = useState(0);
+  const [hasMoreUsers, setHasMoreUsers] = useState(false);
+  const [hasMoreDonors, setHasMoreDonors] = useState(false);
+  const [hasMoreHospitals, setHasMoreHospitals] = useState(false);
+  const [hasMoreRequests, setHasMoreRequests] = useState(false);
+  const [hasMoreInventoryLogs, setHasMoreInventoryLogs] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const loadAll = async () => {
+  const loadUsers = async (page = usersPage) => {
+    const skip = page * PAGE_SIZE;
+    const usersRes = await api.get('/users', { params: { skip, take: PAGE_SIZE } });
+    const data: UserItem[] = usersRes.data.data ?? [];
+    setUsers(data);
+    setHasMoreUsers(data.length === PAGE_SIZE);
+  };
+
+  const loadDonors = async (page = donorsPage) => {
+    const skip = page * PAGE_SIZE;
+    const donorsRes = await api.get('/donors/admin', { params: { skip, take: PAGE_SIZE } });
+    const data: DonorItem[] = donorsRes.data.data ?? [];
+    setDonors(data);
+    setHasMoreDonors(data.length === PAGE_SIZE);
+  };
+
+  const loadHospitals = async (page = hospitalsPage) => {
+    const skip = page * PAGE_SIZE;
+    const hospitalsRes = await api.get('/hospitals/admin', { params: { skip, take: PAGE_SIZE } });
+    const data: HospitalItem[] = hospitalsRes.data.data ?? [];
+    setHospitals(data);
+    setHasMoreHospitals(data.length === PAGE_SIZE);
+  };
+
+  const loadRequests = async (page = requestsPage) => {
+    const skip = page * PAGE_SIZE;
+    const data = await getAllBloodRequests({ skip, take: PAGE_SIZE });
+    setRequestTracking(data);
+    setHasMoreRequests(data.length === PAGE_SIZE);
+  };
+
+  const loadInventoryLogData = async (page = inventoryLogsPage) => {
+    const skip = page * PAGE_SIZE;
+    const data = await getInventoryLogs({ skip, take: PAGE_SIZE });
+    setInventoryLogs(data);
+    setHasMoreInventoryLogs(data.length === PAGE_SIZE);
+  };
+
+  const loadSectionData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [usersRes, donorsRes, hospitalsRes, requestsData, inventoryLogData] = await Promise.all([
-        api.get('/users'),
-        api.get('/donors/admin'),
-        api.get('/hospitals/admin'),
-        getAllBloodRequests(),
-        getInventoryLogs(),
-      ]);
-
-      setUsers(usersRes.data.data);
-      setDonors(donorsRes.data.data);
-      setHospitals(hospitalsRes.data.data);
-      setRequestTracking(requestsData);
-      setInventoryLogs(inventoryLogData);
+      if (activeSection === 'settings') {
+        await loadUsers();
+      } else if (activeSection === 'donors') {
+        await loadDonors();
+      } else if (activeSection === 'hospitals') {
+        await loadHospitals();
+      } else if (activeSection === 'request-tracking') {
+        await loadRequests();
+      } else if (activeSection === 'inventory-tracking') {
+        await loadInventoryLogData();
+      }
     } catch {
       setError('Failed to load admin data. Make sure you are logged in as admin.');
     } finally {
@@ -132,11 +183,15 @@ export default function AdminManagementPage() {
     }
   };
 
+  const refreshCurrentSection = async () => {
+    await loadSectionData();
+  };
+
   const addTrackingUpdate = async (requestId: string, newStatus: RequestProgressStatus) => {
     try {
       await createBloodRequestUpdate(requestId, { newStatus });
       setError('');
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -163,7 +218,7 @@ export default function AdminManagementPage() {
         overrideReason: correction.overrideReason.trim(),
       });
       setError('');
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -174,7 +229,7 @@ export default function AdminManagementPage() {
   const patchDonorResponse = async (responseId: string, responseStatus: DonorResponseStatus) => {
     try {
       await updateDonorResponse(responseId, { responseStatus });
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -183,8 +238,13 @@ export default function AdminManagementPage() {
   };
 
   useEffect(() => {
-    void loadAll();
-  }, []);
+    const timer = setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    void refreshCurrentSection();
+  }, [activeSection, usersPage, donorsPage, hospitalsPage, requestsPage, inventoryLogsPage]);
 
   const resetAccountForm = () => {
     setAccountForm({
@@ -266,7 +326,7 @@ export default function AdminManagementPage() {
       }
 
       resetAccountForm();
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -289,7 +349,7 @@ export default function AdminManagementPage() {
         isActive: editingUser.isActive,
       });
       setEditingUser(null);
-      await loadAll();
+      await refreshCurrentSection();
     } catch {
       setError('Could not update user.');
     }
@@ -302,7 +362,7 @@ export default function AdminManagementPage() {
 
     try {
       await api.delete(`/users/${id}`);
-      await loadAll();
+      await refreshCurrentSection();
     } catch {
       setError('Could not delete user.');
     }
@@ -330,7 +390,7 @@ export default function AdminManagementPage() {
         bloodGroup: editingDonor.bloodGroup,
       });
       setEditingDonor(null);
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -345,7 +405,7 @@ export default function AdminManagementPage() {
 
     try {
       await api.delete(`/donors/admin/${id}`);
-      await loadAll();
+      await refreshCurrentSection();
     } catch {
       setError('Could not delete donor.');
     }
@@ -354,7 +414,7 @@ export default function AdminManagementPage() {
   const setDonorApproval = async (id: string, approved: boolean) => {
     try {
       await api.patch(`/donors/admin/${id}/eligibility`, { approved });
-      await loadAll();
+      await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -383,7 +443,7 @@ export default function AdminManagementPage() {
         contactName: editingHospital.contactName,
       });
       setEditingHospital(null);
-      await loadAll();
+      await refreshCurrentSection();
     } catch {
       setError('Could not update hospital.');
     }
@@ -396,17 +456,60 @@ export default function AdminManagementPage() {
 
     try {
       await api.delete(`/hospitals/admin/${id}`);
-      await loadAll();
+      await refreshCurrentSection();
     } catch {
       setError('Could not delete hospital.');
     }
   };
+
+  const includesTerm = (value: string | undefined | null) =>
+    !searchTerm || (value ?? '').toLowerCase().includes(searchTerm);
+
+  const filteredUsers = users.filter(
+    (user) => includesTerm(user.email) || includesTerm(formatRole(user.role)) || includesTerm(String(user.isActive)),
+  );
+  const filteredDonors = donors.filter(
+    (donor) =>
+      includesTerm(donor.donorNumber) ||
+      includesTerm(donor.fullName) ||
+      includesTerm(donor.user.email) ||
+      includesTerm(donor.location) ||
+      includesTerm(donor.bloodGroup),
+  );
+  const filteredHospitals = hospitals.filter(
+    (hospital) =>
+      includesTerm(hospital.hospitalName) ||
+      includesTerm(hospital.user.email) ||
+      includesTerm(hospital.registrationCode) ||
+      includesTerm(hospital.location),
+  );
+  const filteredRequests = requestTracking.filter(
+    (request) =>
+      includesTerm(request.hospital?.hospitalName) ||
+      includesTerm(request.bloodGroup) ||
+      includesTerm(request.status) ||
+      includesTerm(request.trackingStatus) ||
+      includesTerm(String(request.unitsNeeded)),
+  );
+  const filteredInventoryLogs = inventoryLogs.filter(
+    (log) =>
+      includesTerm(log.inventory.hospital?.hospitalName) ||
+      includesTerm(log.inventory.bloodGroup) ||
+      includesTerm(log.changeType) ||
+      includesTerm(log.changedBy?.email),
+  );
 
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-bold text-primary">Admin Control Center</h1>
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
+      <FilterBox
+        label="Search (debounced)"
+        placeholder="Filter current tab..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
 
       {activeSection === 'settings' ? (
       <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
@@ -519,7 +622,7 @@ export default function AdminManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user.id} className="border-b">
                   <td className="py-2">{user.email}</td>
                   <td className="py-2">{formatRole(user.role)}</td>
@@ -535,6 +638,12 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        <Pager
+          page={usersPage}
+          hasMore={hasMoreUsers}
+          onPrev={() => setUsersPage((page) => Math.max(0, page - 1))}
+          onNext={() => setUsersPage((page) => page + 1)}
+        />
         {editingUser ? (
           <form className="rounded border bg-gray-50 p-3" onSubmit={updateUser}>
             <h3 className="mb-2 font-semibold">Edit User</h3>
@@ -589,7 +698,7 @@ export default function AdminManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {donors.map((donor) => (
+              {filteredDonors.map((donor) => (
                 <tr key={donor.id} className="border-b">
                   <td className="py-2">{donor.donorNumber ?? '-'}</td>
                   <td className="py-2">{donor.fullName}</td>
@@ -621,6 +730,12 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        <Pager
+          page={donorsPage}
+          hasMore={hasMoreDonors}
+          onPrev={() => setDonorsPage((page) => Math.max(0, page - 1))}
+          onNext={() => setDonorsPage((page) => page + 1)}
+        />
         {editingDonor ? (
           <form className="rounded border bg-gray-50 p-3" onSubmit={updateDonor}>
             <h3 className="mb-2 font-semibold">Edit Donor</h3>
@@ -685,7 +800,7 @@ export default function AdminManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {hospitals.map((hospital) => (
+              {filteredHospitals.map((hospital) => (
                 <tr key={hospital.id} className="border-b">
                   <td className="py-2">{hospital.hospitalName}</td>
                   <td className="py-2">{hospital.user.email}</td>
@@ -702,6 +817,12 @@ export default function AdminManagementPage() {
             </tbody>
           </table>
         </div>
+        <Pager
+          page={hospitalsPage}
+          hasMore={hasMoreHospitals}
+          onPrev={() => setHospitalsPage((page) => Math.max(0, page - 1))}
+          onNext={() => setHospitalsPage((page) => page + 1)}
+        />
         {editingHospital ? (
           <form className="rounded border bg-gray-50 p-3" onSubmit={updateHospital}>
             <h3 className="mb-2 font-semibold">Edit Hospital</h3>
@@ -748,11 +869,11 @@ export default function AdminManagementPage() {
       {activeSection === 'request-tracking' ? (
       <div id="request-tracking" className="card space-y-3">
         <h2 className="text-xl font-semibold">Request Tracking</h2>
-        {requestTracking.length === 0 ? (
+        {filteredRequests.length === 0 ? (
           <p className="text-sm text-muted">No blood request tracking records found.</p>
         ) : (
           <div className="space-y-3">
-            {requestTracking.slice(0, 12).map((request) => (
+            {filteredRequests.map((request) => (
               <article key={request.id} className="rounded border p-3">
                 <p className="text-sm font-semibold">
                   {request.hospital?.hospitalName ?? 'Hospital'}: {request.bloodGroup} ({request.unitsNeeded} units)
@@ -895,13 +1016,19 @@ export default function AdminManagementPage() {
             ))}
           </div>
         )}
+        <Pager
+          page={requestsPage}
+          hasMore={hasMoreRequests}
+          onPrev={() => setRequestsPage((page) => Math.max(0, page - 1))}
+          onNext={() => setRequestsPage((page) => page + 1)}
+        />
       </div>
       ) : null}
 
       {activeSection === 'inventory-tracking' ? (
       <div id="inventory-tracking" className="card space-y-3">
         <h2 className="text-xl font-semibold">Inventory Log Tracking</h2>
-        {inventoryLogs.length === 0 ? (
+        {filteredInventoryLogs.length === 0 ? (
           <p className="text-sm text-muted">No inventory log entries found.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -917,7 +1044,7 @@ export default function AdminManagementPage() {
                 </tr>
               </thead>
               <tbody>
-                {inventoryLogs.slice(0, 30).map((log) => (
+                {filteredInventoryLogs.map((log) => (
                   <tr key={log.id} className="border-b">
                     <td className="py-2">{log.inventory.hospital?.hospitalName ?? '-'}</td>
                     <td className="py-2">{log.inventory.bloodGroup}</td>
@@ -934,6 +1061,12 @@ export default function AdminManagementPage() {
             </table>
           </div>
         )}
+        <Pager
+          page={inventoryLogsPage}
+          hasMore={hasMoreInventoryLogs}
+          onPrev={() => setInventoryLogsPage((page) => Math.max(0, page - 1))}
+          onNext={() => setInventoryLogsPage((page) => page + 1)}
+        />
       </div>
       ) : null}
 
@@ -948,3 +1081,5 @@ export default function AdminManagementPage() {
     </section>
   );
 }
+
+

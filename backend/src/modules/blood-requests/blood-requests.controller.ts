@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -11,6 +11,7 @@ import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
 import { AdminCorrectCompletionDto } from './dto/admin-correct-completion.dto';
 import { BloodRequestsService } from './blood-requests.service';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Controller('blood-requests')
@@ -25,14 +26,14 @@ export class BloodRequestsController {
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
   @Get()
-  listAll(@CurrentUser() user: { id: string; role: Role }) {
-    return this.bloodRequestsService.listAll(user.id, user.role);
+  listAll(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.bloodRequestsService.listAll(user.id, user.role, query);
   }
 
   @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
   @Get('mine')
-  listMine(@CurrentUser() user: { id: string; role: Role }) {
-    return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF');
+  listMine(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF', query);
   }
 
   @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
@@ -59,8 +60,8 @@ export class BloodRequestsController {
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
   @Get(':id/updates')
-  listUpdates(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
-    return this.bloodRequestsService.listUpdates(id, user.id, user.role);
+  listUpdates(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.bloodRequestsService.listUpdates(id, user.id, user.role, query);
   }
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
@@ -85,8 +86,8 @@ export class BloodRequestsController {
 
   @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
   @Get(':id/donor-responses')
-  listDonorResponses(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
-    return this.bloodRequestsService.listDonorResponses(id, user.id, user.role);
+  listDonorResponses(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.bloodRequestsService.listDonorResponses(id, user.id, user.role, query);
   }
 
   @Roles(Role.DONOR)

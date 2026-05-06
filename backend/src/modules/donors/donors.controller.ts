@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,6 +14,7 @@ import { UpdateDonorAdminDto } from './dto/admin/update-donor-admin.dto';
 import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 import { UpdateDonorEligibilityApprovalDto } from './dto/admin/update-donor-eligibility-approval.dto';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Roles(Role.DONOR, Role.ADMIN)
@@ -63,8 +64,8 @@ export class DonorsController {
 
   @Roles(Role.ADMIN)
   @Get('admin')
-  listAllForAdmin() {
-    return this.donorsService.listAllForAdmin();
+  listAllForAdmin(@Query() query: PaginationQueryDto) {
+    return this.donorsService.listAllForAdmin(query);
   }
 
   @Roles(Role.ADMIN)
