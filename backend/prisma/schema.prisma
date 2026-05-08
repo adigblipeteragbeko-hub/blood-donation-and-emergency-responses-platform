@@ -82,6 +82,13 @@ enum NotificationType {
   SYSTEM
 }
 
+enum WebsiteStatisticKey {
+  REGISTERED_DONORS
+  EMERGENCY_MATCHES
+  PARTNER_HOSPITALS
+  REQUESTS_COMPLETED
+}
+
 model User {
   id                      String                   @id @default(cuid())
   email                   String                   @unique
@@ -375,4 +382,106 @@ model DonorResponse {
   @@unique([bloodRequestId, donorId])
   @@index([responseStatus])
   @@index([createdAt])
+}
+
+model WebsiteAlert {
+  id           String        @id @default(cuid())
+  title        String
+  message      String
+  bloodType    BloodGroup?
+  hospitalName String
+  urgencyLevel PriorityLevel @default(HIGH)
+  isActive     Boolean       @default(false)
+  isSticky     Boolean       @default(true)
+  isScrolling  Boolean       @default(false)
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([isActive, expiresAt])
+  @@index([createdAt])
+}
+
+model WebsiteStatistic {
+  id                String              @id @default(cuid())
+  key               WebsiteStatisticKey @unique
+  label             String
+  description       String
+  overrideValue     Int?
+  isOverrideEnabled Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model Faq {
+  id          String   @id @default(cuid())
+  question    String
+  answer      String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished])
+  @@index([createdAt])
+}
+
+model Testimonial {
+  id          String   @id @default(cuid())
+  name        String
+  role        String
+  message     String
+  location    String
+  isApproved  Boolean  @default(false)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isApproved, isPublished])
+  @@index([createdAt])
+}
+
+model AwarenessPost {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  image       String?
+  category    String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model PartnerHospital {
+  id           String   @id @default(cuid())
+  hospitalName String
+  location     String
+  phone        String
+  email        String
+  description  String
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([hospitalName])
+  @@index([location])
+  @@index([createdAt])
+}
+
+model WebsiteFooterSettings {
+  id               String   @id @default(cuid())
+  singletonKey     String   @unique @default("default")
+  emergencyPhonePrimary   String
+  emergencyPhoneSecondary String?
+  supportEmail     String
+  facebookUrl      String?
+  instagramUrl     String?
+  linkedinUrl      String?
+  footerText       String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }

@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard Overview' },
+  { to: '/admin/website-management', label: 'Website Management' },
   { to: '/admin/management?section=settings', label: 'Manage Users' },
   { to: '/admin/management?section=donors', label: 'Manage Donors' },
   { to: '/admin/management?section=hospitals', label: 'Manage Hospitals' },

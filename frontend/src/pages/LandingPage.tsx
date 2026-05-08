@@ -1,131 +1,348 @@
-import { CSSProperties, ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  awarenessItems,
+  faqItems,
+  howItWorksSteps,
+  nearbyCenters,
+  notificationPreviewItems,
+  publicEmergencyAlerts,
+  publicStats,
+  publicVisuals,
+  testimonials,
+  trustIndicators,
+  whyDonateItems,
+} from '../data/publicContent';
+import {
+  getPublicWebsiteContent,
+  PublicWebsiteContent,
+  WebsiteStatisticItem,
+} from '../services/website-management';
 
-type PrevalenceRow = {
-  left: { group: string; percent: number; ring: number };
-  right: { group: string; percent: number; ring: number };
-  description: ReactNode;
-};
+function AnimatedStat({ value, suffix = '' }: { value: string; suffix?: string }) {
+  const target = Number(value);
+  const [display, setDisplay] = useState(0);
 
-const rows: PrevalenceRow[] = [
-  {
-    left: { group: 'A+', percent: 19, ring: 19 },
-    right: { group: 'A\u2212', percent: 2, ring: 2 },
-    description: (
-      <>
-        <strong>Group A</strong> blood can be given to patients with blood types A and AB, and blood group A
-        patients can receive types A and O blood.
-        <br />
-        However, anybody with any of the blood types can always give blood.
-      </>
-    ),
-  },
-  {
-    left: { group: 'B+', percent: 21, ring: 21 },
-    right: { group: 'B\u2212', percent: 2, ring: 2 },
-    description: (
-      <>
-        <strong>Group B</strong> blood can be given to patients with blood types B and AB, and blood group B
-        patients can receive types B and O blood.
-        <br />
-        However, no matter your blood type, you can always give blood.
-      </>
-    ),
-  },
-  {
-    left: { group: 'AB+', percent: 3, ring: 3 },
-    right: { group: 'AB\u2212', percent: 1, ring: 1 },
-    description: (
-      <>
-        <strong>Group AB</strong> blood can be given to patients with blood type AB but blood group AB patients can
-        receive any blood type.
-        <br />
-        Irrespective of your blood type, you can always give blood.
-      </>
-    ),
-  },
-  {
-    left: { group: 'O+', percent: 48, ring: 48 },
-    right: { group: 'O\u2212', percent: 4, ring: 4 },
-    description: (
-      <>
-        <strong>Group O</strong> blood can be given to patients with all blood types but blood group O patients can
-        only receive type O blood.
-        <br />
-        Meanwhile, anybody with any of the blood types can always give blood.
-      </>
-    ),
-  },
-];
+  useEffect(() => {
+    let frame = 0;
+    const duration = 900;
+    const start = performance.now();
 
-function BloodCircle({ group, percent, ring }: { group: string; percent: number; ring: number }) {
-  const radius = 95;
-  const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference * (1 - ring / 100);
-  const ringStyle: CSSProperties & { '--progress-offset': string; '--circumference': string } = {
-    '--progress-offset': `${progressOffset}px`,
-    '--circumference': `${circumference}px`,
-  };
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(target * eased));
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
 
   return (
-    <div className="blood-group-circle-wrap">
-      <div className="blood-group-ring" style={ringStyle}>
-        <svg className="blood-group-svg" viewBox="0 0 220 220" aria-hidden="true">
-          <circle className="blood-group-track" cx="110" cy="110" r={radius} />
-          <circle className="blood-group-progress" cx="110" cy="110" r={radius} />
-        </svg>
-        <div className="blood-group-center">
-          <span className="blood-group-label">{group}</span>
-        </div>
-      </div>
-      <p className="blood-group-percent">{percent}%</p>
-    </div>
+    <>
+      {display.toLocaleString()}
+      {suffix}
+    </>
   );
 }
 
 export default function LandingPage() {
+  const [websiteContent, setWebsiteContent] = useState<PublicWebsiteContent | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadWebsiteContent = async () => {
+      try {
+        const content = await getPublicWebsiteContent();
+        if (!active) return;
+        setWebsiteContent(content);
+      } catch {
+        if (!active) return;
+        setWebsiteContent(null);
+      }
+    };
+
+    loadWebsiteContent();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const featuredAlert = useMemo(() => {
+    if (websiteContent?.alert) {
+      return {
+        id: websiteContent.alert.id,
+        bloodType:
+          websiteContent.alert.bloodType?.replace('_POS', '+').replace('_NEG', '-').replace('_', ' ') ?? 'O-',
+        hospital: websiteContent.alert.hospitalName,
+        location: 'Partner hospital network',
+        urgency:
+          websiteContent.alert.urgencyLevel === 'CRITICAL'
+            ? 'Critical'
+            : websiteContent.alert.urgencyLevel === 'HIGH'
+              ? 'High'
+              : 'Standard',
+        note: websiteContent.alert.message,
+      };
+    }
+
+    return publicEmergencyAlerts[0];
+  }, [websiteContent]);
+
+  const displayStats = useMemo(() => {
+    if (!websiteContent?.statistics?.length) return publicStats;
+
+    const details: Record<WebsiteStatisticItem['key'], string> = {
+      REGISTERED_DONORS: 'Verified donor workflows connected to hospital response needs.',
+      EMERGENCY_MATCHES: 'Urgent requests coordinated faster through structured matching.',
+      PARTNER_HOSPITALS: 'Hospitals and blood centers participating in the response network.',
+      REQUESTS_COMPLETED: 'Tracked blood request workflows from creation to fulfillment.',
+    };
+
+    return websiteContent.statistics.map((item) => ({
+      label: item.label,
+      value: String(item.value),
+      suffix: item.value >= 1000 ? '+' : '',
+      detail: item.description ?? details[item.key],
+    }));
+  }, [websiteContent]);
+
+  const displayTestimonials = useMemo(
+    () =>
+      websiteContent?.testimonials?.length
+        ? websiteContent.testimonials.map((item) => ({
+            name: item.location ? `${item.name}, ${item.location}` : item.name,
+            quote: item.message,
+          }))
+        : testimonials,
+    [websiteContent],
+  );
+
+  const displayFaqs = useMemo(
+    () =>
+      websiteContent?.faqs?.length
+        ? websiteContent.faqs.map((item) => ({
+            question: item.question,
+            answer: item.answer,
+          }))
+        : faqItems,
+    [websiteContent],
+  );
+
+  const displayAwareness = useMemo(
+    () =>
+      websiteContent?.awarenessPosts?.length
+        ? websiteContent.awarenessPosts.slice(0, 3).map((item) => ({
+            title: item.title,
+            body: item.content,
+          }))
+        : awarenessItems,
+    [websiteContent],
+  );
+
+  const displayCenters = useMemo(
+    () =>
+      websiteContent?.partnerHospitals?.length
+        ? websiteContent.partnerHospitals.slice(0, 3).map((item) => ({
+            name: item.hospitalName,
+            city: item.location,
+            area: item.email,
+            note: item.description ?? item.phone,
+          }))
+        : nearbyCenters,
+    [websiteContent],
+  );
+
   return (
-    <section className="space-y-6">
-      <div className="legacy-panel grid gap-6 md:grid-cols-2 md:items-center">
-        <div className="space-y-4">
-          <h1 className="legacy-title">DONATE BLOOD!!!</h1>
-          <p className="text-lg text-gray-700">
-            If you are a blood donor, you are a hero to someone waiting for a second chance at life.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link className="btn-primary" to="/donor-register">
-              Donor Registration
-            </Link>
-            <Link className="rounded-lg border border-primary px-4 py-2 font-semibold text-primary" to="/request">
-              Send Request
+    <div className="space-y-14 pb-8">
+      <section className="hero-surface grid gap-8 overflow-hidden rounded-[28px] px-6 py-10 md:px-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-14 lg:py-14">
+        <div className="space-y-6">
+          <span className="inline-flex rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm">
+            Hospital Blood Donation and Emergency Response Platform
+          </span>
+          <div className="space-y-4">
+            <h1 className="text-4xl font-black leading-tight text-slate-900 md:text-5xl lg:text-6xl">
+              Donate Blood, Save Lives
+            </h1>
+            <p className="max-w-2xl text-lg leading-8 text-slate-600">
+              A clean, trusted, and emergency-ready platform that helps donors, hospitals, and administrators respond
+              faster when blood is urgently needed.
+            </p>
+          </div>
+
+          <div className="alert-banner-public">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-700">Live Emergency Spotlight</p>
+              <p className="mt-2 text-lg font-bold text-slate-900">
+                Urgent Need: {featuredAlert.bloodType} blood at {featuredAlert.hospital}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">{featuredAlert.note}</p>
+            </div>
+            <Link className="btn-primary whitespace-nowrap" to="/emergency-requests">
+              View Requests
             </Link>
           </div>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-red-200 bg-white shadow-sm">
-          <img
-            alt="Blood donation"
-            className="h-72 w-full object-cover"
-            src="https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=1200&q=80"
-          />
-        </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="legacy-panel">
-          <h3 className="mb-2 text-xl font-bold text-primary">Donors</h3>
-          <p className="text-gray-700">Register, manage eligibility, and respond to emergency blood alerts.</p>
-        </div>
-        <div className="legacy-panel">
-          <h3 className="mb-2 text-xl font-bold text-primary">Hospitals</h3>
-          <p className="text-gray-700">Create blood requests and monitor inventory fulfillment in real time.</p>
-        </div>
-        <div className="legacy-panel">
-          <h3 className="mb-2 text-xl font-bold text-primary">Emergency</h3>
-          <p className="text-gray-700">Urgent requests are matched quickly by blood group and location.</p>
-        </div>
-      </div>
+          <div className="flex flex-wrap gap-3">
+            <Link className="btn-primary" to="/donor-register">
+              Become a Donor
+            </Link>
+            <Link className="btn-secondary" to="/hospital-login">
+              Request Blood
+            </Link>
+            <Link className="btn-secondary" to="/login">
+              Login
+            </Link>
+            <Link className="btn-secondary" to="/contact">
+              Contact Hospital
+            </Link>
+          </div>
 
-      <div className="blood-prevalence-section">
+          <div className="grid gap-3 pt-2 sm:grid-cols-2">
+            {trustIndicators.map((item) => (
+              <div key={item} className="trust-pill">
+                <span className="trust-pill-dot" aria-hidden="true" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <figure className="image-card-public sm:col-span-2">
+            <img
+              alt="Hospital staff coordinating blood donation support"
+              className="h-full w-full object-cover"
+              src={publicVisuals.heroPrimary}
+            />
+          </figure>
+          <figure className="image-card-public">
+            <img
+              alt="Donor giving blood during a supervised hospital donation session"
+              className="h-full w-full object-cover"
+              src={publicVisuals.heroSecondary}
+            />
+          </figure>
+          <div className="grid gap-4">
+            {displayStats.slice(0, 2).map((item) => (
+              <article key={item.label} className="stat-card-public">
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
+                <p className="mt-3 text-3xl font-black text-primary">
+                  <AnimatedStat suffix={item.suffix} value={item.value} />
+                </p>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{item.detail}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {displayStats.map((item) => (
+          <article key={item.label} className="stat-card-public">
+            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
+            <p className="mt-3 text-4xl font-black text-primary">
+              <AnimatedStat suffix={item.suffix} value={item.value} />
+            </p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{item.detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="space-y-5">
+        <div className="section-heading-wrap">
+          <p className="section-kicker">Emergency Requests</p>
+          <h2 className="section-title">Visible emergency needs without exposing patient-sensitive details</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {publicEmergencyAlerts.map((alert) => (
+            <article key={alert.id} className="public-card border-red-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-red-700">{alert.urgency} Priority</p>
+                  <h3 className="mt-2 text-xl font-bold text-slate-900">{alert.bloodType} needed</h3>
+                </div>
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">Active</span>
+              </div>
+              <p className="mt-3 text-sm font-semibold text-slate-700">{alert.hospital}</p>
+              <p className="mt-1 text-sm text-slate-500">{alert.location}</p>
+              <p className="mt-4 text-sm leading-6 text-slate-600">{alert.note}</p>
+              <div className="mt-5 flex gap-3">
+                <Link className="btn-primary" to="/donor-register">
+                  Respond as Donor
+                </Link>
+                <Link className="btn-ghost" to="/contact">
+                  Contact Hospital
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-5">
+        <div className="section-heading-wrap">
+          <p className="section-kicker">How It Works</p>
+          <h2 className="section-title">A clear path from registration to lifesaving donation</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-5">
+          {howItWorksSteps.map((step) => (
+            <article key={step.title} className="public-card">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-lg font-black text-primary">
+                {step.icon}
+              </div>
+              <h3 className="mt-5 text-lg font-bold text-slate-900">{step.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{step.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[1fr_0.95fr]">
+        <div className="space-y-5">
+          <div className="section-heading-wrap">
+            <p className="section-kicker">Why Donate?</p>
+            <h2 className="section-title">Human donation remains the only way to keep blood available</h2>
+          </div>
+          <div className="grid gap-4">
+            {whyDonateItems.map((item) => (
+              <article key={item.title} className="public-card">
+                <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <article className="public-card bg-red-50/70">
+          <p className="section-kicker">Notification Preview</p>
+          <h2 className="mt-2 text-3xl font-black text-slate-900">A dynamic response system donors can feel</h2>
+          <p className="mt-4 text-sm leading-7 text-slate-600">
+            Donors and hospitals should immediately understand that urgent needs, reminders, and matching activity are
+            active on the platform.
+          </p>
+          <div className="mt-6 grid gap-3">
+            {notificationPreviewItems.map((item) => (
+              <div key={item} className="notification-preview-card">
+                <span className="notification-preview-badge" aria-hidden="true" />
+                <p className="text-sm font-medium leading-6 text-slate-700">{item}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 rounded-2xl border border-red-200 bg-white p-4">
+            <p className="text-sm font-bold text-slate-900">Book Donation Appointment</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Appointment scheduling and donation reminders are already part of the donor and hospital workflow.
+            </p>
+          </div>
+        </article>
+      </section>
+
+      <section className="blood-prevalence-section">
         <header className="blood-prevalence-header">
           <h2 className="blood-prevalence-title">Someone needs your blood type</h2>
           <p className="blood-prevalence-subtitle">Blood Type Prevalence In Ghana</p>
@@ -135,25 +352,119 @@ export default function LandingPage() {
           <div className="blood-top-divider-mark" />
         </div>
 
-        {rows.map((row, index) => (
-          <article key={`${row.left.group}-${row.right.group}`} className={index === 0 ? 'blood-row' : 'blood-row blood-row-bordered'}>
-            <div className="blood-row-grid">
-              <BloodCircle group={row.left.group} percent={row.left.percent} ring={row.left.ring} />
-              <p className="blood-row-description">
-                {row.description}
-              </p>
-              <BloodCircle group={row.right.group} percent={row.right.percent} ring={row.right.ring} />
-            </div>
-          </article>
-        ))}
+        <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'O+', value: '48%', note: 'Most requested emergency-compatible positive group' },
+            { label: 'B+', value: '21%', note: 'Important for routine and emergency replenishment' },
+            { label: 'A+', value: '19%', note: 'High demand for surgery and planned care' },
+            { label: 'Rare Negative', value: '1-4%', note: 'Small supply but often critical in emergencies' },
+          ].map((item) => (
+            <article key={item.label} className="public-card bg-white/90">
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
+              <p className="mt-3 text-4xl font-black text-primary">{item.value}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{item.note}</p>
+            </article>
+          ))}
+        </div>
 
-        <p className="blood-bottom-note">
-          No matter your blood type, your blood is always needed to save someone&apos;s life.{' '}
+        <p className="blood-bottom-note mt-8">
+          No matter your blood type, your blood is always needed to save someone's life.{' '}
           <Link className="blood-bottom-link" to="/donor-register">
             Sign up to be a blood donor &gt;&gt;&gt;
           </Link>
         </p>
-      </div>
-    </section>
+      </section>
+
+      <section className="space-y-5">
+        <div className="section-heading-wrap">
+          <p className="section-kicker">Nearby Centers</p>
+          <h2 className="section-title">Find partner hospitals and blood centers close to you</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {displayCenters.map((center) => (
+            <article key={center.name} className="public-card">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-red-700">{center.city}</p>
+              <h3 className="mt-2 text-xl font-bold text-slate-900">{center.name}</h3>
+              <p className="mt-2 text-sm font-medium text-slate-700">{center.area}</p>
+              <p className="mt-4 text-sm leading-6 text-slate-600">{center.note}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[1fr_0.95fr]">
+        <div className="space-y-5">
+          <div className="section-heading-wrap">
+            <p className="section-kicker">Testimonials</p>
+            <h2 className="section-title">Stories that build trust in the platform</h2>
+          </div>
+          <div className="grid gap-4">
+            {displayTestimonials.map((item) => (
+              <article key={item.name} className="public-card">
+                <p className="text-base leading-7 text-slate-700">"{item.quote}"</p>
+                <p className="mt-4 text-sm font-bold text-primary">{item.name}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="section-heading-wrap">
+            <p className="section-kicker">Frequently Asked Questions</p>
+            <h2 className="section-title">Clear answers for first-time and repeat donors</h2>
+          </div>
+          <div className="grid gap-4">
+            {displayFaqs.map((item) => (
+              <article key={item.question} className="public-card">
+                <h3 className="text-lg font-bold text-slate-900">{item.question}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{item.answer}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-5">
+        <div className="section-heading-wrap">
+          <p className="section-kicker">News & Awareness</p>
+          <h2 className="section-title">Education and engagement that keep donation active</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {displayAwareness.map((item) => (
+            <article key={item.title} className="public-card">
+              <h3 className="text-lg font-bold text-slate-900">{item.title}</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="cta-band-public">
+        <div>
+          <p className="section-kicker text-red-200">Ready To Save A Life?</p>
+          <h2 className="mt-2 text-3xl font-black text-white md:text-4xl">
+            Join a trusted blood response network built for real emergencies.
+          </h2>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-red-50/90">
+            Register as a donor, learn your eligibility, and become part of a response system that helps hospitals act
+            faster when every minute matters.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            className="rounded-lg bg-white px-5 py-3 font-bold text-primary transition hover:bg-red-50"
+            to="/donor-register"
+          >
+            Become a Donor
+          </Link>
+          <Link
+            className="rounded-lg border border-white/40 px-5 py-3 font-bold text-white transition hover:bg-white/10"
+            to="/blood-eligibility"
+          >
+            Check Eligibility
+          </Link>
+        </div>
+      </section>
+    </div>
   );
 }

@@ -7,10 +7,24 @@ export class AuditService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async log(action: string, entityType: string, actorUserId?: string, entityId?: string, metadata?: unknown) {
+  async log(
+    action: string,
+    entityType: string,
+    actorUserId?: string,
+    entityId?: string,
+    metadata?: unknown,
+    description?: string,
+  ) {
     await this.prisma.auditLog.create({
-      data: { action, entityType, actorUserId, entityId, metadata: metadata as object },
+      data: {
+        action,
+        entityType,
+        actorUserId,
+        entityId,
+        metadata: metadata as object,
+        description,
+      },
     });
-    this.logger.log(JSON.stringify({ action, entityType, actorUserId, entityId }));
+    this.logger.log(JSON.stringify({ action, entityType, actorUserId, entityId, description }));
   }
 }

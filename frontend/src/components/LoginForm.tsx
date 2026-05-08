@@ -73,38 +73,40 @@ export function LoginForm({
   };
 
   return (
-    <form onSubmit={submit} autoComplete="off" className="legacy-panel mx-auto w-full max-w-xl space-y-3">
-      <h1 className="text-center text-4xl font-bold text-primary">{title}</h1>
-      {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
-      {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-      <label className="block text-sm font-semibold">
-        Email
-        <input
-          className="legacy-input mt-1"
-          type="email"
-          name={`manual_email_${title.replace(/\s+/g, '_').toLowerCase()}`}
-          autoComplete="off"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-      </label>
-      <label className="block text-sm font-semibold">
-        Password
-        <input
-          className="legacy-input mt-1"
-          type="password"
-          name={`manual_password_${title.replace(/\s+/g, '_').toLowerCase()}`}
-          autoComplete="new-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-      </label>
-      <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
-        {submitting ? 'Signing in...' : 'Login'}
-      </button>
-      {footer ? <div className="flex justify-center gap-5 pt-1 text-sm">{footer}</div> : null}
-    </form>
+    <div className="flex min-h-[72vh] items-center justify-center py-8">
+      <form onSubmit={submit} autoComplete="off" className="legacy-panel mx-auto w-full max-w-xl space-y-3">
+        <h1 className="text-center text-4xl font-bold text-primary">{title}</h1>
+        {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
+        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+        <label className="block text-sm font-semibold">
+          Email
+          <input
+            className="legacy-input mt-1"
+            type="email"
+            name={`manual_email_${title.replace(/\s+/g, '_').toLowerCase()}`}
+            autoComplete="off"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </label>
+        <label className="block text-sm font-semibold">
+          Password
+          <input
+            className="legacy-input mt-1"
+            type="password"
+            name={`manual_password_${title.replace(/\s+/g, '_').toLowerCase()}`}
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </label>
+        <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting} type="submit">
+          {submitting ? 'Signing in...' : 'Login'}
+        </button>
+        {footer ? <div className="flex justify-center gap-5 pt-1 text-sm">{footer}</div> : null}
+      </form>
+    </div>
   );
 }

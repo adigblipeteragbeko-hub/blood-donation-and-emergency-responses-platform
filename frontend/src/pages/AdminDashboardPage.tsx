@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 const adminSections = [
+  { label: 'Website Management', to: '/admin/website-management' },
   { label: 'Manage Donors', to: '/admin/management?section=donors' },
   { label: 'Manage Hospitals', to: '/admin/management?section=hospitals' },
   { label: 'Manage Requests', to: '/admin/management?section=request-tracking' },

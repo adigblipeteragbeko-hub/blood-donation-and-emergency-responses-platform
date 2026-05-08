@@ -11,6 +11,7 @@ import {
   InventoryChangeType,
   AppointmentStatus,
   NotificationType,
+  WebsiteStatisticKey,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -304,6 +305,181 @@ async function main() {
       action: 'SEED_INITIALIZED',
       entityType: 'SYSTEM',
       metadata: { message: 'Initial seed completed' },
+    },
+  });
+
+  await prisma.websiteAlert.upsert({
+    where: { id: 'seed_website_alert' },
+    update: {
+      title: 'Urgent O- blood request',
+      message: 'URGENT: O- blood needed at Tema General Hospital',
+      bloodType: BloodGroup.O_NEG,
+      hospitalName: 'Tema General Hospital',
+      urgencyLevel: PriorityLevel.CRITICAL,
+      isActive: true,
+      isSticky: true,
+      isScrolling: true,
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    },
+    create: {
+      id: 'seed_website_alert',
+      title: 'Urgent O- blood request',
+      message: 'URGENT: O- blood needed at Tema General Hospital',
+      bloodType: BloodGroup.O_NEG,
+      hospitalName: 'Tema General Hospital',
+      urgencyLevel: PriorityLevel.CRITICAL,
+      isActive: true,
+      isSticky: true,
+      isScrolling: true,
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    },
+  });
+
+  const websiteStatistics = [
+    {
+      key: WebsiteStatisticKey.REGISTERED_DONORS,
+      label: 'Registered Donors',
+      description: 'Verified donor workflows connected to hospital response needs.',
+      overrideValue: 12540,
+      isOverrideEnabled: true,
+    },
+    {
+      key: WebsiteStatisticKey.EMERGENCY_MATCHES,
+      label: 'Emergency Matches',
+      description: 'Urgent requests coordinated faster through structured matching.',
+      overrideValue: 3210,
+      isOverrideEnabled: true,
+    },
+    {
+      key: WebsiteStatisticKey.PARTNER_HOSPITALS,
+      label: 'Partner Hospitals',
+      description: 'Hospitals and blood centers participating in the response network.',
+      overrideValue: 25,
+      isOverrideEnabled: true,
+    },
+    {
+      key: WebsiteStatisticKey.REQUESTS_COMPLETED,
+      label: 'Requests Completed',
+      description: 'Tracked blood request workflows from creation to fulfillment.',
+      overrideValue: 8420,
+      isOverrideEnabled: true,
+    },
+  ];
+
+  for (const statistic of websiteStatistics) {
+    await prisma.websiteStatistic.upsert({
+      where: { key: statistic.key },
+      update: statistic,
+      create: statistic,
+    });
+  }
+
+  const faqs = [
+    {
+      id: 'seed_faq_1',
+      question: 'Who can donate blood?',
+      answer: 'Healthy adults who meet age, weight, and screening requirements can usually donate blood safely.',
+      isPublished: true,
+    },
+    {
+      id: 'seed_faq_2',
+      question: 'How often can I donate?',
+      answer: 'Whole blood donors are usually advised to wait several weeks between donations, depending on screening guidance.',
+      isPublished: true,
+    },
+  ];
+
+  for (const faq of faqs) {
+    await prisma.faq.upsert({
+      where: { id: faq.id },
+      update: faq,
+      create: faq,
+    });
+  }
+
+  await prisma.testimonial.upsert({
+    where: { id: 'seed_testimonial_1' },
+    update: {
+      name: 'Akosua Boateng',
+      role: 'Repeat Donor',
+      message: 'The platform made it simple to respond quickly when a nearby hospital needed my blood group.',
+      location: 'Accra',
+      isApproved: true,
+      isPublished: true,
+    },
+    create: {
+      id: 'seed_testimonial_1',
+      name: 'Akosua Boateng',
+      role: 'Repeat Donor',
+      message: 'The platform made it simple to respond quickly when a nearby hospital needed my blood group.',
+      location: 'Accra',
+      isApproved: true,
+      isPublished: true,
+    },
+  });
+
+  await prisma.awarenessPost.upsert({
+    where: { id: 'seed_awareness_1' },
+    update: {
+      title: 'Why blood donation matters',
+      content: 'One donation can support multiple lifesaving care workflows when hospitals face urgent shortages.',
+      image: 'https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=900&q=80',
+      category: 'Awareness',
+      isPublished: true,
+    },
+    create: {
+      id: 'seed_awareness_1',
+      title: 'Why blood donation matters',
+      content: 'One donation can support multiple lifesaving care workflows when hospitals face urgent shortages.',
+      image: 'https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=900&q=80',
+      category: 'Awareness',
+      isPublished: true,
+    },
+  });
+
+  await prisma.partnerHospital.upsert({
+    where: { id: 'seed_partner_hospital_1' },
+    update: {
+      hospitalName: 'Tema General Hospital',
+      location: 'Tema',
+      phone: '+233544515775',
+      email: 'tema.partner@bloodresponse.local',
+      description: 'Partner emergency care center supporting urgent donor coordination.',
+      latitude: 5.6698,
+      longitude: -0.0166,
+    },
+    create: {
+      id: 'seed_partner_hospital_1',
+      hospitalName: 'Tema General Hospital',
+      location: 'Tema',
+      phone: '+233544515775',
+      email: 'tema.partner@bloodresponse.local',
+      description: 'Partner emergency care center supporting urgent donor coordination.',
+      latitude: 5.6698,
+      longitude: -0.0166,
+    },
+  });
+
+  await prisma.websiteFooterSettings.upsert({
+    where: { singletonKey: 'default' },
+    update: {
+      emergencyPhonePrimary: '+233544515775',
+      emergencyPhoneSecondary: '+233554287342',
+      supportEmail: 'support@bloodresponse.local',
+      facebookUrl: 'https://facebook.com/donationdesk',
+      instagramUrl: 'https://instagram.com/donationdesk',
+      linkedinUrl: 'https://linkedin.com/company/donationdesk',
+      footerText: 'Built for trusted donor coordination, hospital response, and emergency visibility.',
+    },
+    create: {
+      singletonKey: 'default',
+      emergencyPhonePrimary: '+233544515775',
+      emergencyPhoneSecondary: '+233554287342',
+      supportEmail: 'support@bloodresponse.local',
+      facebookUrl: 'https://facebook.com/donationdesk',
+      instagramUrl: 'https://instagram.com/donationdesk',
+      linkedinUrl: 'https://linkedin.com/company/donationdesk',
+      footerText: 'Built for trusted donor coordination, hospital response, and emergency visibility.',
     },
   });
 

@@ -74,6 +74,49 @@ export class HospitalsService {
     });
   }
 
+  async listPublicCenters(query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = Math.min(query.take ?? 50, 100);
+
+    const hospitals = await this.prisma.hospital.findMany({
+      where: {
+        OR: [
+          { latitude: { not: null } },
+          { longitude: { not: null } },
+          { location: { not: '' } },
+        ],
+      },
+      orderBy: [{ hospitalName: 'asc' }],
+      skip,
+      take,
+      select: {
+        id: true,
+        hospitalName: true,
+        location: true,
+        address: true,
+        contactPhone: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    return hospitals.map((hospital) => ({
+      id: hospital.id,
+      hospitalName: hospital.hospitalName,
+      location: hospital.location,
+      address: hospital.address,
+      contactPhone: hospital.contactPhone,
+      latitude: hospital.latitude,
+      longitude: hospital.longitude,
+      mapsUrl:
+        hospital.latitude !== null && hospital.longitude !== null
+          ? `https://www.google.com/maps?q=${hospital.latitude},${hospital.longitude}`
+          : `https://www.google.com/maps?q=${encodeURIComponent(
+              `${hospital.hospitalName} ${hospital.address} ${hospital.location}`,
+            )}`,
+    }));
+  }
+
   listAllForAdmin(query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;

@@ -304,6 +304,69 @@ export class BloodRequestsService {
     });
   }
 
+  async listPublicEmergencyRequests(query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = Math.min(query.take ?? 25, 100);
+
+    const requests = await this.prisma.bloodRequest.findMany({
+      where: {
+        type: 'EMERGENCY',
+        status: {
+          in: [RequestStatus.OPEN, RequestStatus.MATCHING],
+        },
+      },
+      include: {
+        hospital: {
+          select: {
+            hospitalName: true,
+            location: true,
+            address: true,
+            contactPhone: true,
+          },
+        },
+        donorResponses: {
+          select: {
+            responseStatus: true,
+          },
+        },
+      },
+      orderBy: [{ priority: 'desc' }, { requiredBy: 'asc' }, { createdAt: 'desc' }],
+      skip,
+      take,
+    });
+
+    return requests.map((request) => {
+      const acceptedResponses = request.donorResponses.filter(
+        (response) =>
+          response.responseStatus === DonorResponseStatus.ACCEPTED ||
+          response.responseStatus === DonorResponseStatus.DONATED,
+      ).length;
+
+      return {
+        id: request.id,
+        bloodGroup: request.bloodGroup,
+        unitsNeeded: request.unitsNeeded,
+        priority: request.priority,
+        status: request.status,
+        trackingStatus: request.trackingStatus,
+        requestDate: request.createdAt,
+        neededBy: request.requiredBy,
+        lastUpdated: request.updatedAt,
+        publicMessage:
+          request.priority === 'CRITICAL'
+            ? `Urgent ${request.bloodGroup.replace('_', ' ')} request requiring immediate donor response.`
+            : `Hospital team needs ${request.unitsNeeded} unit(s) of ${request.bloodGroup.replace('_', ' ')} support.`,
+        hospital: {
+          name: request.hospital.hospitalName,
+          location: request.hospital.location,
+          address: request.hospital.address,
+          contactPhone: request.hospital.contactPhone,
+        },
+        acceptedResponses,
+      };
+    });
+  }
+
   async listMine(userId: string, role: 'ADMIN' | 'HOSPITAL_STAFF', query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;

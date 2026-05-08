@@ -7,7 +7,6 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import DonorLoginPage from './pages/DonorLoginPage';
 import HospitalLoginPage from './pages/HospitalLoginPage';
 import AdminLoginPage from './pages/AdminLoginPage';
@@ -49,6 +48,10 @@ import HospitalProfilePage from './pages/HospitalProfilePage';
 import HospitalSettingsPage from './pages/HospitalSettingsPage';
 import HospitalSupportPage from './pages/HospitalSupportPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import PublicEligibilityPage from './pages/PublicEligibilityPage';
+import PublicEmergencyRequestsPage from './pages/PublicEmergencyRequestsPage';
+import FAQPage from './pages/FAQPage';
+import WebsiteManagementPage from './pages/WebsiteManagementPage';
 
 function App() {
   return (
@@ -58,11 +61,12 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/donor-login" element={<DonorLoginPage />} />
       <Route path="/hospital-login" element={<HospitalLoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/register" element={<Navigate to="/donor-register" replace />} />
 
       <Route element={<ProtectedRoute roles={['ADMIN']} />}>
         <Route path="/admin" element={<AdminPortalLayout />}>
           <Route path="dashboard" element={<AdminDashboardPage />} />
+          <Route path="website-management" element={<WebsiteManagementPage />} />
           <Route path="management" element={<AdminManagementPage />} />
         </Route>
       </Route>
@@ -74,14 +78,18 @@ function App() {
         <Route path="/hospital-register" element={<HospitalRegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/request" element={<RequestPage />} />
-        <Route path="/how-to-donate" element={<HowToDonatePage />} />
+        <Route path="/how-it-works" element={<HowToDonatePage />} />
+        <Route path="/how-to-donate" element={<Navigate to="/how-it-works" replace />} />
+        <Route path="/blood-eligibility" element={<PublicEligibilityPage />} />
+        <Route path="/emergency-requests" element={<PublicEmergencyRequestsPage />} />
+        <Route path="/nearby-centers" element={<NearbyCentersPage />} />
+        <Route path="/faq" element={<FAQPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/dashboard/donor" element={<Navigate to="/donor/dashboard" replace />} />
         <Route path="/dashboard/hospital" element={<Navigate to="/hospital/dashboard" replace />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/emergency-requests" element={<EmergencyRequestsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/appointments" element={<AppointmentsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
