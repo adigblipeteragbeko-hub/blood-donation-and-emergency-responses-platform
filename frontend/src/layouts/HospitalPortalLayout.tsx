@@ -1,22 +1,23 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 const coreLinks = [
-  { to: '/hospital/dashboard', label: 'Dashboard' },
-  { to: '/hospital/inventory', label: 'Blood Inventory' },
-  { to: '/hospital/request-blood', label: 'Request Blood' },
-  { to: '/hospital/active-requests', label: 'Active Requests' },
-  { to: '/hospital/donor-search', label: 'Donor Search' },
-  { to: '/hospital/appointments', label: 'Appointments' },
-  { to: '/hospital/notifications', label: 'Notifications' },
-  { to: '/hospital/reports', label: 'Reports' },
+  { to: '/hospital/dashboard', label: 'Dashboard', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/inventory', label: 'Blood Inventory', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER'] },
+  { to: '/hospital/request-blood', label: 'Request Blood', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/active-requests', label: 'Active Requests', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/donor-search', label: 'Donor Search', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/appointments', label: 'Appointments', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/notifications', label: 'Notifications', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/reports', label: 'Reports', roles: ['HOSPITAL_ADMIN', 'INVENTORY_OFFICER'] },
 ];
 
 const moreLinks = [
-  { to: '/hospital/emergency-requests', label: 'Emergency Requests' },
-  { to: '/hospital/staff', label: 'Staff Management' },
-  { to: '/hospital/profile', label: 'Profile / Hospital Info' },
-  { to: '/hospital/settings', label: 'Settings' },
-  { to: '/hospital/support', label: 'Support / Help' },
+  { to: '/hospital/emergency-requests', label: 'Emergency Requests', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/staff', label: 'Staff Management', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/profile', label: 'Profile / Hospital Info', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/settings', label: 'Settings', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/support', label: 'Support / Help', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
 ];
 
 function linkClass(isActive: boolean) {
@@ -24,6 +25,10 @@ function linkClass(isActive: boolean) {
 }
 
 export function HospitalPortalLayout() {
+  const { user } = useAuth();
+  const coreRoleLinks = coreLinks.filter((item) => user?.role && item.roles.includes(user.role));
+  const secondaryRoleLinks = moreLinks.filter((item) => user?.role && item.roles.includes(user.role));
+
   return (
     <section className="grid gap-5 md:grid-cols-[300px_1fr]">
       <aside className="card h-fit space-y-4">
@@ -35,7 +40,7 @@ export function HospitalPortalLayout() {
         <div>
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Core Tabs</h3>
           <nav className="space-y-1">
-            {coreLinks.map((item) => (
+            {coreRoleLinks.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => linkClass(isActive)}>
                 {item.label}
               </NavLink>
@@ -46,7 +51,7 @@ export function HospitalPortalLayout() {
         <div>
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">More Tools</h3>
           <nav className="space-y-1">
-            {moreLinks.map((item) => (
+            {secondaryRoleLinks.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => linkClass(isActive)}>
                 {item.label}
               </NavLink>
@@ -61,4 +66,3 @@ export function HospitalPortalLayout() {
     </section>
   );
 }
-

@@ -9,12 +9,14 @@ import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto'
 import * as argon2 from 'argon2';
 import { Role } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { ActivityService } from '../../common/activity/activity.service';
 
 @Injectable()
 export class DonorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly activity: ActivityService,
   ) {}
 
   private async buildDonorNumber() {
@@ -164,7 +166,50 @@ export class DonorsService {
       },
     });
 
+    const existingReview = await this.prisma.donorEligibilityReview.findFirst({
+      where: { donorId: donor.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingReview && existingReview.status !== 'APPROVED') {
+      await this.prisma.donorEligibilityReview.update({
+        where: { id: existingReview.id },
+        data: {
+          selectedHospitalId: selectedHospital.id,
+          status: 'SUBMITTED',
+          reviewNotes: null,
+          officeUseNotes: null,
+          submittedAt: new Date(),
+          hospitalReviewedAt: null,
+          officeCompletedAt: null,
+          approvedAt: null,
+          rejectedAt: null,
+          reviewerId: null,
+        },
+      });
+    } else {
+      await this.prisma.donorEligibilityReview.create({
+        data: {
+          donorId: donor.id,
+          selectedHospitalId: selectedHospital.id,
+          status: 'SUBMITTED',
+        },
+      });
+    }
+
     await this.audit.log('DONOR_HEALTH_FORM_SUBMITTED', 'DONOR', userId, donor.id, dto);
+    await this.activity.log({
+      actorUserId: userId,
+      actorName: donor.fullName,
+      type: 'DONOR_REVIEW_SUBMITTED',
+      module: 'DONOR_REVIEW',
+      title: 'Donor clinical form submitted',
+      description: `${donor.fullName} submitted an eligibility form to ${selectedHospital.hospitalName}.`,
+      entityType: 'DONOR',
+      entityId: donor.id,
+      donorId: donor.id,
+      hospitalId: selectedHospital.id,
+    });
     return {
       message: 'Health form submitted. Waiting for hospital approval.',
       selectedHospitalId: selectedHospital.id,
@@ -179,17 +224,20 @@ export class DonorsService {
       throw new NotFoundException('Donor profile not found');
     }
 
-    const submittedForm = await this.prisma.auditLog.findFirst({
-      where: { actorUserId: userId, action: 'DONOR_HEALTH_FORM_SUBMITTED', entityType: 'DONOR' },
+    const latestReview = await this.prisma.donorEligibilityReview.findFirst({
+      where: { donorId: donor.id },
       orderBy: { createdAt: 'desc' },
     });
 
     return {
-      healthFormCompleted: Boolean(submittedForm),
-      healthFormSubmittedAt: submittedForm?.createdAt ?? null,
+      healthFormCompleted: Boolean(latestReview),
+      healthFormSubmittedAt: latestReview?.submittedAt ?? null,
+      reviewStatus: latestReview?.status ?? null,
+      reviewNotes: latestReview?.reviewNotes ?? null,
+      officeUseNotes: latestReview?.officeUseNotes ?? null,
       adminApproved: donor.eligibilityStatus,
       availabilityStatus: donor.availabilityStatus,
-      canSetAvailable: Boolean(submittedForm) && donor.eligibilityStatus,
+      canSetAvailable: Boolean(latestReview) && donor.eligibilityStatus,
     };
   }
 
@@ -200,8 +248,8 @@ export class DonorsService {
     }
 
     if (available) {
-      const submittedForm = await this.prisma.auditLog.findFirst({
-        where: { actorUserId: userId, action: 'DONOR_HEALTH_FORM_SUBMITTED', entityType: 'DONOR' },
+      const submittedForm = await this.prisma.donorEligibilityReview.findFirst({
+        where: { donorId: donor.id },
         orderBy: { createdAt: 'desc' },
       });
 
@@ -345,7 +393,35 @@ export class DonorsService {
       include: { user: { select: { id: true, email: true, role: true, isActive: true } } },
     });
 
+    const latestReview = await this.prisma.donorEligibilityReview.findFirst({
+      where: { donorId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (latestReview) {
+      await this.prisma.donorEligibilityReview.update({
+        where: { id: latestReview.id },
+        data: {
+          status: approved ? 'APPROVED' : 'REJECTED',
+          reviewerId: actorUserId,
+          approvedAt: approved ? new Date() : null,
+          rejectedAt: approved ? null : new Date(),
+        },
+      });
+    }
+
     await this.audit.log('DONOR_ELIGIBILITY_APPROVAL_UPDATED', 'DONOR', actorUserId, donorId, { approved });
+    await this.activity.log({
+      actorUserId,
+      actorName: updated.fullName,
+      type: approved ? 'DONOR_APPROVED' : 'DONOR_REJECTED',
+      module: 'DONOR_REVIEW',
+      title: approved ? 'Donor approved' : 'Donor rejected',
+      description: `${updated.fullName} was ${approved ? 'approved' : 'rejected'} for donation eligibility review.`,
+      entityType: 'DONOR',
+      entityId: donorId,
+      donorId,
+    });
     return updated;
   }
 

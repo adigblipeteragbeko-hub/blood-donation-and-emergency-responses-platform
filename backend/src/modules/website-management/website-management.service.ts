@@ -22,12 +22,14 @@ import { UpdateAwarenessPostDto } from './dto/update-awareness-post.dto';
 import { CreatePartnerHospitalDto } from './dto/create-partner-hospital.dto';
 import { UpdatePartnerHospitalDto } from './dto/update-partner-hospital.dto';
 import { UpdateFooterSettingsDto } from './dto/update-footer-settings.dto';
+import { WebsiteAnnouncementsService } from './website-announcements.service';
 
 @Injectable()
 export class WebsiteManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly announcements: WebsiteAnnouncementsService,
   ) {}
 
   private buildDescription(adminNameOrEmail: string, activity: string) {
@@ -179,6 +181,7 @@ export class WebsiteManagementService {
     const alert = await this.prisma.websiteAlert.create({
       data: this.normalizeAlertPayload(dto) as Prisma.WebsiteAlertCreateInput,
     });
+    await this.announcements.syncAlertAnnouncement(alert);
 
     await this.audit.log(
       'WEBSITE_ALERT_CREATED',
@@ -203,6 +206,7 @@ export class WebsiteManagementService {
       where: { id },
       data: this.normalizeAlertPayload(dto) as Prisma.WebsiteAlertUpdateInput,
     });
+    await this.announcements.syncAlertAnnouncement(alert);
 
     if (dto.isActive !== undefined && dto.isActive !== existing.isActive) {
       await this.audit.log(
@@ -235,6 +239,7 @@ export class WebsiteManagementService {
 
     const actor = await this.resolveAdminLabel(actorUserId);
     await this.prisma.websiteAlert.delete({ where: { id } });
+    await this.announcements.removeAlertAnnouncement(id);
     await this.audit.log(
       'WEBSITE_ALERT_DELETED',
       'WEBSITE_ALERT',
@@ -361,6 +366,7 @@ export class WebsiteManagementService {
   async createAwarenessPost(dto: CreateAwarenessPostDto, actorUserId: string) {
     const actor = await this.resolveAdminLabel(actorUserId);
     const post = await this.prisma.awarenessPost.create({ data: dto });
+    await this.announcements.syncAwarenessAnnouncement(post);
     await this.audit.log(
       'AWARENESS_POST_CREATED',
       'AWARENESS_POST',
@@ -378,6 +384,7 @@ export class WebsiteManagementService {
 
     const actor = await this.resolveAdminLabel(actorUserId);
     const post = await this.prisma.awarenessPost.update({ where: { id }, data: dto });
+    await this.announcements.syncAwarenessAnnouncement(post);
 
     if (dto.isPublished !== undefined && dto.isPublished !== existing.isPublished) {
       await this.audit.log(
@@ -407,6 +414,7 @@ export class WebsiteManagementService {
 
     const actor = await this.resolveAdminLabel(actorUserId);
     await this.prisma.awarenessPost.delete({ where: { id } });
+    await this.announcements.removeAwarenessAnnouncement(id);
     await this.audit.log(
       'AWARENESS_POST_DELETED',
       'AWARENESS_POST',
@@ -516,6 +524,7 @@ export class WebsiteManagementService {
       dto,
       this.buildDescription(actor, 'updated website footer settings'),
     );
+    await this.announcements.upsertSystemAnnouncement();
     return footerSettings;
   }
 

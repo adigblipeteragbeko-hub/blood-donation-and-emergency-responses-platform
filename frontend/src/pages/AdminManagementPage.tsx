@@ -15,7 +15,16 @@ import {
   updateDonorResponse,
 } from '../services/hospital-portal';
 
-type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
+type Role =
+  | 'SUPER_ADMIN'
+  | 'ADMIN'
+  | 'DONOR'
+  | 'HOSPITAL_ADMIN'
+  | 'HOSPITAL_STAFF'
+  | 'INVENTORY_OFFICER'
+  | 'DONOR_REVIEW_OFFICER'
+  | 'WEBSITE_CONTENT_ADMIN'
+  | 'AUDITOR';
 
 type UserItem = {
   id: string;
@@ -46,7 +55,22 @@ type HospitalItem = {
 };
 
 const bloodGroups = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'];
-const formatRole = (role: Role) => (role === 'HOSPITAL_STAFF' ? 'HOSPITAL' : role);
+const formatRole = (role: Role) =>
+  role
+    .toLowerCase()
+    .split('_')
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(' ');
+const adminAssignableRoles: Role[] = [
+  'ADMIN',
+  'WEBSITE_CONTENT_ADMIN',
+  'AUDITOR',
+  'DONOR',
+  'HOSPITAL_ADMIN',
+  'HOSPITAL_STAFF',
+  'INVENTORY_OFFICER',
+  'DONOR_REVIEW_OFFICER',
+];
 const bloodGroupLabel: Record<string, string> = {
   O_POS: 'O_POS (O+)',
   O_NEG: 'O_NEG (O-)',
@@ -283,17 +307,17 @@ export default function AdminManagementPage() {
       setError('Donor name fields must contain letters only.');
       return;
     }
-    if (accountRole === 'HOSPITAL_STAFF' && !nameRule.test(accountForm.contactName)) {
+    if (accountRole === 'HOSPITAL_ADMIN' && !nameRule.test(accountForm.contactName)) {
       setError('Contact name must contain letters only.');
       return;
     }
 
     try {
-      if (accountRole === 'ADMIN') {
+      if (['ADMIN', 'WEBSITE_CONTENT_ADMIN', 'AUDITOR'].includes(accountRole)) {
         await api.post('/users', {
           email: accountForm.email,
           password: accountForm.password,
-          role: 'ADMIN',
+          role: accountRole,
           isActive: true,
         });
       }
@@ -312,7 +336,7 @@ export default function AdminManagementPage() {
         });
       }
 
-      if (accountRole === 'HOSPITAL_STAFF') {
+      if (accountRole === 'HOSPITAL_ADMIN') {
         await api.post('/hospitals/admin', {
           email: accountForm.email,
           password: accountForm.password,
@@ -514,7 +538,7 @@ export default function AdminManagementPage() {
       {activeSection === 'settings' ? (
       <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
         <h2 className="text-xl font-semibold">Add Account</h2>
-        <p className="text-sm text-muted">Allowed account types: Donor, Hospital, Admin.</p>
+        <p className="text-sm text-muted">Create donor, hospital-admin, and delegated administrative accounts.</p>
 
         <div className="grid gap-3 md:grid-cols-3">
           <label className="text-sm font-semibold">
@@ -525,8 +549,10 @@ export default function AdminManagementPage() {
               onChange={(e) => setAccountRole(e.target.value as Role)}
             >
               <option value="DONOR">Donor</option>
-              <option value="HOSPITAL_STAFF">Hospital</option>
+              <option value="HOSPITAL_ADMIN">Hospital Admin</option>
               <option value="ADMIN">Admin</option>
+              <option value="WEBSITE_CONTENT_ADMIN">Website Content Admin</option>
+              <option value="AUDITOR">Auditor</option>
             </select>
           </label>
 
@@ -584,7 +610,7 @@ export default function AdminManagementPage() {
           </div>
         ) : null}
 
-        {accountRole === 'HOSPITAL_STAFF' ? (
+        {accountRole === 'HOSPITAL_ADMIN' ? (
           <div className="grid gap-3 md:grid-cols-3">
             <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
@@ -653,9 +679,11 @@ export default function AdminManagementPage() {
                 value={editingUser.role}
                 onChange={(e) => setEditingUser((v) => (v ? { ...v, role: e.target.value as Role } : v))}
               >
-                <option value="DONOR">DONOR</option>
-                <option value="HOSPITAL_STAFF">HOSPITAL</option>
-                <option value="ADMIN">ADMIN</option>
+                {adminAssignableRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {formatRole(role)}
+                  </option>
+                ))}
               </select>
               <select
                 className="rounded border p-2"

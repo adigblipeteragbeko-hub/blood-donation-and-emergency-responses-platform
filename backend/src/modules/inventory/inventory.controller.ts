@@ -1,18 +1,21 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { PermissionCode, Role } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ActiveUserGuard } from '../../common/guards/active-user.guard';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { Permissions } from '../../common/rbac/permissions.decorator';
+import { PermissionsGuard } from '../../common/rbac/permissions.guard';
 import { CreateInventoryLogDto } from './dto/create-inventory-log.dto';
 import { UpsertInventoryDto } from './dto/upsert-inventory.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { InventoryService } from './inventory.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-@UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
-@Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+@UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
+@Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.INVENTORY_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
+@Permissions([PermissionCode.INVENTORY_MANAGE, PermissionCode.INVENTORY_REPORT_VIEW], 'any')
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}

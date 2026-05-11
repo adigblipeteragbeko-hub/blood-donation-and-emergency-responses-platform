@@ -18,37 +18,53 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 export class BloodRequestsController {
   constructor(private readonly bloodRequestsService: BloodRequestsService) {}
 
-  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
   @Post()
   create(@CurrentUser() user: { id: string }, @Body() dto: CreateBloodRequestDto) {
     return this.bloodRequestsService.create(user.id, dto);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Roles(
+    Role.ADMIN,
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_STAFF,
+    Role.INVENTORY_OFFICER,
+    Role.DONOR_REVIEW_OFFICER,
+    Role.DONOR,
+  )
   @Get()
   listAll(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
     return this.bloodRequestsService.listAll(user.id, user.role, query);
   }
 
-  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
   @Get('mine')
   listMine(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
-    return this.bloodRequestsService.listMine(user.id, user.role as 'ADMIN' | 'HOSPITAL_STAFF', query);
+    return this.bloodRequestsService.listMine(user.id, user.role, query);
   }
 
-  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
   @Post('escalation/check')
   runEscalationCheck(@CurrentUser() user: { id: string; role: Role }) {
     return this.bloodRequestsService.runEscalationCheck(user.id, user.role);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Roles(
+    Role.ADMIN,
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_STAFF,
+    Role.INVENTORY_OFFICER,
+    Role.DONOR_REVIEW_OFFICER,
+    Role.DONOR,
+  )
   @Get(':id')
   getById(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
     return this.bloodRequestsService.getById(id, user.id, user.role);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
@@ -58,13 +74,21 @@ export class BloodRequestsController {
     return this.bloodRequestsService.updateStatus(id, user.id, user.role, dto);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Roles(
+    Role.ADMIN,
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_STAFF,
+    Role.INVENTORY_OFFICER,
+    Role.DONOR_REVIEW_OFFICER,
+    Role.DONOR,
+  )
   @Get(':id/updates')
   listUpdates(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
     return this.bloodRequestsService.listUpdates(id, user.id, user.role, query);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF)
   @Post(':id/updates')
   createUpdate(
     @Param('id') id: string,
@@ -74,7 +98,7 @@ export class BloodRequestsController {
     return this.bloodRequestsService.createUpdate(id, user.id, user.role, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Post(':id/completion-correction')
   correctCompletion(
     @Param('id') id: string,
@@ -84,7 +108,15 @@ export class BloodRequestsController {
     return this.bloodRequestsService.adminCorrectCompletion(id, user.id, dto);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF, Role.DONOR)
+  @Roles(
+    Role.ADMIN,
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_STAFF,
+    Role.INVENTORY_OFFICER,
+    Role.DONOR_REVIEW_OFFICER,
+    Role.DONOR,
+  )
   @Get(':id/donor-responses')
   listDonorResponses(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
     return this.bloodRequestsService.listDonorResponses(id, user.id, user.role, query);

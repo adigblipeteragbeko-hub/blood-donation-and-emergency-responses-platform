@@ -87,6 +87,21 @@ export type WebsiteFooterSettingsItem = {
   updatedAt: string;
 };
 
+export type WebsiteAnnouncementItem = {
+  id: string;
+  type: 'ALERT' | 'AWARENESS' | 'SYSTEM';
+  title: string;
+  message: string;
+  href: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  badge: string | null;
+  isPublished: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isRead?: boolean;
+};
+
 export type PublicWebsiteContent = {
   alert: WebsiteAlertItem | null;
   statistics: WebsiteStatisticItem[];
@@ -102,10 +117,37 @@ export type WebsiteManagementDashboard = PublicWebsiteContent & {
 };
 
 const unwrap = <T>(response: { data: { data: T } }) => response.data.data;
+const WEBSITE_MANAGEMENT_CACHE_KEY = 'website-management-dashboard-cache-v1';
+const PUBLIC_WEBSITE_CACHE_KEY = 'public-website-cache-v1';
+
+const readSessionCache = <T>(key: string): T | null => {
+  try {
+    const cached = window.sessionStorage.getItem(key);
+    return cached ? (JSON.parse(cached) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeSessionCache = (key: string, value: unknown) => {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Cache is only a speed boost; API data remains the source of truth.
+  }
+};
+
+export const getCachedWebsiteManagementDashboard = () =>
+  readSessionCache<WebsiteManagementDashboard>(WEBSITE_MANAGEMENT_CACHE_KEY);
+
+export const getCachedPublicWebsiteContent = () =>
+  readSessionCache<PublicWebsiteContent>(PUBLIC_WEBSITE_CACHE_KEY);
 
 export async function getWebsiteManagementDashboard() {
   const response = await api.get('/admin/website-management');
-  return unwrap<WebsiteManagementDashboard>(response);
+  const data = unwrap<WebsiteManagementDashboard>(response);
+  writeSessionCache(WEBSITE_MANAGEMENT_CACHE_KEY, data);
+  return data;
 }
 
 export async function updateWebsiteStatistic(
@@ -243,5 +285,27 @@ export async function updateFooterSettings(
 
 export async function getPublicWebsiteContent() {
   const response = await api.get('/public/website');
-  return unwrap<PublicWebsiteContent>(response);
+  const data = unwrap<PublicWebsiteContent>(response);
+  writeSessionCache(PUBLIC_WEBSITE_CACHE_KEY, data);
+  return data;
+}
+
+export async function getPublicAnnouncements() {
+  const response = await api.get('/public/announcements');
+  return unwrap<WebsiteAnnouncementItem[]>(response);
+}
+
+export async function getUserAnnouncements() {
+  const response = await api.get('/announcements');
+  return unwrap<WebsiteAnnouncementItem[]>(response);
+}
+
+export async function markAnnouncementRead(id: string) {
+  const response = await api.patch(`/announcements/${id}/read`);
+  return unwrap<{ id: string; isRead: boolean }>(response);
+}
+
+export async function markAllAnnouncementsRead() {
+  const response = await api.post('/announcements/read-all');
+  return unwrap<{ updatedCount: number }>(response);
 }

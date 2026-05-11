@@ -5,12 +5,15 @@ import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto'
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly hospitalAccess: HospitalAccessService,
   ) {}
 
   async create(userId: string, dto: CreateAppointmentDto) {
@@ -33,10 +36,7 @@ export class AppointmentsService {
   }
 
   async createByHospital(userId: string, dto: CreateHospitalAppointmentDto) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
-    if (!hospital) {
-      throw new NotFoundException('Hospital profile not found');
-    }
+    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
 
     const donor = await this.prisma.donor.findUnique({ where: { id: dto.donorId } });
     if (!donor) {
@@ -59,10 +59,10 @@ export class AppointmentsService {
     return appointment;
   }
 
-  listForUser(userId: string, role: 'DONOR' | 'HOSPITAL_STAFF' | 'ADMIN', query: PaginationQueryDto) {
+  async listForUser(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === 'ADMIN') {
+    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
       return this.prisma.appointment.findMany({
         include: { donor: true, hospital: true },
         orderBy: { scheduledAt: 'asc' },
@@ -71,7 +71,7 @@ export class AppointmentsService {
       });
     }
 
-    if (role === 'DONOR') {
+    if (role === Role.DONOR) {
       return this.prisma.appointment.findMany({
         where: { donor: { userId } },
         include: { hospital: true },
@@ -81,8 +81,9 @@ export class AppointmentsService {
       });
     }
 
+    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
     return this.prisma.appointment.findMany({
-      where: { hospital: { userId } },
+      where: { hospitalId: hospital.id },
       include: { donor: true },
       orderBy: { scheduledAt: 'asc' },
       skip,
@@ -93,7 +94,7 @@ export class AppointmentsService {
   async updateStatus(
     id: string,
     userId: string,
-    role: 'DONOR' | 'HOSPITAL_STAFF' | 'ADMIN',
+    role: Role,
     dto: UpdateAppointmentStatusDto,
   ) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -104,9 +105,7 @@ export class AppointmentsService {
       throw new NotFoundException('Appointment not found');
     }
 
-    if (role !== 'ADMIN' && appointment.hospital.userId !== userId) {
-      throw new NotFoundException('Appointment not found');
-    }
+    await this.hospitalAccess.assertHospitalAccess(appointment.hospitalId, userId, role);
 
     const updated = await this.prisma.appointment.update({ where: { id }, data: { status: dto.status } });
     await this.audit.log('APPOINTMENT_UPDATED', 'APPOINTMENT', userId, id, dto);

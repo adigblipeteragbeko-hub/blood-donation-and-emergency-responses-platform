@@ -8,13 +8,15 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Role, WebsiteStatisticKey } from '@prisma/client';
+import { PermissionCode, Role, WebsiteStatisticKey } from '@prisma/client';
 import { WebsiteManagementService } from './website-management.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { ActiveUserGuard } from '../../common/guards/active-user.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Permissions } from '../../common/rbac/permissions.decorator';
+import { PermissionsGuard } from '../../common/rbac/permissions.guard';
 import { CreateWebsiteAlertDto } from './dto/create-website-alert.dto';
 import { UpdateWebsiteAlertDto } from './dto/update-website-alert.dto';
 import { CreateFaqDto } from './dto/create-faq.dto';
@@ -29,8 +31,9 @@ import { UpdatePartnerHospitalDto } from './dto/update-partner-hospital.dto';
 import { UpdateFooterSettingsDto } from './dto/update-footer-settings.dto';
 
 @Controller('admin/website-management')
-@UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
-@Roles(Role.ADMIN)
+@UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
+@Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.WEBSITE_CONTENT_ADMIN)
+@Permissions([PermissionCode.WEBSITE_CONTENT_MANAGE])
 export class WebsiteManagementController {
   constructor(private readonly websiteManagementService: WebsiteManagementService) {}
 

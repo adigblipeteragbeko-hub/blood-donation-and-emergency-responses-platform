@@ -197,3 +197,54 @@ export const awarenessItems = [
     body: 'Consistent donors help hospitals plan safer inventory levels and reduce last-minute panic calls.',
   },
 ];
+
+export const yearlyActivities = [
+  {
+    title: 'Community Blood Drive',
+    period: 'March 2026',
+    status: 'Previous activity',
+    description:
+      'A supervised donor registration and screening exercise with partner hospital staff, volunteers, and community leaders.',
+    image:
+      'https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    title: 'Emergency Response Simulation',
+    period: 'June 2026',
+    status: 'Previous activity',
+    description:
+      'Hospitals and donor coordinators tested urgent O-negative request routing, donor confirmation, and appointment tracking.',
+    image:
+      'https://images.unsplash.com/photo-1516574187841-cb9cc2ca948b?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    title: 'Blood Safety Awareness Week',
+    period: 'September 2026',
+    status: 'Previous activity',
+    description:
+      'Education sessions helped first-time donors understand eligibility, donation intervals, and safe hospital workflows.',
+    image:
+      'https://images.unsplash.com/photo-1579154341098-e4e158cc7f55?auto=format&fit=crop&w=1200&q=80',
+  },
+];
+
+export const upcomingActivities = [
+  {
+    title: 'Hospital Partner Onboarding',
+    period: 'November 2026',
+    status: 'Upcoming activity',
+    description:
+      'New facilities will be onboarded with request tracking, inventory monitoring, and emergency alert training.',
+    image:
+      'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    title: 'Donor Appreciation & Rewards Day',
+    period: 'December 2026',
+    status: 'Upcoming activity',
+    description:
+      'A recognition event for repeat donors, lifesaving emergency responders, and community health volunteers.',
+    image:
+      'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=1200&q=80',
+  },
+];

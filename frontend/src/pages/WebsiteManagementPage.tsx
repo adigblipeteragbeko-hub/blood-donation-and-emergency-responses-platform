@@ -12,6 +12,7 @@ import {
   deleteTestimonial,
   deleteWebsiteAlert,
   FaqItem,
+  getCachedWebsiteManagementDashboard,
   getWebsiteManagementDashboard,
   PartnerHospitalItem,
   TestimonialItem,
@@ -72,16 +73,17 @@ const emptyPartnerHospitalForm = {
 };
 
 export default function WebsiteManagementPage() {
+  const cachedDashboard = getCachedWebsiteManagementDashboard();
   const [activeSection, setActiveSection] = useState<SectionKey>('alerts');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedDashboard);
   const [saving, setSaving] = useState(false);
-  const [alerts, setAlerts] = useState<WebsiteAlertItem[]>([]);
-  const [statistics, setStatistics] = useState<WebsiteStatisticItem[]>([]);
-  const [faqs, setFaqs] = useState<FaqItem[]>([]);
-  const [testimonials, setTestimonials] = useState<TestimonialItem[]>([]);
-  const [awarenessPosts, setAwarenessPosts] = useState<AwarenessPostItem[]>([]);
-  const [partnerHospitals, setPartnerHospitals] = useState<PartnerHospitalItem[]>([]);
-  const [footerSettings, setFooterSettings] = useState<WebsiteFooterSettingsItem | null>(null);
+  const [alerts, setAlerts] = useState<WebsiteAlertItem[]>(cachedDashboard?.alerts ?? []);
+  const [statistics, setStatistics] = useState<WebsiteStatisticItem[]>(cachedDashboard?.statistics ?? []);
+  const [faqs, setFaqs] = useState<FaqItem[]>(cachedDashboard?.faqs ?? []);
+  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(cachedDashboard?.testimonials ?? []);
+  const [awarenessPosts, setAwarenessPosts] = useState<AwarenessPostItem[]>(cachedDashboard?.awarenessPosts ?? []);
+  const [partnerHospitals, setPartnerHospitals] = useState<PartnerHospitalItem[]>(cachedDashboard?.partnerHospitals ?? []);
+  const [footerSettings, setFooterSettings] = useState<WebsiteFooterSettingsItem | null>(cachedDashboard?.footerSettings ?? null);
 
   const [alertForm, setAlertForm] = useState(emptyAlertForm);
   const [faqForm, setFaqForm] = useState(emptyFaqForm);
@@ -89,13 +91,13 @@ export default function WebsiteManagementPage() {
   const [awarenessForm, setAwarenessForm] = useState(emptyAwarenessForm);
   const [partnerHospitalForm, setPartnerHospitalForm] = useState(emptyPartnerHospitalForm);
   const [footerForm, setFooterForm] = useState({
-    emergencyPhonePrimary: '',
-    emergencyPhoneSecondary: '',
-    supportEmail: '',
-    facebookUrl: '',
-    instagramUrl: '',
-    linkedinUrl: '',
-    footerText: '',
+    emergencyPhonePrimary: cachedDashboard?.footerSettings?.emergencyPhonePrimary ?? '',
+    emergencyPhoneSecondary: cachedDashboard?.footerSettings?.emergencyPhoneSecondary ?? '',
+    supportEmail: cachedDashboard?.footerSettings?.supportEmail ?? '',
+    facebookUrl: cachedDashboard?.footerSettings?.facebookUrl ?? '',
+    instagramUrl: cachedDashboard?.footerSettings?.instagramUrl ?? '',
+    linkedinUrl: cachedDashboard?.footerSettings?.linkedinUrl ?? '',
+    footerText: cachedDashboard?.footerSettings?.footerText ?? '',
   });
 
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
@@ -115,26 +117,32 @@ export default function WebsiteManagementPage() {
     }, 3500);
   };
 
+  const applyDashboard = (data: Awaited<ReturnType<typeof getWebsiteManagementDashboard>>) => {
+    setAlerts(data.alerts ?? []);
+    setStatistics(data.statistics ?? []);
+    setFaqs(data.faqs ?? []);
+    setTestimonials(data.testimonials ?? []);
+    setAwarenessPosts(data.awarenessPosts ?? []);
+    setPartnerHospitals(data.partnerHospitals ?? []);
+    setFooterSettings(data.footerSettings);
+    setFooterForm({
+      emergencyPhonePrimary: data.footerSettings?.emergencyPhonePrimary ?? '',
+      emergencyPhoneSecondary: data.footerSettings?.emergencyPhoneSecondary ?? '',
+      supportEmail: data.footerSettings?.supportEmail ?? '',
+      facebookUrl: data.footerSettings?.facebookUrl ?? '',
+      instagramUrl: data.footerSettings?.instagramUrl ?? '',
+      linkedinUrl: data.footerSettings?.linkedinUrl ?? '',
+      footerText: data.footerSettings?.footerText ?? '',
+    });
+  };
+
   const loadDashboard = async () => {
-    setLoading(true);
+    if (!cachedDashboard) {
+      setLoading(true);
+    }
     try {
       const data = await getWebsiteManagementDashboard();
-      setAlerts(data.alerts ?? []);
-      setStatistics(data.statistics ?? []);
-      setFaqs(data.faqs ?? []);
-      setTestimonials(data.testimonials ?? []);
-      setAwarenessPosts(data.awarenessPosts ?? []);
-      setPartnerHospitals(data.partnerHospitals ?? []);
-      setFooterSettings(data.footerSettings);
-      setFooterForm({
-        emergencyPhonePrimary: data.footerSettings?.emergencyPhonePrimary ?? '',
-        emergencyPhoneSecondary: data.footerSettings?.emergencyPhoneSecondary ?? '',
-        supportEmail: data.footerSettings?.supportEmail ?? '',
-        facebookUrl: data.footerSettings?.facebookUrl ?? '',
-        instagramUrl: data.footerSettings?.instagramUrl ?? '',
-        linkedinUrl: data.footerSettings?.linkedinUrl ?? '',
-        footerText: data.footerSettings?.footerText ?? '',
-      });
+      applyDashboard(data);
     } catch (error: any) {
       pushToast('error', error?.response?.data?.error?.message ?? 'Could not load website management content.');
     } finally {

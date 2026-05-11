@@ -22,26 +22,34 @@ export class AppointmentsController {
     return this.appointmentsService.create(user.id, dto);
   }
 
-  @Roles(Role.HOSPITAL_STAFF, Role.ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
   @Post('hospital')
   createByHospital(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalAppointmentDto) {
     return this.appointmentsService.createByHospital(user.id, dto);
   }
 
-  @Roles(Role.ADMIN, Role.DONOR, Role.HOSPITAL_STAFF)
+  @Roles(
+    Role.ADMIN,
+    Role.SUPER_ADMIN,
+    Role.DONOR,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_STAFF,
+    Role.INVENTORY_OFFICER,
+    Role.DONOR_REVIEW_OFFICER,
+  )
   @Get()
   listForUser(
-    @CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' },
+    @CurrentUser() user: { id: string; role: Role },
     @Query() query: PaginationQueryDto,
   ) {
     return this.appointmentsService.listForUser(user.id, user.role, query);
   }
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' },
+    @CurrentUser() user: { id: string; role: Role },
     @Body() dto: UpdateAppointmentStatusDto,
   ) {
     return this.appointmentsService.updateStatus(id, user.id, user.role, dto);

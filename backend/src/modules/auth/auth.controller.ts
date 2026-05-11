@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { Role } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -31,8 +32,11 @@ export class AuthController {
 
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.authService.login(dto, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 
   @HttpCode(HttpStatus.OK)
@@ -50,15 +54,29 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
-  refresh(@CurrentUser() user: { id: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF'; refreshToken: string }) {
-    return this.authService.refresh(user.id, user.refreshToken, user.role);
+  refresh(
+    @CurrentUser()
+    user: { id: string; role: Role; refreshToken: string },
+    @Req() req: Request,
+  ) {
+    return this.authService.refresh(user.id, user.refreshToken, user.role, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAccessGuard)
   @Post('logout')
-  logout(@CurrentUser() user: { id: string }, @Body('refreshToken') refreshToken: string) {
-    return this.authService.logout(user.id, refreshToken);
+  logout(
+    @CurrentUser() user: { id: string },
+    @Body('refreshToken') refreshToken: string,
+    @Req() req: Request,
+  ) {
+    return this.authService.logout(user.id, refreshToken, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
   }
 
   @Post('forgot-password')

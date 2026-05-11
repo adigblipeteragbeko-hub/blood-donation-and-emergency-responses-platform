@@ -8,6 +8,8 @@ import { PrismaService } from '../../prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { MailService } from '../../common/mail/mail.service';
+import { ActivityService } from '../../common/activity/activity.service';
+import { SecurityEventsService } from '../../common/security/security-events.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -28,6 +30,11 @@ type SafeUser = {
   updatedAt: Date;
 };
 
+type RequestMetadata = {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -37,6 +44,8 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly alertsService: AlertsService,
     private readonly mailService: MailService,
+    private readonly activityService: ActivityService,
+    private readonly securityEvents: SecurityEventsService,
   ) {}
 
   private buildDonorNumber() {
@@ -96,6 +105,16 @@ export class AuthService {
       });
     });
     await this.auditService.log('REGISTER', 'USER', user.id, user.id);
+    await this.activityService.log({
+      actorUserId: user.id,
+      actorName: payload.donorProfile?.fullName ?? payload.email,
+      type: 'DONOR_REGISTERED',
+      module: 'AUTH',
+      title: 'New donor registered',
+      description: `${payload.email} created a donor account and is waiting for verification.`,
+      entityType: 'USER',
+      entityId: user.id,
+    });
 
     return {
       message: 'Registration successful. A verification code has been sent to your email.',
@@ -104,7 +123,7 @@ export class AuthService {
     };
   }
 
-  async login(payload: LoginDto) {
+  async login(payload: LoginDto, metadata?: RequestMetadata) {
     const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -116,6 +135,17 @@ export class AuthService {
       await this.prisma.user.update({
         where: { id: user.id },
         data: { failedLoginCount },
+      });
+
+      await this.securityEvents.log({
+        actorUserId: user.id,
+        email: user.email,
+        eventType: 'FAILED_LOGIN',
+        severity: failedLoginCount >= 5 ? 'WARNING' : 'INFO',
+        description: `Failed login attempt for ${user.email}.`,
+        ipAddress: metadata?.ipAddress ?? null,
+        device: this.buildDeviceLabel(metadata?.userAgent),
+        userAgent: metadata?.userAgent ?? null,
       });
 
       if (failedLoginCount >= 5) {
@@ -138,9 +168,43 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokens(user.id, user.role);
-    await this.storeRefreshToken(user.id, tokens.refreshToken);
+    const refreshTokenRecord = await this.storeRefreshToken(user.id, tokens.refreshToken);
+    const suspicious = await this.isSuspiciousSession(user.id, metadata);
+    await this.prisma.sessionLog.create({
+      data: {
+        userId: user.id,
+        refreshTokenId: refreshTokenRecord.id,
+        ipAddress: metadata?.ipAddress ?? undefined,
+        device: this.buildDeviceLabel(metadata?.userAgent),
+        userAgent: metadata?.userAgent ?? undefined,
+        expiresAt: refreshTokenRecord.expiresAt,
+        lastSeenAt: new Date(),
+        isSuspicious: suspicious,
+      },
+    });
 
     await this.auditService.log('LOGIN', 'USER', user.id, user.id);
+    await this.securityEvents.log({
+      actorUserId: user.id,
+      email: user.email,
+      eventType: 'LOGIN_SUCCESS',
+      severity: suspicious ? 'WARNING' : 'INFO',
+      description: `${user.email} logged in successfully.`,
+      ipAddress: metadata?.ipAddress ?? null,
+      device: this.buildDeviceLabel(metadata?.userAgent),
+      userAgent: metadata?.userAgent ?? null,
+      metadata: suspicious ? { suspicious: true } : undefined,
+    });
+    await this.activityService.log({
+      actorUserId: user.id,
+      actorName: user.email,
+      type: 'USER_LOGIN',
+      module: 'AUTH',
+      title: 'User login',
+      description: `${user.email} signed in.`,
+      entityType: 'USER',
+      entityId: user.id,
+    });
 
     return { user: this.toSafeUser(user), ...tokens };
   }
@@ -203,17 +267,43 @@ export class AuthService {
     return { message: 'If verification is pending, a new code has been sent.' };
   }
 
-  async logout(userId: string, refreshToken: string) {
+  async logout(userId: string, refreshToken: string, metadata?: RequestMetadata) {
     const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
-    await this.prisma.refreshToken.updateMany({
+    const existingToken = await this.prisma.refreshToken.findFirst({
+      where: { userId, tokenHash, revokedAt: null },
+      select: { id: true },
+    });
+    const revoked = await this.prisma.refreshToken.updateMany({
       where: { userId, tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (existingToken) {
+      await this.prisma.sessionLog.updateMany({
+        where: {
+          userId,
+          refreshTokenId: existingToken.id,
+          loggedOutAt: null,
+        },
+        data: {
+          loggedOutAt: new Date(),
+          lastSeenAt: new Date(),
+        },
+      });
+    }
     await this.auditService.log('LOGOUT', 'USER', userId, userId);
+    await this.securityEvents.log({
+      actorUserId: userId,
+      eventType: 'LOGOUT',
+      severity: 'INFO',
+      description: revoked.count > 0 ? 'User logged out successfully.' : 'Logout attempted without active session.',
+      ipAddress: metadata?.ipAddress ?? null,
+      device: this.buildDeviceLabel(metadata?.userAgent),
+      userAgent: metadata?.userAgent ?? null,
+    });
     return { message: 'Logged out successfully' };
   }
 
-  async refresh(userId: string, refreshToken: string, role: Role) {
+  async refresh(userId: string, refreshToken: string, role: Role, metadata?: RequestMetadata) {
     const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
     const storedToken = await this.prisma.refreshToken.findFirst({
       where: {
@@ -234,7 +324,29 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokens(userId, role);
-    await this.storeRefreshToken(userId, tokens.refreshToken);
+    const replacementToken = await this.storeRefreshToken(userId, tokens.refreshToken);
+    await this.prisma.sessionLog.updateMany({
+      where: {
+        userId,
+        refreshTokenId: storedToken.id,
+        loggedOutAt: null,
+      },
+      data: {
+        loggedOutAt: new Date(),
+        lastSeenAt: new Date(),
+      },
+    });
+    await this.prisma.sessionLog.create({
+      data: {
+        userId,
+        refreshTokenId: replacementToken.id,
+        ipAddress: metadata?.ipAddress ?? undefined,
+        device: this.buildDeviceLabel(metadata?.userAgent),
+        userAgent: metadata?.userAgent ?? undefined,
+        expiresAt: replacementToken.expiresAt,
+        lastSeenAt: new Date(),
+      },
+    });
 
     return tokens;
   }
@@ -343,9 +455,58 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
     const expiresAt = new Date(Date.now() + this.config.get<number>('jwt.refreshTtlDays', 7) * 86_400_000);
 
-    await this.prisma.refreshToken.create({
+    return this.prisma.refreshToken.create({
       data: { userId, tokenHash, expiresAt },
     });
+  }
+
+  private buildDeviceLabel(userAgent?: string | null) {
+    if (!userAgent) {
+      return 'Unknown device';
+    }
+
+    if (/iphone|ipad|ios/i.test(userAgent)) {
+      return 'iOS device';
+    }
+
+    if (/android/i.test(userAgent)) {
+      return 'Android device';
+    }
+
+    if (/windows/i.test(userAgent)) {
+      return 'Windows device';
+    }
+
+    if (/macintosh|mac os/i.test(userAgent)) {
+      return 'Mac device';
+    }
+
+    return 'Web device';
+  }
+
+  private async isSuspiciousSession(userId: string, metadata?: RequestMetadata) {
+    if (!metadata?.ipAddress && !metadata?.userAgent) {
+      return false;
+    }
+
+    const previousSessions = await this.prisma.sessionLog.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { ipAddress: true, device: true },
+    });
+
+    if (previousSessions.length === 0) {
+      return false;
+    }
+
+    const device = this.buildDeviceLabel(metadata.userAgent);
+
+    return !previousSessions.some(
+      (session) =>
+        session.ipAddress === (metadata.ipAddress ?? null) &&
+        session.device === device,
+    );
   }
 
   private generateVerificationCode() {

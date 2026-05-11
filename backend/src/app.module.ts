@@ -12,6 +12,7 @@ import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { WebsiteManagementModule } from './modules/website-management/website-management.module';
+import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module';
 import { CoreModule } from './core/core.module';
 import { HealthController } from './health.controller';
 
@@ -30,6 +31,7 @@ import { HealthController } from './health.controller';
     NotificationsModule,
     ReportsModule,
     WebsiteManagementModule,
+    AdminDashboardModule,
   ],
   controllers: [HealthController],
 })

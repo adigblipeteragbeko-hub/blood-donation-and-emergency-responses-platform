@@ -430,6 +430,134 @@ textarea::placeholder {
   flex-shrink: 0;
 }
 
+.activity-showcase {
+  display: grid;
+  gap: 1.5rem;
+  align-items: stretch;
+  border-radius: 30px;
+  border: 1px solid #fecaca;
+  background:
+    radial-gradient(circle at top right, rgba(200, 16, 46, 0.1), transparent 26rem),
+    linear-gradient(180deg, #fff8f8 0%, #ffffff 100%);
+  padding: 1.5rem;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+.activity-showcase-copy {
+  padding: 0.75rem;
+}
+
+.activity-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid #fee2e2;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 0.95rem 1rem;
+  text-align: left;
+  color: #334155;
+  font-size: 0.92rem;
+  font-weight: 800;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.activity-tab span:last-child {
+  color: #64748b;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.activity-tab:hover,
+.activity-tab-active {
+  transform: translateX(4px);
+  border-color: #fca5a5;
+  background: #c8102e;
+  color: #ffffff;
+  box-shadow: 0 14px 28px rgba(200, 16, 46, 0.16);
+}
+
+.activity-tab:hover span:last-child,
+.activity-tab-active span:last-child {
+  color: #ffe4e6;
+}
+
+.activity-slide-card {
+  position: relative;
+  min-height: 430px;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(200, 16, 46, 0.16);
+  background: #111827;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+}
+
+.activity-slide-image {
+  width: 100%;
+  height: 100%;
+  min-height: 430px;
+  object-fit: cover;
+  animation: activity-image-rise 520ms ease;
+}
+
+.activity-slide-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2rem;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.62) 48%, rgba(15, 23, 42, 0.1) 100%),
+    linear-gradient(0deg, rgba(15, 23, 42, 0.75) 0%, transparent 55%);
+  animation: page-fade-up 420ms ease;
+}
+
+.activity-status-pill,
+.activity-period-pill {
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.activity-status-pill {
+  background: #ffffff;
+  color: #c8102e;
+}
+
+.activity-period-pill {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.activity-dot {
+  width: 2rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.38);
+  transition:
+    width 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.activity-dot:hover,
+.activity-dot-active {
+  width: 3rem;
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
 .announcement-bell {
   position: relative;
   display: inline-flex;
@@ -454,6 +582,10 @@ textarea::placeholder {
   border-color: #fda4af;
   background: #fff1f2;
   box-shadow: 0 14px 26px rgba(15, 23, 42, 0.1);
+}
+
+.announcement-bell-urgent {
+  animation: urgent-bell-pulse 1.9s ease-in-out infinite;
 }
 
 .announcement-bell-badge {
@@ -521,6 +653,15 @@ textarea::placeholder {
   box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
 }
 
+.announcement-item-unread {
+  border-color: #fca5a5;
+  box-shadow: 0 14px 28px rgba(200, 16, 46, 0.08);
+}
+
+.announcement-item-read {
+  opacity: 0.84;
+}
+
 .announcement-item-critical {
   border-color: #fecaca;
   background: linear-gradient(180deg, #fff1f2 0%, #ffffff 100%);
@@ -557,6 +698,11 @@ textarea::placeholder {
 .announcement-pill-neutral {
   background: #e2e8f0;
   color: #475569;
+}
+
+.announcement-pill-unread {
+  background: #fef3c7;
+  color: #b45309;
 }
 
 .announcement-priority-dot {
@@ -664,6 +810,10 @@ textarea:focus-visible {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
     align-items: start;
   }
+
+  .activity-showcase {
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  }
 }
 
 @media (max-width: 768px) {
@@ -696,6 +846,22 @@ textarea:focus-visible {
 
   .announcement-panel {
     width: min(24rem, calc(100vw - 2rem));
+  }
+
+  .activity-showcase {
+    padding: 1rem;
+    border-radius: 22px;
+  }
+
+  .activity-slide-card,
+  .activity-slide-image {
+    min-height: 360px;
+  }
+
+  .activity-slide-overlay {
+    padding: 1.25rem;
+    background:
+      linear-gradient(0deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.35) 100%);
   }
 
   .blood-prevalence-section {
@@ -772,5 +938,32 @@ textarea:focus-visible {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes urgent-bell-pulse {
+  0%,
+  100% {
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+    transform: translateY(0);
+  }
+
+  50% {
+    box-shadow:
+      0 14px 30px rgba(15, 23, 42, 0.12),
+      0 0 0 8px rgba(200, 16, 46, 0.08);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes activity-image-rise {
+  from {
+    opacity: 0.75;
+    transform: scale(1.04);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }

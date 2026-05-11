@@ -52,6 +52,7 @@ import PublicEligibilityPage from './pages/PublicEligibilityPage';
 import PublicEmergencyRequestsPage from './pages/PublicEmergencyRequestsPage';
 import FAQPage from './pages/FAQPage';
 import WebsiteManagementPage from './pages/WebsiteManagementPage';
+import { ADMIN_PORTAL_ROLES, HOSPITAL_PORTAL_ROLES } from './types/auth';
 
 function App() {
   return (
@@ -63,7 +64,7 @@ function App() {
       <Route path="/hospital-login" element={<HospitalLoginPage />} />
       <Route path="/register" element={<Navigate to="/donor-register" replace />} />
 
-      <Route element={<ProtectedRoute roles={['ADMIN']} />}>
+      <Route element={<ProtectedRoute roles={ADMIN_PORTAL_ROLES} />}>
         <Route path="/admin" element={<AdminPortalLayout />}>
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="website-management" element={<WebsiteManagementPage />} />
@@ -116,7 +117,7 @@ function App() {
           </Route>
         </Route>
 
-        <Route element={<ProtectedRoute roles={['HOSPITAL_STAFF']} />}>
+        <Route element={<ProtectedRoute roles={HOSPITAL_PORTAL_ROLES} />}>
           <Route path="/hospital" element={<HospitalPortalLayout />}>
             <Route path="dashboard" element={<HospitalDashboardPage />} />
             <Route path="inventory" element={<HospitalInventoryPage />} />

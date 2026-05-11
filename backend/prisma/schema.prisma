@@ -8,9 +8,59 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
+  HOSPITAL_ADMIN
   DONOR
   HOSPITAL_STAFF
+  INVENTORY_OFFICER
+  DONOR_REVIEW_OFFICER
+  WEBSITE_CONTENT_ADMIN
+  AUDITOR
+}
+
+enum PermissionCode {
+  PLATFORM_ANALYTICS_VIEW
+  PLATFORM_SECURITY_VIEW
+  RBAC_MANAGE
+  HOSPITAL_APPROVE
+  ACCOUNT_SUSPEND
+  EMERGENCY_OVERRIDE
+  NATIONAL_ALERT_BROADCAST
+  WEBSITE_CONTENT_MANAGE
+  AUDIT_LOG_VIEW
+  AUDIT_LOG_EXPORT
+  HOSPITAL_OPERATIONS_VIEW
+  HOSPITAL_STAFF_MANAGE
+  HOSPITAL_SETTINGS_MANAGE
+  INVENTORY_MANAGE
+  INVENTORY_REPORT_VIEW
+  DONOR_REVIEW_MANAGE
+  DONOR_REVIEW_APPROVE
+  BLOOD_REQUEST_CREATE
+  BLOOD_REQUEST_APPROVE
+  BLOOD_REQUEST_PROGRESS_UPDATE
+  DONOR_MATCH_VIEW
+  APPOINTMENT_MANAGE
+  REPORT_VIEW
+  SECURITY_MONITOR_VIEW
+  GLOBAL_SEARCH_USE
+}
+
+enum DepartmentType {
+  ADMINISTRATION
+  EMERGENCY
+  LABORATORY
+  BLOOD_BANK
+  DONOR_SERVICES
+  COMPLIANCE
+  OPERATIONS
+}
+
+enum StaffAccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
 enum BloodGroup {
@@ -89,6 +139,26 @@ enum WebsiteStatisticKey {
   REQUESTS_COMPLETED
 }
 
+enum WebsiteAnnouncementType {
+  ALERT
+  AWARENESS
+  SYSTEM
+}
+
+enum DonorReviewStatus {
+  SUBMITTED
+  HOSPITAL_REVIEW
+  OFFICE_USE_COMPLETED
+  APPROVED
+  REJECTED
+}
+
+enum SecurityEventSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 model User {
   id                      String                   @id @default(cuid())
   email                   String                   @unique
@@ -102,15 +172,24 @@ model User {
   updatedAt               DateTime                 @updatedAt
   donorProfile            Donor?
   hospitalProfile         Hospital?
+  staffProfile            StaffProfile?
   refreshTokens           RefreshToken[]
+  sessionLogs             SessionLog[]
   emailVerificationTokens EmailVerificationToken[]
   notifications           Notification[]
+  websiteAnnouncementReads WebsiteAnnouncementRead[]
   auditLogs               AuditLog[]               @relation("AuditActor")
   bloodRequestUpdates     BloodRequestUpdate[]     @relation("RequestUpdateActor")
   inventoryUpdates        InventoryItem[]          @relation("InventoryUpdatedBy")
   inventoryLogs           InventoryLog[]           @relation("InventoryLogActor")
   donorResponses          DonorResponse[]
+  activityLogs            ActivityLog[]            @relation("ActivityActor")
+  securityEvents          SecurityEvent[]          @relation("SecurityActor")
+  donorEligibilityReviews DonorEligibilityReview[] @relation("DonorEligibilityReviewer")
+  approvedHospitals       Hospital[]               @relation("HospitalApprovedBy")
+  rolePermissionOverrides UserPermissionOverride[]
 
+  @@index([role])
   @@index([createdAt])
 }
 
@@ -142,6 +221,7 @@ model Donor {
   appointments             Appointment[]
   donorMatches             BloodRequest[]  @relation("MatchedDonors")
   donorResponses           DonorResponse[]
+  eligibilityReviews       DonorEligibilityReview[]
 
   @@index([bloodGroup])
   @@index([location])
@@ -160,15 +240,24 @@ model Hospital {
   longitude        Float?
   contactName      String
   contactPhone     String
+  isApproved       Boolean         @default(true)
+  approvedAt       DateTime?
+  approvedById     String?
+  approvalNotes    String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy       User?           @relation("HospitalApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   bloodRequests    BloodRequest[]
   inventoryItems   InventoryItem[]
   appointments     Appointment[]
   donations        Donation[]
+  eligibilityReviews DonorEligibilityReview[]
+  departments      HospitalDepartment[]
+  staffMembers     StaffProfile[]
 
   @@index([location])
+  @@index([isApproved])
   @@index([createdAt])
 }
 
@@ -198,8 +287,10 @@ model BloodRequest {
   donations              Donation[]
 
   @@index([status])
+  @@index([hospitalId])
   @@index([location])
   @@index([bloodGroup])
+  @@index([priority])
   @@index([createdAt])
 }
 
@@ -208,6 +299,9 @@ model InventoryItem {
   hospitalId     String
   bloodGroup     BloodGroup
   availableUnits Int
+  expiringUnits  Int            @default(0)
+  lowThreshold   Int            @default(7)
+  criticalThreshold Int         @default(3)
   updatedById    String?
   lastUpdated    DateTime       @updatedAt
   createdAt      DateTime       @default(now())
@@ -216,6 +310,7 @@ model InventoryItem {
   logs           InventoryLog[]
 
   @@unique([hospitalId, bloodGroup])
+  @@index([hospitalId])
   @@index([bloodGroup])
   @@index([createdAt])
 }
@@ -235,6 +330,8 @@ model Appointment {
   bloodRequest   BloodRequest?     @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
   @@index([scheduledAt])
+  @@index([donorId])
+  @@index([hospitalId])
   @@index([createdAt])
 }
 
@@ -254,6 +351,8 @@ model Donation {
   hospital        Hospital?     @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
   bloodRequest    BloodRequest? @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
+  @@index([donorId])
+  @@index([hospitalId])
   @@index([createdAt])
 }
 
@@ -272,6 +371,7 @@ model Notification {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   bloodRequest   BloodRequest?    @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
   @@index([createdAt])
 }
 
@@ -317,16 +417,22 @@ model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
   action      String
+  module      String?
   entityType  String
   entityId    String?
   description String?
   ipAddress   String?
+  device      String?
   metadata    Json?
+  oldValue    Json?
+  newValue    Json?
   createdAt   DateTime @default(now())
   actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([action])
+  @@index([module])
+  @@index([actorUserId])
 }
 
 model BloodRequestUpdate {
@@ -380,8 +486,165 @@ model DonorResponse {
   userId         String?
 
   @@unique([bloodRequestId, donorId])
+  @@index([bloodRequestId])
+  @@index([donorId])
   @@index([responseStatus])
   @@index([createdAt])
+}
+
+model DonorEligibilityReview {
+  id                  String            @id @default(cuid())
+  donorId             String
+  selectedHospitalId  String?
+  status              DonorReviewStatus @default(SUBMITTED)
+  reviewNotes         String?
+  officeUseNotes      String?
+  clinicalRiskFlag    Boolean           @default(false)
+  clinicalRiskNotes   String?
+  submittedAt         DateTime          @default(now())
+  hospitalReviewedAt  DateTime?
+  officeCompletedAt   DateTime?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  reviewerId          String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  donor               Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  selectedHospital    Hospital?         @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
+  reviewer            User?             @relation("DonorEligibilityReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([donorId])
+  @@index([selectedHospitalId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id             String   @id @default(cuid())
+  actorUserId    String?
+  actorName      String?
+  type           String
+  module         String
+  title          String
+  description    String
+  entityType     String?
+  entityId       String?
+  donorId        String?
+  hospitalId     String?
+  bloodRequestId String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  actor          User?    @relation("ActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([donorId])
+  @@index([hospitalId])
+  @@index([bloodRequestId])
+  @@index([module])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model SecurityEvent {
+  id          String                @id @default(cuid())
+  actorUserId String?
+  email       String?
+  eventType   String
+  severity    SecurityEventSeverity @default(INFO)
+  description String
+  ipAddress   String?
+  device      String?
+  metadata    Json?
+  createdAt   DateTime              @default(now())
+  actor       User?                 @relation("SecurityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model HospitalDepartment {
+  id           String            @id @default(cuid())
+  hospitalId    String
+  name          String
+  type          DepartmentType
+  description   String?
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  hospital      Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  staffMembers  StaffProfile[]
+
+  @@unique([hospitalId, name])
+  @@index([hospitalId, type])
+  @@index([createdAt])
+}
+
+model StaffProfile {
+  id               String              @id @default(cuid())
+  userId           String              @unique
+  hospitalId       String
+  departmentId     String?
+  employeeCode     String              @unique
+  title            String
+  status           StaffAccountStatus  @default(ACTIVE)
+  isDepartmentHead Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospital         Hospital            @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  department       HospitalDepartment? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([hospitalId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RolePermission {
+  id         String         @id @default(cuid())
+  role       Role
+  permission PermissionCode
+  isGranted  Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([role, permission])
+  @@index([role])
+}
+
+model UserPermissionOverride {
+  id         String         @id @default(cuid())
+  userId      String
+  permission  PermissionCode
+  isGranted   Boolean
+  reason      String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission])
+  @@index([userId])
+}
+
+model SessionLog {
+  id             String    @id @default(cuid())
+  userId         String
+  refreshTokenId String?
+  ipAddress      String?
+  device         String?
+  userAgent      String?
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime?
+  expiresAt      DateTime
+  loggedOutAt    DateTime?
+  isSuspicious   Boolean   @default(false)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([isSuspicious, createdAt])
 }
 
 model WebsiteAlert {
@@ -484,4 +747,36 @@ model WebsiteFooterSettings {
   footerText       String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model WebsiteAnnouncement {
+  id         String                   @id @default(cuid())
+  sourceKey  String                   @unique
+  sourceType WebsiteAnnouncementType
+  title      String
+  message    String
+  href       String
+  priority   PriorityLevel            @default(MEDIUM)
+  badge      String?
+  isPublished Boolean                 @default(true)
+  expiresAt  DateTime?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+  reads      WebsiteAnnouncementRead[]
+
+  @@index([sourceType, isPublished])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+model WebsiteAnnouncementRead {
+  id             String              @id @default(cuid())
+  announcementId String
+  userId         String
+  readAt         DateTime            @default(now())
+  announcement   WebsiteAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId, readAt])
 }

@@ -11,9 +11,12 @@ import {
   publicVisuals,
   testimonials,
   trustIndicators,
+  upcomingActivities,
   whyDonateItems,
+  yearlyActivities,
 } from '../data/publicContent';
 import {
+  getCachedPublicWebsiteContent,
   getPublicWebsiteContent,
   PublicWebsiteContent,
   WebsiteStatisticItem,
@@ -50,7 +53,8 @@ function AnimatedStat({ value, suffix = '' }: { value: string; suffix?: string }
 }
 
 export default function LandingPage() {
-  const [websiteContent, setWebsiteContent] = useState<PublicWebsiteContent | null>(null);
+  const [websiteContent, setWebsiteContent] = useState<PublicWebsiteContent | null>(() => getCachedPublicWebsiteContent());
+  const [activityIndex, setActivityIndex] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +160,17 @@ export default function LandingPage() {
         : nearbyCenters,
     [websiteContent],
   );
+
+  const activityItems = useMemo(() => [...yearlyActivities, ...upcomingActivities], []);
+  const activeActivity = activityItems[activityIndex % activityItems.length];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActivityIndex((current) => (current + 1) % activityItems.length);
+    }, 5600);
+
+    return () => window.clearInterval(timer);
+  }, [activityItems.length]);
 
   return (
     <div className="space-y-14 pb-8">
@@ -300,6 +315,54 @@ export default function LandingPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="activity-showcase">
+        <div className="activity-showcase-copy">
+          <p className="section-kicker">Activities & Outreach</p>
+          <h2 className="section-title">Previous work and upcoming lifesaving programs</h2>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
+            This section works like a professional rotating activity board: it highlights completed events from the
+            year, then cycles into upcoming programs so visitors can quickly see that the platform is active.
+          </p>
+
+          <div className="mt-6 grid gap-3">
+            {activityItems.map((item, index) => (
+              <button
+                key={`${item.status}-${item.title}`}
+                className={`activity-tab ${activityIndex === index ? 'activity-tab-active' : ''}`}
+                onClick={() => setActivityIndex(index)}
+                type="button"
+              >
+                <span>{item.title}</span>
+                <span>{item.period}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <article className="activity-slide-card" aria-live="polite">
+          <img src={activeActivity.image} alt={activeActivity.title} className="activity-slide-image" />
+          <div className="activity-slide-overlay">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="activity-status-pill">{activeActivity.status}</span>
+              <span className="activity-period-pill">{activeActivity.period}</span>
+            </div>
+            <h3 className="mt-4 text-3xl font-black text-white">{activeActivity.title}</h3>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-red-50">{activeActivity.description}</p>
+            <div className="mt-5 flex gap-2">
+              {activityItems.map((item, index) => (
+                <button
+                  key={item.title}
+                  aria-label={`Show ${item.title}`}
+                  className={`activity-dot ${activityIndex === index ? 'activity-dot-active' : ''}`}
+                  onClick={() => setActivityIndex(index)}
+                  type="button"
+                />
+              ))}
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="grid gap-8 lg:grid-cols-[1fr_0.95fr]">

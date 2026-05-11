@@ -20,4 +20,8 @@ export class RealtimeService {
   broadcastNotification(payload: unknown) {
     this.gateway.emitEvent('notification.created', payload);
   }
+
+  broadcastWebsiteAnnouncement(payload: unknown) {
+    this.gateway.emitEvent('website.announcement.updated', payload);
+  }
 }

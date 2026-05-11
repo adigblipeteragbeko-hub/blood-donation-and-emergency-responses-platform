@@ -18,6 +18,7 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
 
 @Injectable()
 export class BloodRequestsService {
@@ -26,6 +27,7 @@ export class BloodRequestsService {
     private readonly audit: AuditService,
     private readonly alerts: AlertsService,
     private readonly realtime: RealtimeService,
+    private readonly hospitalAccess: HospitalAccessService,
   ) {}
 
   private getCompatibleGroups(group: BloodGroup): BloodGroup[] {
@@ -59,12 +61,6 @@ export class BloodRequestsService {
     };
 
     return statusMap[status];
-  }
-
-  private ensureHospitalAccess(hospitalUserId: string, userId: string, role: Role) {
-    if (role !== Role.ADMIN && hospitalUserId !== userId) {
-      throw new NotFoundException('Blood request not found');
-    }
   }
 
   private async applyInventoryCreditForCompletion(
@@ -107,10 +103,7 @@ export class BloodRequestsService {
   }
 
   async create(userId: string, dto: CreateBloodRequestDto) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
-    if (!hospital) {
-      throw new NotFoundException('Hospital profile not found');
-    }
+    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
 
     const donorTarget = dto.type === 'EMERGENCY' || dto.priority === 'CRITICAL' ? 100 : 50;
     const compatibleGroups = this.getCompatibleGroups(dto.bloodGroup);
@@ -367,17 +360,14 @@ export class BloodRequestsService {
     });
   }
 
-  async listMine(userId: string, role: 'ADMIN' | 'HOSPITAL_STAFF', query: PaginationQueryDto) {
+  async listMine(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === 'ADMIN') {
+    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
       return this.listAll(userId, Role.ADMIN, query);
     }
 
-    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
-    if (!hospital) {
-      throw new NotFoundException('Hospital profile not found');
-    }
+    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
 
     return this.prisma.bloodRequest.findMany({
       where: { hospitalId: hospital.id },
@@ -416,8 +406,13 @@ export class BloodRequestsService {
       throw new NotFoundException('Blood request not found');
     }
 
-    if (role === Role.HOSPITAL_STAFF && request.hospital.userId !== userId) {
-      throw new NotFoundException('Blood request not found');
+    if (
+      role === Role.HOSPITAL_ADMIN ||
+      role === Role.HOSPITAL_STAFF ||
+      role === Role.INVENTORY_OFFICER ||
+      role === Role.DONOR_REVIEW_OFFICER
+    ) {
+      await this.hospitalAccess.assertHospitalAccess(request.hospital.id, userId, role);
     }
 
     if (role === Role.DONOR) {
@@ -442,7 +437,7 @@ export class BloodRequestsService {
     if (!request) {
       throw new NotFoundException('Blood request not found');
     }
-    this.ensureHospitalAccess(request.hospital.userId, userId, role);
+    await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
 
     const oldTrackingStatus = request.trackingStatus;
     const mappedTrackingStatus = this.mapStatusToTracking(dto.status);
@@ -514,14 +509,14 @@ export class BloodRequestsService {
     if (!request) {
       throw new NotFoundException('Blood request not found');
     }
-    this.ensureHospitalAccess(request.hospital.userId, userId, role);
+    await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
 
     if (request.trackingStatus === dto.newStatus) {
       throw new BadRequestException('Tracking status is already set to this value');
     }
 
     if (dto.newStatus === RequestProgressStatus.COMPLETED) {
-      if (role !== Role.HOSPITAL_STAFF) {
+      if (role !== Role.HOSPITAL_STAFF && role !== Role.HOSPITAL_ADMIN) {
         throw new BadRequestException('Only hospital staff can mark request as COMPLETED. Admin may use completion correction.');
       }
       if (!dto.transfusedByStaffId || !dto.unitDin || !dto.patientEncounterId) {
@@ -626,11 +621,11 @@ export class BloodRequestsService {
     const threeMinutesAgo = new Date(now.getTime() - 3 * 60 * 1000);
 
     const whereScope =
-      role === Role.ADMIN
+      role === Role.ADMIN || role === Role.SUPER_ADMIN
         ? {}
         : {
             hospital: {
-              is: { userId },
+              OR: [{ userId }, { staffMembers: { some: { userId } } }],
             },
           };
 
@@ -822,8 +817,12 @@ export class BloodRequestsService {
       throw new NotFoundException('Donor response not found');
     }
 
-    if (role === Role.HOSPITAL_STAFF && response.bloodRequest.hospital.userId !== userId) {
-      throw new NotFoundException('Donor response not found');
+    if (
+      role === Role.HOSPITAL_ADMIN ||
+      role === Role.HOSPITAL_STAFF ||
+      role === Role.DONOR_REVIEW_OFFICER
+    ) {
+      await this.hospitalAccess.assertHospitalAccess(response.bloodRequest.hospitalId, userId, role);
     }
 
     const updatePayload: { responseStatus?: DonorResponseStatus; notes?: string; responseTime?: Date } = {};

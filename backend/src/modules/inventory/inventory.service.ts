@@ -8,6 +8,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
 
 @Injectable()
 export class InventoryService {
@@ -16,14 +17,11 @@ export class InventoryService {
     private readonly audit: AuditService,
     private readonly alerts: AlertsService,
     private readonly realtime: RealtimeService,
+    private readonly hospitalAccess: HospitalAccessService,
   ) {}
 
   private async getHospitalForUser(userId: string) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
-    if (!hospital) {
-      throw new NotFoundException('Hospital profile not found');
-    }
-    return hospital;
+    return this.hospitalAccess.getHospitalForUser(userId);
   }
 
   private calculateUnits(previousUnits: number, unitsChanged: number, changeType: InventoryChangeType): number {
@@ -118,7 +116,7 @@ export class InventoryService {
   async list(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === Role.ADMIN) {
+    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
       return this.prisma.inventoryItem.findMany({
         include: {
           hospital: { select: { hospitalName: true, location: true } },
@@ -153,9 +151,7 @@ export class InventoryService {
       throw new NotFoundException('Inventory item not found');
     }
 
-    if (role !== Role.ADMIN && item.hospital.userId !== userId) {
-      throw new NotFoundException('Inventory item not found');
-    }
+    await this.hospitalAccess.assertHospitalAccess(item.hospitalId, userId, role);
 
     const previousUnits = item.availableUnits;
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -196,7 +192,7 @@ export class InventoryService {
   async listLogs(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === Role.ADMIN) {
+    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
       return this.prisma.inventoryLog.findMany({
         include: {
           inventory: {
@@ -240,9 +236,7 @@ export class InventoryService {
       throw new NotFoundException('Inventory item not found');
     }
 
-    if (role !== Role.ADMIN && inventory.hospital.userId !== userId) {
-      throw new NotFoundException('Inventory item not found');
-    }
+    await this.hospitalAccess.assertHospitalAccess(inventory.hospitalId, userId, role);
 
     if (dto.unitsChanged < 0) {
       throw new BadRequestException('unitsChanged must be non-negative');

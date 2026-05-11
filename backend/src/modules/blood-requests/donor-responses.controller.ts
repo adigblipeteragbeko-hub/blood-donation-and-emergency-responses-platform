@@ -13,7 +13,7 @@ import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 export class DonorResponsesController {
   constructor(private readonly bloodRequestsService: BloodRequestsService) {}
 
-  @Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -23,4 +23,3 @@ export class DonorResponsesController {
     return this.bloodRequestsService.updateDonorResponse(id, user.id, user.role, dto);
   }
 }
-

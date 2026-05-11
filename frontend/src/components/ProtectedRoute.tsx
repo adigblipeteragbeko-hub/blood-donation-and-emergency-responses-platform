@@ -10,7 +10,13 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
   }
 
   if (roles && !roles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+    if (user.role === 'DONOR') {
+      return <Navigate to="/donor/dashboard" replace />;
+    }
+    if (['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'].includes(user.role)) {
+      return <Navigate to="/hospital/dashboard" replace />;
+    }
+    return <Navigate to="/admin/dashboard" replace />;
   }
 
   return <Outlet />;

@@ -1,8 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-
-type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF';
+import { ADMIN_PORTAL_ROLES, HOSPITAL_PORTAL_ROLES, Role } from '../types/auth';
 
 export function LoginForm({
   title,
@@ -54,11 +53,19 @@ export function LoginForm({
         return;
       }
 
-      if (nextRole === 'ADMIN') {
+      if (nextRole && ADMIN_PORTAL_ROLES.includes(nextRole as Role)) {
+        if (nextRole === 'WEBSITE_CONTENT_ADMIN') {
+          navigate('/admin/website-management');
+          return;
+        }
         navigate('/admin/dashboard');
       } else if (nextRole === 'DONOR') {
         navigate('/dashboard/donor');
-      } else if (nextRole === 'HOSPITAL_STAFF') {
+      } else if (nextRole && HOSPITAL_PORTAL_ROLES.includes(nextRole as Role)) {
+        if (nextRole === 'INVENTORY_OFFICER') {
+          navigate('/hospital/inventory');
+          return;
+        }
         navigate('/dashboard/hospital');
       } else {
         navigate('/login');
