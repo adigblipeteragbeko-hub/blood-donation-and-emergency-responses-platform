@@ -5,8 +5,7 @@ export default function LoginPage() {
   return (
     <LoginForm
       title="User Login"
-      allowedRoles={['DONOR', 'HOSPITAL_STAFF']}
-      subtitle="Sign in with your donor or hospital account."
+      subtitle="Sign in once. We will send you to the right dashboard for your role."
       footer={
         <>
           <Link className="text-primary underline" to="/register">

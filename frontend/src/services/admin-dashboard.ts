@@ -221,6 +221,11 @@ export type AdminDashboardSearchResults = {
 
 const unwrap = <T>(response: { data: { data: T } }) => response.data.data;
 
+const cleanParams = (params: Record<string, string | number | undefined>) =>
+  Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== ''),
+  );
+
 export async function getAdminDashboardOverview() {
   return unwrap<DashboardOverview>(await api.get('/admin/dashboard/overview'));
 }
@@ -234,12 +239,12 @@ export async function getAdminEmergencyRequests(params: Record<string, string | 
     total: number;
     items: EmergencyRequestMonitorItem[];
     hospitals: { id: string; hospitalName: string }[];
-  }>(await api.get('/admin/dashboard/emergency-requests', { params }));
+  }>(await api.get('/admin/dashboard/emergency-requests', { params: cleanParams(params) }));
 }
 
 export async function getAdminActivityFeed(params: Record<string, string | number | undefined>) {
   return unwrap<{ total: number; items: ActivityFeedItem[] }>(
-    await api.get('/admin/dashboard/activity-feed', { params }),
+    await api.get('/admin/dashboard/activity-feed', { params: cleanParams(params) }),
   );
 }
 
@@ -254,7 +259,7 @@ export async function getAdminDonorReviews(params: Record<string, string | numbe
     total: number;
     items: DonorReviewItem[];
     hospitals: { id: string; hospitalName: string }[];
-  }>(await api.get('/admin/dashboard/donor-reviews', { params }));
+  }>(await api.get('/admin/dashboard/donor-reviews', { params: cleanParams(params) }));
 }
 
 export async function updateAdminDonorReview(
@@ -269,7 +274,7 @@ export async function getAdminAuditLogs(params: Record<string, string | number |
     total: number;
     items: AuditLogItem[];
     users: { id: string; email: string }[];
-  }>(await api.get('/admin/dashboard/audit-logs', { params }));
+  }>(await api.get('/admin/dashboard/audit-logs', { params: cleanParams(params) }));
 }
 
 export async function getAdminReports() {

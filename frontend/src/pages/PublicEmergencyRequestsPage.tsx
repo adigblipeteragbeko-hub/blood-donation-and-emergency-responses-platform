@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { unwrapApiResponse } from '../utils/api-response';
 
 type PublicEmergencyRequest = {
   id: string;
@@ -62,15 +63,16 @@ export default function PublicEmergencyRequestsPage() {
           setLoading(true);
         }
 
-        const { data } = await api.get<PublicEmergencyRequest[]>('/public/emergency-requests', {
+        const { data } = await api.get('/public/emergency-requests', {
           params: { take: 30 },
         });
+        const nextRequests = unwrapApiResponse<PublicEmergencyRequest[]>(data);
 
         if (!isMounted) {
           return;
         }
 
-        setRequests(data);
+        setRequests(Array.isArray(nextRequests) ? nextRequests : []);
         setError('');
         setLastSynced(new Date().toISOString());
       } catch {
@@ -96,7 +98,7 @@ export default function PublicEmergencyRequestsPage() {
   }, [requests.length]);
 
   const locationOptions = useMemo(
-    () => Array.from(new Set(requests.map((request) => request.hospital.location).filter(Boolean))),
+    () => Array.from(new Set(requests.map((request) => request.hospital?.location).filter(Boolean))),
     [requests],
   );
 
@@ -110,9 +112,9 @@ export default function PublicEmergencyRequestsPage() {
       const normalizedBloodType = formatBloodGroup(request.bloodGroup);
       const normalizedUrgency = urgencyLabelMap[request.priority];
       const haystack = [
-        request.hospital.name,
-        request.hospital.location,
-        request.hospital.address,
+        request.hospital?.name,
+        request.hospital?.location,
+        request.hospital?.address,
         normalizedBloodType,
         request.publicMessage,
       ]
@@ -122,7 +124,7 @@ export default function PublicEmergencyRequestsPage() {
       const matchesSearch = haystack.includes(search.toLowerCase().trim());
       const matchesBloodType = bloodType === 'all' || normalizedBloodType === bloodType;
       const matchesUrgency = urgency === 'all' || normalizedUrgency === urgency;
-      const matchesLocation = location === 'all' || request.hospital.location === location;
+      const matchesLocation = location === 'all' || request.hospital?.location === location;
 
       return matchesSearch && matchesBloodType && matchesUrgency && matchesLocation;
     });
@@ -263,8 +265,8 @@ export default function PublicEmergencyRequestsPage() {
                   </div>
                   <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">{request.status}</span>
                 </div>
-                <p className="mt-4 text-sm font-semibold text-slate-800">{request.hospital.name}</p>
-                <p className="mt-1 text-sm text-slate-500">{request.hospital.location}</p>
+                <p className="mt-4 text-sm font-semibold text-slate-800">{request.hospital?.name ?? 'Partner hospital'}</p>
+                <p className="mt-1 text-sm text-slate-500">{request.hospital?.location ?? 'Location pending'}</p>
                 <p className="mt-4 text-sm leading-6 text-slate-600">{request.publicMessage}</p>
                 <div className="mt-4 grid gap-2 text-sm text-slate-600">
                   <p>

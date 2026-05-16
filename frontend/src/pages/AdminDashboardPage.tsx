@@ -66,6 +66,48 @@ const dashboardAnchors = [
   { label: 'Security', href: '#security' },
 ];
 
+const emptyOverview: DashboardOverview = {
+  summaryCards: [
+    { key: 'total-donors', label: 'Total registered donors', value: 0, tone: 'primary' },
+    { key: 'active-emergencies', label: 'Active emergency requests', value: 0, tone: 'danger' },
+    { key: 'partner-hospitals', label: 'Partner hospitals', value: 0, tone: 'neutral' },
+    { key: 'blood-units-available', label: 'Blood units available', value: 0, tone: 'success' },
+  ],
+  quickActions: [
+    { label: 'Create Emergency Request', href: '/admin/management?section=request-tracking', color: 'primary' },
+    { label: 'Add Blood Inventory', href: '/admin/management?section=inventory-tracking', color: 'navy' },
+    { label: 'Broadcast Alert', href: '/admin/website-management', color: 'amber' },
+  ],
+};
+
+const emptyReports: Awaited<ReturnType<typeof getAdminReports>> = {
+  donationsByMonth: [],
+  requestTrends: [],
+  mostRequestedBloodTypes: [],
+  donorResponseRates: [],
+  hospitalPerformance: [],
+  shortageTrends: [],
+};
+
+const emptySecurity: Awaited<ReturnType<typeof getAdminSecurityMonitoring>> = {
+  recentAdminLogins: [],
+  failedLoginAttempts: [],
+  suspiciousAccessAttempts: [],
+  activeSessions: [],
+};
+
+async function settle<T>(request: Promise<T>, fallback: T, label: string, onError: (message: string) => void) {
+  const result = await Promise.allSettled([request]);
+  const settled = result[0];
+  if (settled.status === 'fulfilled') {
+    return settled.value;
+  }
+
+  console.error(`${label} failed`, settled.reason);
+  onError(`${label} could not load. Showing safe fallback data.`);
+  return fallback;
+}
+
 function humanizeToken(value: string) {
   return value.replace(/_/g, ' ');
 }
@@ -333,27 +375,20 @@ export default function AdminDashboardPage() {
   };
 
   const loadCoreDashboard = async () => {
-    const [
-      overviewData,
-      inventoryData,
-      requestsData,
-      activityFeedData,
-      notificationsData,
-      reviewsData,
-      auditLogsData,
-      reportsData,
-      securityData,
-    ] = await Promise.all([
-      getAdminDashboardOverview(),
-      getAdminInventoryMonitoring(),
-      getAdminEmergencyRequests(emergencyFilters),
-      getAdminActivityFeed({ take: 12 }),
-      getAdminNotifications(),
-      getAdminDonorReviews(reviewFilters),
-      getAdminAuditLogs(auditFilters),
-      getAdminReports(),
-      getAdminSecurityMonitoring(),
-    ]);
+    const onError = (message: string) => pushToast('error', message);
+
+    const [overviewData, inventoryData, requestsData, activityFeedData, notificationsData, reviewsData, auditLogsData, reportsData, securityData] =
+      await Promise.all([
+        settle(getAdminDashboardOverview(), emptyOverview, 'Dashboard overview', onError),
+        settle(getAdminInventoryMonitoring(), [] as InventoryMonitorItem[], 'Inventory monitoring', onError),
+        settle(getAdminEmergencyRequests(emergencyFilters), { total: 0, items: [], hospitals: [] }, 'Emergency request queue', onError),
+        settle(getAdminActivityFeed({ take: 12 }), { total: 0, items: [] }, 'Activity feed', onError),
+        settle(getAdminNotifications(), { systemNotifications: [], inbox: [] }, 'Notifications', onError),
+        settle(getAdminDonorReviews(reviewFilters), { total: 0, items: [], hospitals: [] }, 'Donor review queue', onError),
+        settle(getAdminAuditLogs(auditFilters), { total: 0, items: [], users: [] }, 'Audit logs', onError),
+        settle(getAdminReports(), emptyReports, 'Reports', onError),
+        settle(getAdminSecurityMonitoring(), emptySecurity, 'Security monitoring', onError),
+      ]);
 
     setOverview(overviewData);
     setInventory(inventoryData);
@@ -1039,8 +1074,11 @@ export default function AdminDashboardPage() {
 
               <PanelCard title="Hospital request performance">
                 <div className="space-y-3">
-                  {reports.hospitalPerformance.map((item) => (
-                    <div key={item.hospitalName} className="rounded-2xl border border-slate-100 p-4">
+                  {reports.hospitalPerformance.map((item, index) => (
+                    <div
+                      key={`${item.hospitalName}-${index}`}
+                      className="rounded-2xl border border-slate-100 p-4"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-semibold text-slate-900">{item.hospitalName}</p>
                         <StatusBadge label={`${item.completionRate}%`} toneKey={item.completionRate >= 80 ? 'stable' : item.completionRate >= 50 ? 'low' : 'critical'} />

@@ -1,7 +1,8 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ADMIN_PORTAL_ROLES, HOSPITAL_PORTAL_ROLES, Role } from '../types/auth';
+import { Role } from '../types/auth';
+import { getRoleLandingPath } from '../utils/role-redirect';
 
 export function LoginForm({
   title,
@@ -53,23 +54,7 @@ export function LoginForm({
         return;
       }
 
-      if (nextRole && ADMIN_PORTAL_ROLES.includes(nextRole as Role)) {
-        if (nextRole === 'WEBSITE_CONTENT_ADMIN') {
-          navigate('/admin/website-management');
-          return;
-        }
-        navigate('/admin/dashboard');
-      } else if (nextRole === 'DONOR') {
-        navigate('/dashboard/donor');
-      } else if (nextRole && HOSPITAL_PORTAL_ROLES.includes(nextRole as Role)) {
-        if (nextRole === 'INVENTORY_OFFICER') {
-          navigate('/hospital/inventory');
-          return;
-        }
-        navigate('/dashboard/hospital');
-      } else {
-        navigate('/login');
-      }
+      navigate(getRoleLandingPath(nextRole as Role));
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
