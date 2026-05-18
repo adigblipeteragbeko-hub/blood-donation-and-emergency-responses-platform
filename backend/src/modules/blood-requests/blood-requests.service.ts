@@ -172,6 +172,8 @@ export class BloodRequestsService {
         type: dto.type,
         priority: dto.priority,
         location: normalizedLocation,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
         requiredBy: requiredByDate,
         notes: dto.notes,
         status: RequestStatus.MATCHING,

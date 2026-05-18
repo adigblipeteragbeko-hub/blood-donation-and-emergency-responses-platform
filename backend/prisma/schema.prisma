@@ -153,6 +153,46 @@ enum DonorReviewStatus {
   REJECTED
 }
 
+enum DonorClinicalStatus {
+  DRAFT
+  SUBMITTED
+  HOSPITAL_REVIEW
+  OFFICE_USE_COMPLETED
+  APPROVED
+  REJECTED
+  TEMPORARILY_DEFERRED
+  PERMANENTLY_DEFERRED
+}
+
+enum ClinicalPassFail {
+  PASSED
+  FAILED
+}
+
+enum ClinicalYesNo {
+  YES
+  NO
+}
+
+enum ClinicalScreeningOutcome {
+  QUALIFIED
+  TEMPORARILY_DEFERRED
+  PERMANENTLY_DEFERRED
+  REJECTED
+}
+
+enum PackType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  QUAD
+}
+
+enum PhlebotomyOutcome {
+  SUCCESSFUL
+  UNSUCCESSFUL
+}
+
 enum SecurityEventSeverity {
   INFO
   WARNING
@@ -186,6 +226,8 @@ model User {
   activityLogs            ActivityLog[]            @relation("ActivityActor")
   securityEvents          SecurityEvent[]          @relation("SecurityActor")
   donorEligibilityReviews DonorEligibilityReview[] @relation("DonorEligibilityReviewer")
+  donorClinicalRecords     DonorClinicalRecord[]     @relation("DonorClinicalReviewer")
+  donorClinicalAuditTrails DonorClinicalAuditTrail[] @relation("DonorClinicalAuditActor")
   approvedHospitals       Hospital[]               @relation("HospitalApprovedBy")
   rolePermissionOverrides UserPermissionOverride[]
 
@@ -222,10 +264,12 @@ model Donor {
   donorMatches             BloodRequest[]  @relation("MatchedDonors")
   donorResponses           DonorResponse[]
   eligibilityReviews       DonorEligibilityReview[]
+  clinicalRecords          DonorClinicalRecord[]
 
   @@index([bloodGroup])
   @@index([location])
   @@index([donorNumber])
+  @@index([latitude, longitude])
   @@index([createdAt])
 }
 
@@ -253,11 +297,13 @@ model Hospital {
   appointments     Appointment[]
   donations        Donation[]
   eligibilityReviews DonorEligibilityReview[]
+  donorClinicalRecords DonorClinicalRecord[]
   departments      HospitalDepartment[]
   staffMembers     StaffProfile[]
 
   @@index([location])
   @@index([isApproved])
+  @@index([latitude, longitude])
   @@index([createdAt])
 }
 
@@ -273,6 +319,8 @@ model BloodRequest {
   status                 RequestStatus         @default(OPEN)
   trackingStatus         RequestProgressStatus @default(PENDING)
   location               String
+  latitude               Float?
+  longitude              Float?
   notes                  String?
   requestDate            DateTime              @default(now())
   requiredBy             DateTime
@@ -291,6 +339,7 @@ model BloodRequest {
   @@index([location])
   @@index([bloodGroup])
   @@index([priority])
+  @@index([latitude, longitude])
   @@index([createdAt])
 }
 
@@ -517,6 +566,186 @@ model DonorEligibilityReview {
   @@index([selectedHospitalId])
   @@index([status])
   @@index([createdAt])
+}
+
+
+model DonorClinicalRecord {
+  id                         String              @id @default(cuid())
+  donorId                    String
+  selectedHospitalId         String?
+  reviewerId                 String?
+  status                     DonorClinicalStatus @default(DRAFT)
+  version                    Int                 @default(1)
+  isLocked                   Boolean             @default(false)
+  submittedAt                DateTime?
+  hospitalReviewedAt         DateTime?
+  officeCompletedAt          DateTime?
+  finalDecisionAt            DateTime?
+
+  formDate                   DateTime?
+  venue                      String?
+  title                      String?
+  firstName                  String?
+  lastName                   String?
+  callingName                String?
+  dateOfBirth                DateTime?
+  sex                        String?
+  areaOfResidence            String?
+  addressOrWorkplace         String?
+  occupation                 String?
+  idType                     String?
+  idNumber                   String?
+  phoneNumber                String?
+  email                      String?
+  preferredContactMethod     String?
+  doNotContactForDonation    Boolean             @default(false)
+
+  donorType                  String?             @default("VOLUNTARY")
+  hasDonatedBefore           Boolean?
+  lastDonationDate           DateTime?
+  numberOfVoluntaryDonations Int                 @default(0)
+  numberOfReplacementDonations Int               @default(0)
+  donorCardNumber            String?
+
+  patientName                String?
+  patientHospital            String?
+  ward                       String?
+  relationshipToPatient      String?
+  clerkingOfficerName        String?
+  clerkingOfficerSignature   String?
+
+  declarationConfirmed       Boolean             @default(false)
+  testingConsent             Boolean             @default(false)
+  contactConsent             Boolean             @default(false)
+  staffEligibilityConsent     Boolean             @default(false)
+  dataUseConsent             Boolean             @default(false)
+  donorSignature             String?
+  declarationDate            DateTime?
+  counsellorName             String?
+  counsellorSignature        String?
+
+  donorRiskFlag              Boolean             @default(false)
+  donorRiskSummary           String?
+  reviewNotes                String?
+
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+
+  donor                      Donor               @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  selectedHospital           Hospital?           @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
+  reviewer                   User?               @relation("DonorClinicalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  healthAnswers              DonorClinicalHealthAnswer[]
+  clinicalReview             DonorClinicalReview?
+  donationOutcome            DonorClinicalDonationOutcome?
+  versions                   DonorClinicalFormVersion[]
+  auditTrails                DonorClinicalAuditTrail[]
+
+  @@index([donorId])
+  @@index([selectedHospitalId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([hospitalReviewedAt])
+}
+
+model DonorClinicalHealthAnswer {
+  id               String              @id @default(cuid())
+  clinicalRecordId String
+  questionKey      String
+  questionText     String
+  answer           Boolean
+  details          String?
+  riskFlag         Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  clinicalRecord   DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicalRecordId, questionKey])
+  @@index([clinicalRecordId])
+  @@index([riskFlag])
+}
+
+model DonorClinicalReview {
+  id                         String                   @id @default(cuid())
+  clinicalRecordId           String                   @unique
+  appearancePassed           ClinicalPassFail?
+  medicalHistoryPassed       ClinicalPassFail?
+  weightKg                   Float?
+  bloodPressure              String?
+  pulseBpm                   Int?
+  haemoglobinLevel           Float?
+  hbByCuSO4Passed            ClinicalPassFail?
+  hbSagChecked               ClinicalYesNo?
+  hbSagResult                String?
+  qualifiesToDonate          ClinicalYesNo?
+  outcomeOfScreening         ClinicalScreeningOutcome?
+  permanentDeferralReasons   String[]                 @default([])
+  temporaryDeferralReasons   String[]                 @default([])
+  temporaryDeferralDuration  String?
+  comments                   String?
+  nurseName                  String?
+  nurseSignature             String?
+  reviewedById               String?
+  reviewedAt                 DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  clinicalRecord             DonorClinicalRecord      @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([reviewedAt])
+}
+
+model DonorClinicalDonationOutcome {
+  id                    String              @id @default(cuid())
+  clinicalRecordId      String              @unique
+  donationNumber        String?
+  packType              PackType?
+  bleedStartTime        DateTime?
+  bleedEndTime          DateTime?
+  dryPack               Boolean             @default(false)
+  apheresis             Boolean             @default(false)
+  testOnly              Boolean             @default(false)
+  didNotBleed           Boolean             @default(false)
+  outcomeOfPhlebotomy   PhlebotomyOutcome?
+  unsuccessfulReason    String?
+  venousAccessIssue     Boolean             @default(false)
+  underbledMl           Int?
+  donorReaction         Boolean             @default(false)
+  adverseEvents         String[]            @default([])
+  nurseName             String?
+  nurseSignature        String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  clinicalRecord        DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+}
+
+model DonorClinicalFormVersion {
+  id               String              @id @default(cuid())
+  clinicalRecordId String
+  version          Int
+  snapshot         Json
+  changeReason     String?
+  createdById      String?
+  createdAt        DateTime            @default(now())
+  clinicalRecord   DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([clinicalRecordId, version])
+  @@index([createdAt])
+}
+
+model DonorClinicalAuditTrail {
+  id               String              @id @default(cuid())
+  clinicalRecordId String
+  actorUserId      String?
+  action           String
+  description      String?
+  oldValue         Json?
+  newValue         Json?
+  createdAt        DateTime            @default(now())
+  clinicalRecord   DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+  actor            User?               @relation("DonorClinicalAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([clinicalRecordId, createdAt])
+  @@index([actorUserId])
+  @@index([action])
 }
 
 model ActivityLog {

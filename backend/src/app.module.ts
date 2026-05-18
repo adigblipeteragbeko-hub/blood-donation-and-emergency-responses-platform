@@ -13,6 +13,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { WebsiteManagementModule } from './modules/website-management/website-management.module';
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module';
+import { MapsModule } from './modules/maps/maps.module';
+import { DonorClinicalRecordsModule } from './modules/donor-clinical-records/donor-clinical-records.module';
+import { SmsModule } from './common/sms/sms.module';
 import { CoreModule } from './core/core.module';
 import { HealthController } from './health.controller';
 
@@ -32,7 +35,11 @@ import { HealthController } from './health.controller';
     ReportsModule,
     WebsiteManagementModule,
     AdminDashboardModule,
+    MapsModule,
+    DonorClinicalRecordsModule,
+    SmsModule,
   ],
   controllers: [HealthController],
 })
 export class AppModule {}
+

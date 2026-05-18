@@ -23,4 +23,14 @@ export default () => ({
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'no-reply@bloodresponse.local',
   },
+  sms: {
+    enabled: process.env.SMS_ENABLED === 'true',
+    provider: process.env.SMS_PROVIDER ?? 'console',
+    from: process.env.SMS_FROM ?? 'BloodResponse',
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    twilioFromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
+    africasTalkingUsername: process.env.AFRICAS_TALKING_USERNAME ?? '',
+    africasTalkingApiKey: process.env.AFRICAS_TALKING_API_KEY ?? '',
+  },
 });

@@ -13,6 +13,10 @@ export class RealtimeService {
     this.gateway.emitEvent('donor.response.updated', payload);
   }
 
+  broadcastDonorLocation(payload: unknown) {
+    this.gateway.emitEvent('donor.location.updated', payload);
+  }
+
   broadcastInventoryUpdate(payload: unknown) {
     this.gateway.emitEvent('inventory.updated', payload);
   }
