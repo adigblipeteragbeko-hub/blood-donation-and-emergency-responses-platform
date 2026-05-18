@@ -7,6 +7,8 @@ const coreLinks = [
   { to: '/hospital/request-blood', label: 'Request Blood', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
   { to: '/hospital/active-requests', label: 'Active Requests', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
   { to: '/hospital/donor-search', label: 'Donor Search', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/donor-reviews', label: 'Donor Clinical Reviews', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/live-map', label: 'Live Map Tracking', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
   { to: '/hospital/appointments', label: 'Appointments', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
   { to: '/hospital/notifications', label: 'Notifications', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
   { to: '/hospital/reports', label: 'Reports', roles: ['HOSPITAL_ADMIN', 'INVENTORY_OFFICER'] },

@@ -111,6 +111,7 @@ export function MainLayout() {
     ['/about', 'About'],
     ['/how-it-works', 'How It Works'],
     ['/emergency-requests', 'Emergency Requests'],
+    ['/nearby-centers', 'Blood Centers'],
     ['/donor-register', 'Become a Donor'],
     ['/contact', 'Contact'],
     ['/login', 'Login'],
@@ -393,7 +394,7 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-white text-text">
-      <div className="sticky top-0 z-50 border-b border-red-200 bg-primary px-4 py-2 text-sm text-white shadow-sm">
+      <div className="sticky top-3 z-50 mx-3 rounded-[1.75rem] border border-red-200/60 bg-primary px-4 py-2 text-sm text-white shadow-lg shadow-red-950/10">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <p className="font-semibold">
             URGENT: {alertItem.bloodType} blood needed at {alertItem.hospital}
@@ -407,7 +408,7 @@ export function MainLayout() {
         </div>
       </div>
 
-      <header className="sticky top-[45px] z-40 border-b border-red-100 bg-white/95 shadow-sm backdrop-blur">
+      <header className="sticky top-[74px] z-40 mx-3 mt-3 rounded-[2rem] border border-red-100 bg-white/95 shadow-lg shadow-slate-950/5 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
           <BrandLogo />
 

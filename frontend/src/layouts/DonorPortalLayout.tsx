@@ -10,6 +10,7 @@ const donorLinks = [
   { to: '/donor/emergency-requests', label: 'Emergency Requests' },
   { to: '/donor/notifications', label: 'Notifications' },
   { to: '/donor/availability', label: 'Availability Status' },
+  { to: '/donor/live-location', label: 'Live Location' },
   { to: '/donor/nearby-centers', label: 'Nearby Centers' },
   { to: '/donor/rewards', label: 'Rewards / Achievements' },
   { to: '/donor/health-form', label: 'Health & Eligibility Form' },

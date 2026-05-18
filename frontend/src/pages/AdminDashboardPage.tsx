@@ -613,13 +613,13 @@ export default function AdminDashboardPage() {
             </div>
             <h1 className="mt-4 text-3xl font-black text-slate-950 md:text-4xl">Admin operations dashboard</h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-              A real-time operational view of donor readiness, emergency fulfillment, blood stock, website signals, and security health—designed to help us run the platform like a real hospital response center.
+              A compact command view for donor readiness, emergency requests, blood stock, website signals, and security health.
             </p>
           </div>
           <div className="grid gap-3 rounded-3xl border border-slate-100 bg-white/90 p-4 shadow-sm sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Refresh mode</p>
-              <p className="mt-2 text-sm font-semibold text-slate-800">{refreshing ? 'Syncing live operations…' : 'Auto-refresh every 30 seconds'}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-800">{refreshing ? 'Syncing live operations...' : 'Auto-refresh every 30 seconds'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Action lane</p>
@@ -650,7 +650,7 @@ export default function AdminDashboardPage() {
       <SectionShell
         id="overview"
         title="Dashboard analytics overview"
-        description="Professional summary cards powered by live database metrics and ready for board-level reporting."
+        description="Live summary cards for fast operational review."
       >
         {initialLoading || !overview ? (
           <LoadingGrid />
@@ -693,12 +693,15 @@ export default function AdminDashboardPage() {
       <SectionShell
         id="inventory"
         title="Blood inventory monitoring"
-        description="Track every blood group with availability, low/critical thresholds, expiry risk, and freshness signals."
+        description="Availability, thresholds, expiry risk, and last update by blood group."
         action={lowStockSummary.length ? <StatusBadge label={`${lowStockSummary.length} low stock groups`} toneKey="critical" /> : undefined}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {inventory.map((item) => (
-            <article key={item.bloodGroup} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+        {inventory.length === 0 ? (
+          <EmptyState title="No inventory records yet" body="Seed or add hospital blood stock to populate this monitoring panel." />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {inventory.map((item) => (
+              <article key={item.bloodGroup} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Blood group</p>
@@ -723,15 +726,16 @@ export default function AdminDashboardPage() {
                 <p>Low threshold: <span className="font-semibold text-slate-900">{item.lowThreshold}</span></p>
                 <p>Last updated: <span className="font-semibold text-slate-900">{formatDateTime(item.lastUpdated)}</span></p>
               </div>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
       </SectionShell>
 
       <SectionShell
         id="requests"
         title="Emergency request monitoring console"
-        description="Review the live request queue, filter by urgency or hospital, and quickly identify escalations and donor response gaps."
+        description="Filter requests and identify urgent response gaps quickly."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <select
@@ -850,7 +854,7 @@ export default function AdminDashboardPage() {
         <SectionShell
           id="activity"
           title="Real-time activity feed"
-          description="Recent operational movement across donor onboarding, emergency response, approvals, and inventory."
+          description="Recent donor, request, review, and inventory activity."
         >
           <div className="space-y-4">
             {activityData.items.length ? (
@@ -879,33 +883,43 @@ export default function AdminDashboardPage() {
         <SectionShell
           id="notifications"
           title="Notification center"
-          description="Low stock, expiry warnings, unmatched critical requests, and inbound in-app messages."
+          description="Low stock, expiry warnings, critical requests, and inbox messages."
         >
           <div className="space-y-4">
-            {notificationData.systemNotifications.slice(0, 4).map((item) => (
-              <article key={item.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-900">{item.title}</p>
-                  <StatusBadge label={item.severity} toneKey={item.severity} />
-                </div>
-                <p className="mt-2 text-sm text-slate-600">{item.body}</p>
-                <p className="mt-3 text-xs font-medium text-slate-500">{formatDateTime(item.createdAt)}</p>
-              </article>
-            ))}
+            {notificationData.systemNotifications.length ? (
+              notificationData.systemNotifications.slice(0, 4).map((item) => (
+                <article key={item.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-900">{item.title}</p>
+                    <StatusBadge label={item.severity} toneKey={item.severity} />
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">{item.body}</p>
+                  <p className="mt-3 text-xs font-medium text-slate-500">{formatDateTime(item.createdAt)}</p>
+                </article>
+              ))
+            ) : (
+              <EmptyState title="No system notifications" body="Low stock alerts, failed matches, and review alerts will appear here." />
+            )}
 
             <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Latest inbox notifications</p>
               <div className="mt-3 space-y-3">
-                {notificationData.inbox.slice(0, 4).map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-white px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                      <span className={`h-2.5 w-2.5 rounded-full ${item.isRead ? 'bg-slate-300' : 'bg-primary'}`} aria-hidden="true" />
+                {notificationData.inbox.length ? (
+                  notificationData.inbox.slice(0, 4).map((item) => (
+                    <div key={item.id} className="rounded-2xl bg-white px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                        <span className={`h-2.5 w-2.5 rounded-full ${item.isRead ? 'bg-slate-300' : 'bg-primary'}`} aria-hidden="true" />
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{item.body}</p>
+                      <p className="mt-2 text-xs text-slate-500">{item.userEmail}</p>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{item.body}</p>
-                    <p className="mt-2 text-xs text-slate-500">{item.userEmail}</p>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-500">
+                    Inbox notifications will appear here when users receive alerts, reminders, or system messages.
+                  </p>
+                )}
               </div>
             </div>
           </div>

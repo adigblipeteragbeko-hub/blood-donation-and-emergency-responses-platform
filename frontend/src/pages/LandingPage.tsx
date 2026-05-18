@@ -184,8 +184,7 @@ export default function LandingPage() {
               Donate Blood, Save Lives
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-slate-600">
-              A clean, trusted, and emergency-ready platform that helps donors, hospitals, and administrators respond
-              faster when blood is urgently needed.
+              A trusted coordination platform for donors, hospitals, and emergency blood requests.
             </p>
           </div>
 
@@ -271,7 +270,7 @@ export default function LandingPage() {
       <section className="space-y-5">
         <div className="section-heading-wrap">
           <p className="section-kicker">Emergency Requests</p>
-          <h2 className="section-title">Visible emergency needs without exposing patient-sensitive details</h2>
+          <h2 className="section-title">Active needs, safe public details</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           {publicEmergencyAlerts.map((alert) => (
@@ -302,7 +301,7 @@ export default function LandingPage() {
       <section className="space-y-5">
         <div className="section-heading-wrap">
           <p className="section-kicker">How It Works</p>
-          <h2 className="section-title">A clear path from registration to lifesaving donation</h2>
+          <h2 className="section-title">From registration to donation</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-5">
           {howItWorksSteps.map((step) => (
@@ -320,10 +319,9 @@ export default function LandingPage() {
       <section className="activity-showcase">
         <div className="activity-showcase-copy">
           <p className="section-kicker">Activities & Outreach</p>
-          <h2 className="section-title">Previous work and upcoming lifesaving programs</h2>
+          <h2 className="section-title">Activities and upcoming programs</h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600">
-            This section works like a professional rotating activity board: it highlights completed events from the
-            year, then cycles into upcoming programs so visitors can quickly see that the platform is active.
+            A rotating board showing what the platform has done this year and what is coming next.
           </p>
 
           <div className="mt-6 grid gap-3">
@@ -369,7 +367,7 @@ export default function LandingPage() {
         <div className="space-y-5">
           <div className="section-heading-wrap">
             <p className="section-kicker">Why Donate?</p>
-            <h2 className="section-title">Human donation remains the only way to keep blood available</h2>
+            <h2 className="section-title">Why donation matters</h2>
           </div>
           <div className="grid gap-4">
             {whyDonateItems.map((item) => (
@@ -383,10 +381,9 @@ export default function LandingPage() {
 
         <article className="public-card bg-red-50/70">
           <p className="section-kicker">Notification Preview</p>
-          <h2 className="mt-2 text-3xl font-black text-slate-900">A dynamic response system donors can feel</h2>
+          <h2 className="mt-2 text-3xl font-black text-slate-900">Fast alerts, clear action</h2>
           <p className="mt-4 text-sm leading-7 text-slate-600">
-            Donors and hospitals should immediately understand that urgent needs, reminders, and matching activity are
-            active on the platform.
+            Donors and hospitals receive the right messages at the right moment.
           </p>
           <div className="mt-6 grid gap-3">
             {notificationPreviewItems.map((item) => (
@@ -441,7 +438,7 @@ export default function LandingPage() {
       <section className="space-y-5">
         <div className="section-heading-wrap">
           <p className="section-kicker">Nearby Centers</p>
-          <h2 className="section-title">Find partner hospitals and blood centers close to you</h2>
+          <h2 className="section-title">Nearby donation centers</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           {displayCenters.map((center) => (
@@ -459,7 +456,7 @@ export default function LandingPage() {
         <div className="space-y-5">
           <div className="section-heading-wrap">
             <p className="section-kicker">Testimonials</p>
-            <h2 className="section-title">Stories that build trust in the platform</h2>
+            <h2 className="section-title">Trusted by donors and hospitals</h2>
           </div>
           <div className="grid gap-4">
             {displayTestimonials.map((item) => (
@@ -474,7 +471,7 @@ export default function LandingPage() {
         <div className="space-y-5">
           <div className="section-heading-wrap">
             <p className="section-kicker">Frequently Asked Questions</p>
-            <h2 className="section-title">Clear answers for first-time and repeat donors</h2>
+            <h2 className="section-title">Quick donor answers</h2>
           </div>
           <div className="grid gap-4">
             {displayFaqs.map((item) => (
@@ -490,7 +487,7 @@ export default function LandingPage() {
       <section className="space-y-5">
         <div className="section-heading-wrap">
           <p className="section-kicker">News & Awareness</p>
-          <h2 className="section-title">Education and engagement that keep donation active</h2>
+          <h2 className="section-title">Awareness updates</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           {displayAwareness.map((item) => (
@@ -506,11 +503,10 @@ export default function LandingPage() {
         <div>
           <p className="section-kicker text-red-200">Ready To Save A Life?</p>
           <h2 className="mt-2 text-3xl font-black text-white md:text-4xl">
-            Join a trusted blood response network built for real emergencies.
+            Join a trusted emergency donor network.
           </h2>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-red-50/90">
-            Register as a donor, learn your eligibility, and become part of a response system that helps hospitals act
-            faster when every minute matters.
+            Register, check eligibility, and help hospitals respond when every minute matters.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

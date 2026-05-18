@@ -5,6 +5,8 @@ import { BrandLogo } from '../components/BrandLogo';
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard Overview', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
   { to: '/admin/website-management', label: 'Website Management', roles: ['SUPER_ADMIN', 'ADMIN', 'WEBSITE_CONTENT_ADMIN'] },
+  { to: '/admin/live-map', label: 'Live Map Tracking', roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { to: '/admin/donor-clinical-reviews', label: 'Donor Clinical Reviews', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=settings', label: 'Manage Users', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=donors', label: 'Manage Donors', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=hospitals', label: 'Manage Hospitals', roles: ['SUPER_ADMIN', 'ADMIN'] },
