@@ -63,6 +63,18 @@ export class BloodRequestsService {
     return statusMap[status];
   }
 
+  private distanceKm(fromLat: number, fromLng: number, toLat: number, toLng: number) {
+    const earthRadiusKm = 6371;
+    const dLat = ((toLat - fromLat) * Math.PI) / 180;
+    const dLng = ((toLng - fromLng) * Math.PI) / 180;
+    const lat1 = (fromLat * Math.PI) / 180;
+    const lat2 = (toLat * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   private async applyInventoryCreditForCompletion(
     tx: PrismaService,
     request: { id: string; hospitalId: string; bloodGroup: BloodGroup; unitsNeeded: number },
@@ -118,35 +130,55 @@ export class BloodRequestsService {
       throw new BadRequestException('requiredBy must be in the future');
     }
 
-    const exactMatchedDonors = await this.prisma.donor.findMany({
+    if (dto.type === 'EMERGENCY') {
+      if (!dto.ward?.trim()) throw new BadRequestException('ward is required for emergency requests');
+      if (!dto.city?.trim()) throw new BadRequestException('city is required for emergency requests');
+      if (!dto.region?.trim()) throw new BadRequestException('region is required for emergency requests');
+      if (typeof dto.latitude !== 'number' || typeof dto.longitude !== 'number') {
+        throw new BadRequestException('latitude and longitude are required for emergency requests');
+      }
+    }
+
+    const baseMatchedDonors = await this.prisma.donor.findMany({
       where: {
         bloodGroup: { in: compatibleGroups },
-        location: { equals: normalizedLocation, mode: 'insensitive' },
         eligibilityStatus: true,
         availabilityStatus: true,
+        ...(dto.type === 'EMERGENCY' && typeof dto.latitude === 'number' && typeof dto.longitude === 'number'
+          ? {
+              locationSharingEnabled: true,
+              latitude: { not: null },
+              longitude: { not: null },
+            }
+          : {
+              location: { contains: normalizedLocation, mode: 'insensitive' },
+            }),
       },
-      select: { id: true, userId: true, bloodGroup: true },
-      take: donorTarget,
+      select: { id: true, userId: true, bloodGroup: true, latitude: true, longitude: true, location: true },
+      take: 500,
     });
 
-    const broadenedMatchedDonors =
-      exactMatchedDonors.length < donorTarget
-        ? await this.prisma.donor.findMany({
-            where: {
-              bloodGroup: { in: compatibleGroups },
-              location: { contains: normalizedLocation, mode: 'insensitive' },
-              eligibilityStatus: true,
-              availabilityStatus: true,
-              id: { notIn: exactMatchedDonors.map((d) => d.id) },
-            },
-            select: { id: true, userId: true, bloodGroup: true },
-            take: donorTarget - exactMatchedDonors.length,
-          })
-        : [];
-
-    const rankedDonors = [...exactMatchedDonors, ...broadenedMatchedDonors].sort(
-      (a, b) => this.compatibilityRank(dto.bloodGroup, a.bloodGroup) - this.compatibilityRank(dto.bloodGroup, b.bloodGroup),
-    );
+    const rankedDonors = baseMatchedDonors
+      .map((donor) => ({
+        ...donor,
+        distanceKm:
+          dto.type === 'EMERGENCY' &&
+          typeof dto.latitude === 'number' &&
+          typeof dto.longitude === 'number' &&
+          typeof donor.latitude === 'number' &&
+          typeof donor.longitude === 'number'
+            ? this.distanceKm(dto.latitude, dto.longitude, donor.latitude, donor.longitude)
+            : null,
+      }))
+      .sort((a, b) => {
+        const compatibilityDelta = this.compatibilityRank(dto.bloodGroup, a.bloodGroup) - this.compatibilityRank(dto.bloodGroup, b.bloodGroup);
+        if (compatibilityDelta !== 0) return compatibilityDelta;
+        if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+        if (a.distanceKm !== null) return -1;
+        if (b.distanceKm !== null) return 1;
+        return 0;
+      })
+      .slice(0, donorTarget);
 
     const matchedDonors = rankedDonors.map((donor) => ({
       id: donor.id,
@@ -172,6 +204,12 @@ export class BloodRequestsService {
         type: dto.type,
         priority: dto.priority,
         location: normalizedLocation,
+        hospitalCenterName: dto.hospitalCenterName?.trim() || hospital.hospitalName,
+        ward: dto.ward?.trim() || null,
+        emergencyLocation: dto.emergencyLocation?.trim() || normalizedLocation,
+        city: dto.city?.trim() || null,
+        region: dto.region?.trim() || null,
+        locationNotes: dto.locationNotes?.trim() || null,
         latitude: dto.latitude,
         longitude: dto.longitude,
         requiredBy: requiredByDate,
@@ -187,6 +225,9 @@ export class BloodRequestsService {
       this.alerts.notifyCritical('EMERGENCY_REQUEST_CREATED', {
         requestId: request.id,
         bloodGroup: request.bloodGroup,
+        city: dto.city ?? null,
+        region: dto.region ?? null,
+        ward: dto.ward ?? null,
       });
     }
 
@@ -241,6 +282,15 @@ export class BloodRequestsService {
       status: request.status,
       trackingStatus: request.trackingStatus,
       bloodGroup: request.bloodGroup,
+      unitsNeeded: request.unitsNeeded,
+      priority: request.priority,
+      location: request.location,
+      emergencyLocation: request.emergencyLocation,
+      city: request.city,
+      region: request.region,
+      ward: request.ward,
+      latitude: request.latitude,
+      longitude: request.longitude,
       hospitalId: request.hospitalId,
       matchedDonorCount: matchedDonors.length,
     });

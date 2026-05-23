@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { BloodGroup, PriorityLevel, RequestStatus, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -6,6 +6,7 @@ import { RealtimeService } from '../../common/realtime/realtime.service';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
 import { NearbyDonorQueryDto } from './dto/nearby-donor-query.dto';
 import { UpdateDonorLocationDto } from './dto/update-donor-location.dto';
+import { OperationalDonorQueryDto } from './dto/operational-donor-query.dto';
 import { BloodBankQueryDto, NearestBloodSourceQueryDto } from './dto/blood-bank-query.dto';
 import {
   SmartBloodAvailability,
@@ -139,7 +140,7 @@ export class MapsService {
     const radiusKm = query.radiusKm ?? null;
     const hasOrigin = typeof query.latitude === 'number' && typeof query.longitude === 'number';
 
-    const [hospitals, partnerHospitals, activeRequests] = await Promise.all([
+    const [hospitals, partnerHospitals, activeRequests, eligibleDonors] = await Promise.all([
       this.prisma.hospital.findMany({
         where: {
           isApproved: true,
@@ -176,7 +177,15 @@ export class MapsService {
           unitsNeeded: true,
           priority: true,
           status: true,
+          trackingStatus: true,
           location: true,
+          emergencyLocation: true,
+          city: true,
+          region: true,
+          ward: true,
+          locationNotes: true,
+          notes: true,
+          hospitalCenterName: true,
           latitude: true,
           longitude: true,
           createdAt: true,
@@ -185,6 +194,22 @@ export class MapsService {
         },
         orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
         take: 100,
+      }),
+      this.prisma.donor.findMany({
+        where: {
+          eligibilityStatus: true,
+          availabilityStatus: true,
+          locationSharingEnabled: true,
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: {
+          id: true,
+          bloodGroup: true,
+          latitude: true,
+          longitude: true,
+        },
+        take: 1200,
       }),
     ]);
 
@@ -285,17 +310,78 @@ export class MapsService {
       id: request.id,
       hospitalId: request.hospitalId,
       hospitalName: request.hospital.hospitalName,
+      hospitalCenterName: request.hospitalCenterName ?? null,
+      ward: request.ward ?? null,
       bloodGroup: request.bloodGroup,
       bloodGroupLabel: this.labelBloodGroup(request.bloodGroup),
       unitsNeeded: request.unitsNeeded,
       priority: request.priority,
       status: request.status,
+      trackingStatus: request.trackingStatus,
       location: request.location,
+      emergencyLocation: request.emergencyLocation ?? null,
+      city: request.city ?? null,
+      region: request.region ?? null,
+      locationNotes: request.locationNotes ?? null,
+      notes: request.notes ?? null,
       latitude: request.latitude ?? 0,
       longitude: request.longitude ?? 0,
       createdAt: request.createdAt.toISOString(),
       requiredBy: request.requiredBy.toISOString(),
       distanceKm: this.distanceOrNull(query.latitude, query.longitude, request.latitude, request.longitude),
+      nearby: {
+        radius5km: {
+          compatibleDonors: eligibleDonors.filter(
+            (donor) =>
+              this.compatibleDonorGroups(request.bloodGroup).includes(donor.bloodGroup) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, donor.latitude ?? 0, donor.longitude ?? 0) <= 5,
+          ).length,
+          bloodBanks: [...hospitalCenters, ...partnerCenters].filter(
+            (center) =>
+              center.centerType === 'blood_bank' &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 5,
+          ).length,
+          hospitalsWithStock: hospitalCenters.filter(
+            (center) =>
+              center.availableBloodGroups.includes(this.labelBloodGroup(request.bloodGroup)) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 5,
+          ).length,
+        },
+        radius10km: {
+          compatibleDonors: eligibleDonors.filter(
+            (donor) =>
+              this.compatibleDonorGroups(request.bloodGroup).includes(donor.bloodGroup) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, donor.latitude ?? 0, donor.longitude ?? 0) <= 10,
+          ).length,
+          bloodBanks: [...hospitalCenters, ...partnerCenters].filter(
+            (center) =>
+              center.centerType === 'blood_bank' &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 10,
+          ).length,
+          hospitalsWithStock: hospitalCenters.filter(
+            (center) =>
+              center.availableBloodGroups.includes(this.labelBloodGroup(request.bloodGroup)) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 10,
+          ).length,
+        },
+        radius20km: {
+          compatibleDonors: eligibleDonors.filter(
+            (donor) =>
+              this.compatibleDonorGroups(request.bloodGroup).includes(donor.bloodGroup) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, donor.latitude ?? 0, donor.longitude ?? 0) <= 20,
+          ).length,
+          bloodBanks: [...hospitalCenters, ...partnerCenters].filter(
+            (center) =>
+              center.centerType === 'blood_bank' &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 20,
+          ).length,
+          hospitalsWithStock: hospitalCenters.filter(
+            (center) =>
+              center.availableBloodGroups.includes(this.labelBloodGroup(request.bloodGroup)) &&
+              this.distanceKm(request.latitude ?? 0, request.longitude ?? 0, center.latitude, center.longitude) <= 20,
+          ).length,
+        },
+      },
     }));
 
     const matchingText = (center: SmartBloodBankCenter) =>
@@ -375,24 +461,50 @@ export class MapsService {
   }
 
   async updateOwnDonorLocation(userId: string, dto: UpdateDonorLocationDto, ipAddress?: string, device?: string) {
-    const donor = await this.prisma.donor.findUnique({ where: { userId }, select: { id: true, fullName: true } });
+    const donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        fullName: true,
+        latitude: true,
+        longitude: true,
+        locationSharingEnabled: true,
+      },
+    });
     if (!donor) {
       throw new NotFoundException('Donor profile not found');
     }
 
+    const wantsSharingDisabled = dto.locationSharingEnabled === false;
+    const hasCoordinates = typeof dto.latitude === 'number' && typeof dto.longitude === 'number';
+    const hasExistingCoordinates = typeof donor.latitude === 'number' && typeof donor.longitude === 'number';
+
+    if (!wantsSharingDisabled && !hasCoordinates && !hasExistingCoordinates) {
+      throw new BadRequestException('Latitude and longitude are required before enabling donor location sharing.');
+    }
+
+    const locationParts = [dto.areaCommunity, dto.city, dto.region].filter(Boolean).join(', ');
     const updated = await this.prisma.donor.update({
       where: { userId },
       data: {
-        latitude: dto.latitude,
-        longitude: dto.longitude,
+        ...(hasCoordinates ? { latitude: dto.latitude, longitude: dto.longitude, lastLocationUpdateAt: new Date() } : {}),
+        ...(typeof dto.areaCommunity === 'string' ? { areaCommunity: dto.areaCommunity.trim() || null } : {}),
+        ...(typeof dto.city === 'string' ? { city: dto.city.trim() || null } : {}),
+        ...(typeof dto.region === 'string' ? { region: dto.region.trim() || null } : {}),
+        ...(locationParts ? { location: locationParts } : {}),
+        locationSharingEnabled: dto.locationSharingEnabled ?? donor.locationSharingEnabled,
       },
       select: {
         id: true,
-        fullName: true,
         bloodGroup: true,
         location: true,
+        areaCommunity: true,
+        city: true,
+        region: true,
         latitude: true,
         longitude: true,
+        locationSharingEnabled: true,
+        lastLocationUpdateAt: true,
         availabilityStatus: true,
         eligibilityStatus: true,
         updatedAt: true,
@@ -402,14 +514,17 @@ export class MapsService {
     await this.audit.log('DONOR_LOCATION_UPDATED', 'DONOR_LOCATION', userId, donor.id, {
       accuracyMeters: dto.accuracyMeters ?? null,
       source: dto.source ?? 'browser_geolocation',
+      locationSharingEnabled: updated.locationSharingEnabled,
     }, `${donor.fullName} updated live donor location.`, { module: 'MAP_TRACKING', ipAddress, device });
 
-    this.realtime.broadcastDonorLocation({
-      donorId: updated.id,
-      latitude: updated.latitude,
-      longitude: updated.longitude,
-      updatedAt: updated.updatedAt,
-    });
+    if (updated.locationSharingEnabled && hasCoordinates) {
+      this.realtime.broadcastDonorLocation({
+        donorId: updated.id,
+        latitude: updated.latitude,
+        longitude: updated.longitude,
+        updatedAt: updated.lastLocationUpdateAt ?? updated.updatedAt,
+      });
+    }
 
     return { message: 'Location updated securely.', donor: updated };
   }
@@ -424,14 +539,19 @@ export class MapsService {
         bloodGroup: { in: compatibleGroups },
         eligibilityStatus: true,
         availabilityStatus: true,
+        locationSharingEnabled: true,
         latitude: { not: null },
         longitude: { not: null },
       },
       select: {
         id: true,
-        fullName: true,
         bloodGroup: true,
         location: true,
+        areaCommunity: true,
+        city: true,
+        region: true,
+        locationSharingEnabled: true,
+        lastLocationUpdateAt: true,
         latitude: true,
         longitude: true,
         updatedAt: true,
@@ -442,7 +562,7 @@ export class MapsService {
     const donors = candidates
       .map((donor) => ({
         ...donor,
-        distanceKm: this.distanceKm(query.latitude, query.longitude, donor.latitude ?? 0, donor.longitude ?? 0),
+        distanceKm: Number(this.distanceKm(query.latitude, query.longitude, donor.latitude ?? 0, donor.longitude ?? 0).toFixed(2)),
       }))
       .filter((donor) => donor.distanceKm <= radiusKm)
       .sort((a, b) => a.distanceKm - b.distanceKm);
@@ -454,6 +574,114 @@ export class MapsService {
     }, 'Authorized user searched nearby donor live locations.', { module: 'MAP_TRACKING', ipAddress, device });
 
     return donors;
+  }
+
+  async getOperationalDonors(userId: string, role: Role, query: OperationalDonorQueryDto, ipAddress?: string, device?: string) {
+    this.assertCanViewLiveLocations(role);
+    const radiusKm = query.radiusKm ?? 25;
+    const canCalculateDistance = typeof query.latitude === 'number' && typeof query.longitude === 'number';
+
+    const donors = await this.prisma.donor.findMany({
+      where: {
+        ...(query.bloodGroup ? { bloodGroup: query.bloodGroup } : {}),
+        eligibilityStatus: true,
+        availabilityStatus: true,
+        locationSharingEnabled: true,
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true,
+        bloodGroup: true,
+        location: true,
+        areaCommunity: true,
+        city: true,
+        region: true,
+        latitude: true,
+        longitude: true,
+        locationSharingEnabled: true,
+        lastLocationUpdateAt: true,
+        updatedAt: true,
+      },
+      orderBy: { lastLocationUpdateAt: 'desc' },
+      take: 500,
+    });
+
+    const filtered = donors
+      .map((donor) => ({
+        ...donor,
+        distanceKm: canCalculateDistance
+          ? Number(this.distanceKm(query.latitude!, query.longitude!, donor.latitude ?? 0, donor.longitude ?? 0).toFixed(2))
+          : undefined,
+      }))
+      .filter((donor) => (canCalculateDistance ? (donor.distanceKm ?? Number.POSITIVE_INFINITY) <= radiusKm : true))
+      .sort((a, b) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY));
+
+    await this.audit.log('OPERATIONAL_DONORS_ACCESSED', 'DONOR_LOCATION', userId, undefined, {
+      bloodGroup: query.bloodGroup ?? null,
+      radiusKm: canCalculateDistance ? radiusKm : null,
+      resultCount: filtered.length,
+    }, 'Authorized user viewed operational donor map data.', { module: 'MAP_TRACKING', ipAddress, device });
+
+    return filtered;
+  }
+
+  async getDonorCoverage(userId: string, role: Role, ipAddress?: string, device?: string) {
+    this.assertCanViewLiveLocations(role);
+
+    const donors = await this.prisma.donor.findMany({
+      where: {
+        eligibilityStatus: true,
+        availabilityStatus: true,
+        locationSharingEnabled: true,
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        bloodGroup: true,
+        city: true,
+        region: true,
+        areaCommunity: true,
+      },
+      take: 2000,
+    });
+
+    const regions = new Map<string, { region: string; donorCount: number; cities: Set<string>; bloodGroups: Partial<Record<BloodGroup, number>> }>();
+    const cities = new Map<string, { city: string; region: string; donorCount: number; bloodGroups: Partial<Record<BloodGroup, number>> }>();
+
+    donors.forEach((donor) => {
+      const region = donor.region ?? 'Unspecified region';
+      const city = donor.city ?? donor.areaCommunity ?? 'Unspecified city';
+      const regionRecord = regions.get(region) ?? { region, donorCount: 0, cities: new Set<string>(), bloodGroups: {} };
+      regionRecord.donorCount += 1;
+      regionRecord.cities.add(city);
+      regionRecord.bloodGroups[donor.bloodGroup] = (regionRecord.bloodGroups[donor.bloodGroup] ?? 0) + 1;
+      regions.set(region, regionRecord);
+
+      const cityKey = `${region}:${city}`;
+      const cityRecord = cities.get(cityKey) ?? { city, region, donorCount: 0, bloodGroups: {} };
+      cityRecord.donorCount += 1;
+      cityRecord.bloodGroups[donor.bloodGroup] = (cityRecord.bloodGroups[donor.bloodGroup] ?? 0) + 1;
+      cities.set(cityKey, cityRecord);
+    });
+
+    await this.audit.log('DONOR_COVERAGE_VIEWED', 'DONOR_LOCATION', userId, undefined, {
+      donorCount: donors.length,
+      regionCount: regions.size,
+    }, 'Authorized user viewed donor coverage statistics.', { module: 'MAP_TRACKING', ipAddress, device });
+
+    return {
+      totalVisibleDonors: donors.length,
+      regions: Array.from(regions.values())
+        .map((record) => ({
+          region: record.region,
+          donorCount: record.donorCount,
+          cityCount: record.cities.size,
+          bloodGroups: record.bloodGroups,
+        }))
+        .sort((a, b) => b.donorCount - a.donorCount),
+      cities: Array.from(cities.values()).sort((a, b) => b.donorCount - a.donorCount),
+    };
   }
 
   async getOperationsMap(userId: string, role: Role, ipAddress?: string, device?: string) {
@@ -484,10 +712,18 @@ export class MapsService {
           priority: true,
           status: true,
           trackingStatus: true,
+          hospitalCenterName: true,
+          ward: true,
           location: true,
+          emergencyLocation: true,
+          city: true,
+          region: true,
+          locationNotes: true,
+          notes: true,
           latitude: true,
           longitude: true,
           createdAt: true,
+          requiredBy: true,
           hospital: { select: { id: true, hospitalName: true } },
           donorResponses: { select: { responseStatus: true } },
         },
@@ -500,9 +736,22 @@ export class MapsService {
           longitude: { not: null },
           eligibilityStatus: true,
           availabilityStatus: true,
+          locationSharingEnabled: true,
         },
-        select: { id: true, fullName: true, bloodGroup: true, location: true, latitude: true, longitude: true, updatedAt: true },
-        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          bloodGroup: true,
+          location: true,
+          areaCommunity: true,
+          city: true,
+          region: true,
+          latitude: true,
+          longitude: true,
+          locationSharingEnabled: true,
+          lastLocationUpdateAt: true,
+          updatedAt: true,
+        },
+        orderBy: { lastLocationUpdateAt: 'desc' },
         take: 250,
       }),
     ]);

@@ -4,6 +4,16 @@ import { IsDateString, IsEnum, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOpt
 export class CreateBloodRequestDto {
   @IsOptional()
   @IsString()
+  @MaxLength(140)
+  hospitalCenterName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ward?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   patientName?: string;
 
@@ -29,6 +39,26 @@ export class CreateBloodRequestDto {
   @IsNotEmpty()
   @MaxLength(120)
   location!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  emergencyLocation?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  locationNotes?: string;
 
   @IsOptional()
   @IsLatitude()

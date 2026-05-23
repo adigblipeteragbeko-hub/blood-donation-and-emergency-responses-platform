@@ -51,6 +51,12 @@ export class HospitalsController {
     return this.hospitalsService.searchDonors(user.id, query);
   }
 
+  @Get('typeahead')
+  @Permissions([PermissionCode.HOSPITAL_OPERATIONS_VIEW], 'all')
+  typeahead(@CurrentUser() user: { id: string }, @Query('q') q?: string) {
+    return this.hospitalsService.getTypeaheadSuggestions(user.id, q ?? '');
+  }
+
   @Get('eligibility-submissions')
   @Permissions([PermissionCode.DONOR_REVIEW_MANAGE, PermissionCode.DONOR_REVIEW_APPROVE], 'any')
   getEligibilitySubmissions(@CurrentUser() user: { id: string }) {

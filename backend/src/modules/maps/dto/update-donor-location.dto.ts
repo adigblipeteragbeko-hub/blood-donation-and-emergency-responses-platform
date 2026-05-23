@@ -1,14 +1,32 @@
-import { IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateDonorLocationDto {
+  @IsOptional()
   @Type(() => Number)
   @IsLatitude()
-  latitude!: number;
+  latitude?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsLongitude()
-  longitude!: number;
+  longitude?: number;
+
+  @IsOptional()
+  @IsString()
+  areaCommunity?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  locationSharingEnabled?: boolean;
 
   @IsOptional()
   @Type(() => Number)

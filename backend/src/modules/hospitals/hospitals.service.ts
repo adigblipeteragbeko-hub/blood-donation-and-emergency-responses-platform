@@ -5,7 +5,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { CreateHospitalAdminDto } from './dto/admin/create-hospital-admin.dto';
 import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import * as argon2 from 'argon2';
-import { Role, StaffAccountStatus } from '@prisma/client';
+import { BloodGroup, Role, StaffAccountStatus } from '@prisma/client';
 import { DonorSearchDto } from './dto/donor-search.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
@@ -22,6 +22,7 @@ const HOSPITAL_STAFF_ROLES = new Set<Role>([
   Role.INVENTORY_OFFICER,
   Role.DONOR_REVIEW_OFFICER,
 ]);
+const BLOOD_GROUP_CODES = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'] as const;
 
 @Injectable()
 export class HospitalsService {
@@ -85,6 +86,124 @@ export class HospitalsService {
         eligibilityStatus: true,
       },
     });
+  }
+
+  async getTypeaheadSuggestions(userId: string, rawQuery: string) {
+    const query = rawQuery.trim();
+    const normalizedQuery = query.toUpperCase();
+    const bloodGroupQuery = BLOOD_GROUP_CODES.includes(normalizedQuery as (typeof BLOOD_GROUP_CODES)[number])
+      ? (normalizedQuery as BloodGroup)
+      : undefined;
+    if (!query) {
+      return {
+        hospitals: [],
+        donors: [],
+        bloodGroups: [],
+        locations: [],
+        emergencyRequests: [],
+        inventory: [],
+        donationCenters: [],
+      };
+    }
+
+    await this.getHospitalByUser(userId);
+
+    const [hospitals, donors, requests, inventory] = await Promise.all([
+      this.prisma.hospital.findMany({
+        where: {
+          OR: [
+            { hospitalName: { contains: query, mode: 'insensitive' } },
+            { location: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, hospitalName: true, location: true },
+        take: 8,
+        orderBy: { hospitalName: 'asc' },
+      }),
+      this.prisma.donor.findMany({
+        where: {
+          OR: [
+            { fullName: { contains: query, mode: 'insensitive' } },
+            { location: { contains: query, mode: 'insensitive' } },
+            { city: { contains: query, mode: 'insensitive' } },
+            { region: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, fullName: true, bloodGroup: true, location: true },
+        take: 8,
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.bloodRequest.findMany({
+        where: {
+          OR: [
+            { patientName: { contains: query, mode: 'insensitive' } },
+            { patientCode: { contains: query, mode: 'insensitive' } },
+            { hospitalCenterName: { contains: query, mode: 'insensitive' } },
+            { emergencyLocation: { contains: query, mode: 'insensitive' } },
+            { location: { contains: query, mode: 'insensitive' } },
+            { city: { contains: query, mode: 'insensitive' } },
+            { region: { contains: query, mode: 'insensitive' } },
+            { ward: { contains: query, mode: 'insensitive' } },
+            ...(bloodGroupQuery ? [{ bloodGroup: { equals: bloodGroupQuery } }] : []),
+          ],
+          type: 'EMERGENCY',
+        },
+        select: {
+          id: true,
+          bloodGroup: true,
+          location: true,
+          emergencyLocation: true,
+          city: true,
+          region: true,
+          unitsNeeded: true,
+          priority: true,
+        },
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.inventoryItem.findMany({
+        where: {
+          OR: [
+            { hospital: { hospitalName: { contains: query, mode: 'insensitive' } } },
+            { hospital: { location: { contains: query, mode: 'insensitive' } } },
+            ...(bloodGroupQuery ? [{ bloodGroup: { equals: bloodGroupQuery } }] : []),
+          ],
+        },
+        select: {
+          id: true,
+          bloodGroup: true,
+          availableUnits: true,
+          hospital: { select: { hospitalName: true, location: true } },
+        },
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const bloodGroups = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'].filter((group) =>
+      group.toLowerCase().includes(query.toLowerCase()),
+    );
+
+    const locations = Array.from(
+      new Set(
+        [
+          ...hospitals.map((h) => h.location),
+          ...donors.map((d) => d.location),
+          ...requests.map((r) => r.emergencyLocation ?? r.location),
+          ...requests.map((r) => [r.city, r.region].filter(Boolean).join(', ')),
+        ].filter(Boolean),
+      ),
+    ).slice(0, 8);
+
+    return {
+      hospitals,
+      donors,
+      bloodGroups,
+      locations,
+      emergencyRequests: requests,
+      inventory,
+      donationCenters: hospitals,
+    };
   }
 
   async listPublicCenters(query: PaginationQueryDto) {

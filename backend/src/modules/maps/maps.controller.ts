@@ -9,6 +9,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { MapsService } from './maps.service';
 import { NearbyDonorQueryDto } from './dto/nearby-donor-query.dto';
 import { UpdateDonorLocationDto } from './dto/update-donor-location.dto';
+import { OperationalDonorQueryDto } from './dto/operational-donor-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
 @Controller('maps')
@@ -33,6 +34,22 @@ export class MapsController {
     @Req() request: Request,
   ) {
     return this.mapsService.findNearbyEligibleDonors(user.id, user.role, query, request.ip, String(request.headers['user-agent'] ?? ''));
+  }
+
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.DONOR_REVIEW_OFFICER)
+  @Get('donor-coverage')
+  donorCoverage(@CurrentUser() user: { id: string; role: Role }, @Req() request: Request) {
+    return this.mapsService.getDonorCoverage(user.id, user.role, request.ip, String(request.headers['user-agent'] ?? ''));
+  }
+
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.DONOR_REVIEW_OFFICER)
+  @Get('operational-donors')
+  operationalDonors(
+    @CurrentUser() user: { id: string; role: Role },
+    @Query() query: OperationalDonorQueryDto,
+    @Req() request: Request,
+  ) {
+    return this.mapsService.getOperationalDonors(user.id, user.role, query, request.ip, String(request.headers['user-agent'] ?? ''));
   }
 
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.DONOR_REVIEW_OFFICER)
