@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { bloodGroups } from '../constants/blood-groups';
+import { AppIcon } from '../components/ui/AppIcon';
 
 type DonorProfilePayload = {
   bloodGroup?: string;
@@ -63,8 +64,11 @@ export default function DonorDashboardPage() {
   return (
     <section className="space-y-4">
       <div className="card">
-        <h1 className="text-2xl font-bold text-primary">Dashboard</h1>
-        <p className="text-sm text-gray-600">Overview updates automatically as you donate, respond to requests, and receive alerts.</p>
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
+          <AppIcon name="dashboard" className="h-5 w-5" />
+          Dashboard
+        </h1>
+        <p className="text-sm text-gray-600">Your latest donation, availability, and alerts.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

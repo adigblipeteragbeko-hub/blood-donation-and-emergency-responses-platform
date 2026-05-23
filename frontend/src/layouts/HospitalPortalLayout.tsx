@@ -1,29 +1,38 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner';
+import { AppIcon } from '../components/ui/AppIcon';
 
-const coreLinks = [
-  { to: '/hospital/dashboard', label: 'Dashboard', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/inventory', label: 'Blood Inventory', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER'] },
-  { to: '/hospital/request-blood', label: 'Request Blood', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
-  { to: '/hospital/active-requests', label: 'Active Requests', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/donor-search', label: 'Donor Search', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/donor-reviews', label: 'Donor Clinical Reviews', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/live-map', label: 'Live Map Tracking', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/appointments', label: 'Appointments', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/notifications', label: 'Notifications', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
-  { to: '/hospital/reports', label: 'Reports', roles: ['HOSPITAL_ADMIN', 'INVENTORY_OFFICER'] },
+type PortalLink = {
+  to: string;
+  label: string;
+  icon: Parameters<typeof AppIcon>[0]['name'];
+  roles: string[];
+};
+
+const coreLinks: PortalLink[] = [
+  { to: '/hospital/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER'] },
+  { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/appointments', label: 'Appointments', icon: 'clock', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/notifications', label: 'Notifications', icon: 'notification', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
+  { to: '/hospital/reports', label: 'Reports', icon: 'reports', roles: ['HOSPITAL_ADMIN', 'INVENTORY_OFFICER'] },
 ];
 
-const moreLinks = [
-  { to: '/hospital/emergency-requests', label: 'Emergency Requests', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
-  { to: '/hospital/staff', label: 'Staff Management', roles: ['HOSPITAL_ADMIN'] },
-  { to: '/hospital/profile', label: 'Profile / Hospital Info', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
-  { to: '/hospital/settings', label: 'Settings', roles: ['HOSPITAL_ADMIN'] },
-  { to: '/hospital/support', label: 'Support / Help', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
+const moreLinks: PortalLink[] = [
+  { to: '/hospital/emergency-requests', label: 'Emergency', icon: 'alert', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/staff', label: 'Staff', icon: 'users', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/profile', label: 'Profile', icon: 'hospital', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/settings', label: 'Settings', icon: 'settings', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/support', label: 'Support', icon: 'notification', roles: ['HOSPITAL_ADMIN', 'HOSPITAL_STAFF', 'INVENTORY_OFFICER', 'DONOR_REVIEW_OFFICER'] },
 ];
 
 function linkClass(isActive: boolean) {
-  return `${isActive ? 'bg-primary text-white' : 'bg-red-50 text-primary'} block rounded-md px-3 py-2 text-sm font-semibold`;
+  return `${isActive ? 'bg-primary text-white' : 'bg-red-50 text-primary'} flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold`;
 }
 
 export function HospitalPortalLayout() {
@@ -32,11 +41,14 @@ export function HospitalPortalLayout() {
   const secondaryRoleLinks = moreLinks.filter((item) => user?.role && item.roles.includes(user.role));
 
   return (
-    <section className="grid gap-5 md:grid-cols-[300px_1fr]">
+    <section className="grid gap-5 overflow-x-hidden pt-6 md:grid-cols-[300px_minmax(0,1fr)] md:pt-8">
       <aside className="card h-fit space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-primary">Hospital Portal</h2>
-          <p className="text-sm text-muted">Manage requests, stock, donors, and alerts.</p>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-primary">
+            <AppIcon name="hospital" className="h-5 w-5" />
+            Hospital Portal
+          </h2>
+          <p className="text-sm text-muted">Requests, stock, donors, alerts.</p>
         </div>
 
         <div>
@@ -44,6 +56,7 @@ export function HospitalPortalLayout() {
           <nav className="space-y-1">
             {coreRoleLinks.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => linkClass(isActive)}>
+                <AppIcon name={item.icon} className="h-4 w-4 shrink-0" />
                 {item.label}
               </NavLink>
             ))}
@@ -55,6 +68,7 @@ export function HospitalPortalLayout() {
           <nav className="space-y-1">
             {secondaryRoleLinks.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => linkClass(isActive)}>
+                <AppIcon name={item.icon} className="h-4 w-4 shrink-0" />
                 {item.label}
               </NavLink>
             ))}
@@ -62,7 +76,8 @@ export function HospitalPortalLayout() {
         </div>
       </aside>
 
-      <div>
+      <div className="min-w-0 space-y-5 pt-2 md:pt-3">
+        <LiveEmergencyAlertBanner />
         <Outlet />
       </div>
     </section>

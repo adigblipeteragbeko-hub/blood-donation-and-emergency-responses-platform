@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { createRealtimeSocket } from '../services/live-map';
+import { AppIcon } from './ui/AppIcon';
 
 type EmergencyAlertItem = {
   id: string;
@@ -106,7 +107,10 @@ export function LiveEmergencyAlertBanner() {
       to={targetHref}
     >
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-red-100">Live emergency alert</p>
+        <p className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.22em] text-red-100">
+          <AppIcon name="alert" className="h-3.5 w-3.5" />
+          Live emergency
+        </p>
         <p className="mt-1 text-base font-extrabold md:text-lg">
           {bloodType} needed at {hospital}
         </p>
@@ -121,7 +125,8 @@ export function LiveEmergencyAlertBanner() {
           <span className="rounded-full border border-white/30 bg-white/15 px-2 py-1">{status}</span>
         </div>
       </div>
-      <span className="inline-flex w-fit items-center rounded-full border border-white/30 px-4 py-2 text-sm font-bold transition group-hover:bg-white group-hover:text-primary animate-pulse">
+      <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 px-4 py-2 text-sm font-bold transition group-hover:bg-white group-hover:text-primary animate-pulse">
+        <AppIcon name="notification" className="h-4 w-4" />
         View details
       </span>
     </Link>

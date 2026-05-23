@@ -5,6 +5,7 @@ import {
   getHospitalNotifications,
   getHospitalRequests,
 } from '../services/hospital-portal';
+import { AppIcon } from '../components/ui/AppIcon';
 
 export default function HospitalDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -52,8 +53,11 @@ export default function HospitalDashboardPage() {
   return (
     <section className="space-y-5">
       <div className="card">
-        <h1 className="text-2xl font-bold text-primary">Hospital Dashboard</h1>
-        <p className="text-sm text-muted">Overview of blood stock, active requests, recent activity, and alerts.</p>
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
+          <AppIcon name="hospital" className="h-5 w-5" />
+          Hospital Dashboard
+        </h1>
+        <p className="text-sm text-muted">Stock, active requests, activity, and alerts.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -108,4 +112,3 @@ export default function HospitalDashboardPage() {
     </section>
   );
 }
-

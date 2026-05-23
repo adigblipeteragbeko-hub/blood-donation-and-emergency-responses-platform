@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Role } from '../types/auth';
 import { getRoleLandingPath } from '../utils/role-redirect';
+import { AppIcon } from './ui/AppIcon';
 
 export function LoginForm({
   title,
@@ -65,9 +66,16 @@ export function LoginForm({
   };
 
   return (
-    <div className="flex min-h-[72vh] items-center justify-center py-8">
-      <form onSubmit={submit} autoComplete="off" className="legacy-panel mx-auto w-full max-w-xl space-y-3">
-        <h1 className="text-center text-4xl font-bold text-primary">{title}</h1>
+    <div className="flex min-h-[72vh] items-center justify-center px-4 py-8 sm:px-6">
+      <form
+        onSubmit={submit}
+        autoComplete="off"
+        className="legacy-panel mx-auto w-full max-w-2xl space-y-4 rounded-2xl shadow-sm"
+      >
+        <h1 className="flex items-center justify-center gap-2 text-center text-3xl font-bold text-primary sm:text-4xl">
+          <AppIcon name="users" className="h-6 w-6" />
+          {title}
+        </h1>
         {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
         {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
         <label className="block text-sm font-semibold">

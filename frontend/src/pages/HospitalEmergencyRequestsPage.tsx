@@ -6,6 +6,7 @@ import { bloodGroups } from '../constants/blood-groups';
 import { ENGLISH_FRIENDLY_TILE_ATTRIBUTION, ENGLISH_FRIENDLY_TILE_URL } from '../constants/map-tiles';
 import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
 import { BloodGroup, createHospitalRequest, getTypeaheadSuggestions } from '../services/hospital-portal';
+import { AppIcon } from '../components/ui/AppIcon';
 
 const GHANA_CENTER: [number, number] = [7.9465, -1.0232];
 const markerIcon = L.divIcon({
@@ -47,6 +48,7 @@ export default function HospitalEmergencyRequestsPage() {
   const [city, setCity] = useState('');
   const [region, setRegion] = useState('');
   const [locationNotes, setLocationNotes] = useState('');
+  const [radiusKm, setRadiusKm] = useState<5 | 10 | 20>(10);
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
   const [notes, setNotes] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -99,6 +101,7 @@ export default function HospitalEmergencyRequestsPage() {
         locationNotes,
         latitude,
         longitude,
+        radiusKm,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
@@ -115,13 +118,16 @@ export default function HospitalEmergencyRequestsPage() {
   };
 
   return (
-    <section className="space-y-5 pt-1">
+    <section className="mx-auto max-w-5xl space-y-5 px-4 pt-1 sm:px-6">
       <div className="card">
-        <h1 className="text-2xl font-bold text-primary">Emergency Requests</h1>
-        <p className="text-sm text-muted">Submit location-aware emergency blood requests for faster nearby coordination.</p>
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
+          <AppIcon name="alert" className="h-5 w-5 text-red-600" />
+          Emergency Request
+        </h1>
+        <p className="text-sm text-muted">Broadcast urgent, location-aware requests.</p>
       </div>
 
-      <form className="card grid gap-3 md:grid-cols-2" onSubmit={submit}>
+      <form className="card mx-auto grid w-full max-w-4xl gap-3 rounded-2xl shadow-sm md:grid-cols-2" onSubmit={submit}>
         <AsyncTypeahead
           label="Hospital / Center Name"
           value={hospitalCenterName}
@@ -197,6 +203,18 @@ export default function HospitalEmergencyRequestsPage() {
         <label className="text-sm font-semibold">
           Required By
           <input className="legacy-input mt-1" required type="datetime-local" value={requiredBy} onChange={(e) => setRequiredBy(e.target.value)} />
+        </label>
+        <label className="text-sm font-semibold">
+          Donor Match Radius
+          <select
+            className="legacy-input mt-1"
+            value={radiusKm}
+            onChange={(e) => setRadiusKm(Number(e.target.value) as 5 | 10 | 20)}
+          >
+            <option value={5}>5 km</option>
+            <option value={10}>10 km</option>
+            <option value={20}>20 km</option>
+          </select>
         </label>
         <label className="text-sm font-semibold">
           Location Notes

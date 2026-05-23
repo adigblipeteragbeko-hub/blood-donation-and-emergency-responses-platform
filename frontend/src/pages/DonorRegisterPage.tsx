@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { bloodGroups } from '../constants/blood-groups';
 import { countryCodes } from '../constants/country-codes';
+import { AppIcon } from '../components/ui/AppIcon';
 
 export default function DonorRegisterPage() {
   const navigate = useNavigate();
@@ -58,11 +59,15 @@ export default function DonorRegisterPage() {
   };
 
   return (
-    <section className="legacy-panel mx-auto max-w-3xl space-y-3">
-      <h1 className="text-center text-5xl font-bold text-primary">Donor Registration</h1>
+    <section className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <div className="legacy-panel mx-auto w-full space-y-4 rounded-2xl shadow-sm">
+      <h1 className="flex items-center justify-center gap-2 text-center text-3xl font-bold text-primary sm:text-4xl">
+        <AppIcon name="heart" className="h-6 w-6" />
+        Donor Registration
+      </h1>
       {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
-      <form className="space-y-2" onSubmit={submit} autoComplete="off">
+      <form className="space-y-3" onSubmit={submit} autoComplete="off">
         <input
           className="legacy-input"
           name="donor_signup_fullname"
@@ -110,13 +115,14 @@ export default function DonorRegisterPage() {
           {submitting ? 'Registering...' : 'Register Donor'}
         </button>
       </form>
-      <div className="flex justify-center gap-5 text-sm">
+      <div className="flex flex-wrap justify-center gap-4 text-sm">
         <Link className="text-primary underline" to="/donor-login">
           Back to donor login
         </Link>
         <Link className="text-primary underline" to="/">
           Back to home
         </Link>
+      </div>
       </div>
     </section>
   );

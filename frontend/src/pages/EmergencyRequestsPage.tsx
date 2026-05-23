@@ -6,9 +6,11 @@ import {
   getAllBloodRequests,
   getTypeaheadSuggestions,
   respondToBloodRequest,
+  updateDonorAvailability,
 } from '../services/hospital-portal';
 import { FilterBox, Pager } from '../components/TableControls';
 import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
+import { AppIcon } from '../components/ui/AppIcon';
 
 const bloodGroupLabel: Record<string, string> = {
   O_POS: 'O_POS (O+)',
@@ -94,10 +96,27 @@ export default function EmergencyRequestsPage() {
     }
   };
 
+  const markUnavailable = async (id: string) => {
+    try {
+      await updateDonorAvailability(false);
+      await respondToBloodRequest(id, {
+        responseStatus: 'DECLINED',
+        notes: notes[id] ? `${notes[id]} | Marked unavailable by donor.` : 'Marked unavailable by donor.',
+      });
+      setMessage('Availability set to unavailable and response recorded as declined.');
+      await loadRequests();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to mark unavailable.');
+    }
+  };
+
   return (
-    <section className="space-y-4 pt-1">
-      <h1 className="text-2xl font-bold text-primary">Emergency Requests</h1>
-      <p className="text-sm text-gray-600">View urgent blood requests and respond (accept/decline).</p>
+    <section className="mx-auto max-w-5xl space-y-4 px-4 pt-1 sm:px-6">
+      <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
+        <AppIcon name="alert" className="h-5 w-5 text-red-600" />
+        Emergency Requests
+      </h1>
+      <p className="text-sm text-gray-600">Respond quickly: accept, decline, or mark unavailable.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <FilterBox
           label="Filter emergency requests (debounced)"
@@ -239,6 +258,13 @@ export default function EmergencyRequestsPage() {
                 type="button"
               >
                 Mark Donated
+              </button>
+              <button
+                className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700"
+                onClick={() => void markUnavailable(card.id)}
+                type="button"
+              >
+                Mark Unavailable
               </button>
             </div>
           </article>
