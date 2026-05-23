@@ -297,6 +297,7 @@ export default function AdminDashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<AdminDashboardSearchResults | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [compactDensity, setCompactDensity] = useState(false);
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [inventory, setInventory] = useState<InventoryMonitorItem[]>([]);
@@ -604,7 +605,7 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 pt-1">
       <div className="card border border-slate-100 bg-[radial-gradient(circle_at_top_left,_rgba(200,16,46,0.1),_transparent_35%),linear-gradient(135deg,#ffffff,_#f8fafc)] shadow-[0_24px_70px_-42px_rgba(15,23,42,0.35)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -628,23 +629,35 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          {dashboardAnchors.map((anchor) => (
-            <a
-              key={anchor.href}
-              href={anchor.href}
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-primary"
+        <div className="mt-6 overflow-x-auto pb-1">
+          <div className="flex min-w-max flex-nowrap gap-3">
+            {dashboardAnchors.map((anchor) => (
+              <a
+                key={anchor.href}
+                href={anchor.href}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-primary"
+              >
+                {anchor.label}
+              </a>
+            ))}
+            <Link
+              to="/admin/website-management"
+              className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
             >
-              {anchor.label}
-            </a>
-          ))}
-          <Link
-            to="/admin/website-management"
-            className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary hover:text-white"
-          >
-            Open Website Management
-          </Link>
+              Open Website Management
+            </Link>
+          </div>
         </div>
+      </div>
+
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setCompactDensity((current) => !current)}
+          className="rounded-full border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:border-red-200 hover:text-primary"
+        >
+          Density: {compactDensity ? 'Compact' : 'Comfortable'}
+        </button>
       </div>
 
       <SectionShell
@@ -795,9 +808,9 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="mt-5 overflow-hidden rounded-3xl border border-slate-100">
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.25em] text-slate-400">
+          <div className="max-h-[56vh] overflow-auto">
+            <table className={`min-w-[920px] bg-white ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+              <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase tracking-[0.25em] text-slate-400">
                 <tr>
                   <th className="px-4 py-4">Blood Type</th>
                   <th className="px-4 py-4">Hospital</th>
@@ -1131,7 +1144,7 @@ export default function AdminDashboardPage() {
           title="Audit log visibility"
           description="Track who changed what, when, and from which module with old/new value support for safe governance."
         >
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <input
               value={auditFilters.action}
               onChange={(event) => setAuditFilters((current) => ({ ...current, action: event.target.value, skip: 0 }))}
@@ -1170,9 +1183,9 @@ export default function AdminDashboardPage() {
             />
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-3xl border border-slate-100">
-            <table className="min-w-full bg-white text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.25em] text-slate-400">
+          <div className="mt-5 max-h-[56vh] overflow-auto rounded-3xl border border-slate-100">
+            <table className={`min-w-[760px] bg-white ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+              <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase tracking-[0.25em] text-slate-400">
                 <tr>
                   <th className="px-4 py-4">User</th>
                   <th className="px-4 py-4">Action</th>

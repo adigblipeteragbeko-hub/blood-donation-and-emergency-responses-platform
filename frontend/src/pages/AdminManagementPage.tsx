@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { FilterBox, Pager } from '../components/TableControls';
+import { EditModal } from '../components/ui/EditModal';
+import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
 import { countryCodes } from '../constants/country-codes';
 import {
   adminCorrectCompletionEvidence,
@@ -12,6 +14,7 @@ import {
   createBloodRequestUpdate,
   getAllBloodRequests,
   getInventoryLogs,
+  getTypeaheadSuggestions,
   updateDonorResponse,
 } from '../services/hospital-portal';
 
@@ -146,6 +149,8 @@ export default function AdminManagementPage() {
   const [hasMoreInventoryLogs, setHasMoreInventoryLogs] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [savingModal, setSavingModal] = useState(false);
+  const [compactDensity, setCompactDensity] = useState(false);
 
   const loadUsers = async (page = usersPage) => {
     const skip = page * PAGE_SIZE;
@@ -523,17 +528,64 @@ export default function AdminManagementPage() {
       includesTerm(log.changedBy?.email),
   );
 
+  const handleUserModalSubmit = async (event: FormEvent) => {
+    setSavingModal(true);
+    await updateUser(event);
+    setSavingModal(false);
+  };
+
+  const handleDonorModalSubmit = async (event: FormEvent) => {
+    setSavingModal(true);
+    await updateDonor(event);
+    setSavingModal(false);
+  };
+
+  const handleHospitalModalSubmit = async (event: FormEvent) => {
+    setSavingModal(true);
+    await updateHospital(event);
+    setSavingModal(false);
+  };
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 pt-2 md:pt-3">
       <h1 className="text-2xl font-bold text-primary">Admin Control Center</h1>
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
-      <FilterBox
-        label="Search (debounced)"
-        placeholder="Filter current tab..."
-        value={searchInput}
-        onChange={setSearchInput}
-      />
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setCompactDensity((current) => !current)}
+          className="rounded-full border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:border-red-200 hover:text-primary"
+        >
+          Density: {compactDensity ? 'Compact' : 'Comfortable'}
+        </button>
+      </div>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <FilterBox
+          label="Search (debounced)"
+          placeholder="Filter current tab..."
+          value={searchInput}
+          onChange={setSearchInput}
+        />
+        <AsyncTypeahead
+          label="Smart typeahead search"
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search donor, hospital, blood group, location, emergency..."
+          loadSuggestions={async (query): Promise<TypeaheadSuggestion[]> => {
+            const payload = await getTypeaheadSuggestions(query);
+            return [
+              ...payload.hospitals.map((item) => ({ id: `h-${item.id}`, label: item.hospitalName, description: item.location, category: 'Hospital' })),
+              ...payload.donors.map((item) => ({ id: `d-${item.id}`, label: item.fullName, description: `${item.bloodGroup} • ${item.location}`, category: 'Donor' })),
+              ...payload.bloodGroups.map((item) => ({ id: `b-${item}`, label: item, category: 'Blood' })),
+              ...payload.locations.map((item, index) => ({ id: `l-${index}`, label: item, category: 'Location' })),
+              ...payload.emergencyRequests.map((item) => ({ id: `e-${item.id}`, label: `${item.bloodGroup} • ${item.unitsNeeded}u`, description: item.location, category: 'Emergency' })),
+              ...payload.inventory.map((item) => ({ id: `i-${item.id}`, label: `${item.bloodGroup} • ${item.availableUnits}u`, description: item.hospital.hospitalName, category: 'Inventory' })),
+            ];
+          }}
+          onSelect={(item) => setSearchInput(item.value ?? item.label)}
+        />
+      </div>
 
       {activeSection === 'settings' ? (
       <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
@@ -637,24 +689,24 @@ export default function AdminManagementPage() {
       {activeSection === 'settings' ? (
       <div id="settings" className="card space-y-3">
         <h2 className="text-xl font-semibold">Users</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
+        <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
+          <table className={`min-w-[680px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+            <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b">
-                <th className="py-2">Email</th>
-                <th className="py-2">Role</th>
-                <th className="py-2">Active</th>
-                <th className="py-2">Actions</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Role</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Active</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="border-b">
-                  <td className="py-2">{user.email}</td>
-                  <td className="py-2">{formatRole(user.role)}</td>
-                  <td className="py-2">{String(user.isActive)}</td>
-                  <td className="py-2">
-                    <div className="flex gap-2">
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{user.email}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{formatRole(user.role)}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{String(user.isActive)}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="flex flex-wrap gap-2">
                       <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editUser(user)}>Edit</button>
                       <button className="rounded bg-red-100 px-3 py-1 text-red-700" onClick={() => void deleteUser(user.id)}>Delete</button>
                     </div>
@@ -670,76 +722,41 @@ export default function AdminManagementPage() {
           onPrev={() => setUsersPage((page) => Math.max(0, page - 1))}
           onNext={() => setUsersPage((page) => page + 1)}
         />
-        {editingUser ? (
-          <form className="rounded border bg-gray-50 p-3" onSubmit={updateUser}>
-            <h3 className="mb-2 font-semibold">Edit User</h3>
-            <div className="grid gap-2 md:grid-cols-3">
-              <select
-                className="rounded border p-2"
-                value={editingUser.role}
-                onChange={(e) => setEditingUser((v) => (v ? { ...v, role: e.target.value as Role } : v))}
-              >
-                {adminAssignableRoles.map((role) => (
-                  <option key={role} value={role}>
-                    {formatRole(role)}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="rounded border p-2"
-                value={String(editingUser.isActive)}
-                onChange={(e) =>
-                  setEditingUser((v) => (v ? { ...v, isActive: e.target.value === 'true' } : v))
-                }
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-              <div className="flex gap-2">
-                <button className="btn-primary" type="submit">
-                  Update
-                </button>
-                <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingUser(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
-        ) : null}
+        {null}
       </div>
       ) : null}
 
       {activeSection === 'donors' ? (
       <div id="donors" className="card space-y-3">
         <h2 className="text-xl font-semibold">Donors</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
+        <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
+          <table className={`min-w-[900px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+            <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b">
-                <th className="py-2">Serial Number</th>
-                <th className="py-2">Name</th>
-                <th className="py-2">Email</th>
-                <th className="py-2">Blood Group</th>
-                <th className="py-2">Location</th>
-                <th className="py-2">Approval</th>
-                <th className="py-2">Actions</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Serial Number</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Name</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Blood Group</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Location</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Approval</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDonors.map((donor) => (
                 <tr key={donor.id} className="border-b">
-                  <td className="py-2">{donor.donorNumber ?? '-'}</td>
-                  <td className="py-2">{donor.fullName}</td>
-                  <td className="py-2">{donor.user.email}</td>
-                  <td className="py-2">{bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}</td>
-                  <td className="py-2">{donor.location}</td>
-                  <td className="py-2">
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.donorNumber ?? '-'}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.fullName}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.user.email}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.location}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                     <span className={`rounded px-2 py-1 text-xs font-semibold ${donor.eligibilityStatus ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                       {donor.eligibilityStatus ? 'Approved' : 'Pending'}
                     </span>
                   </td>
-                  <td className="py-2">
-                    <div className="flex gap-2">
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="flex flex-wrap gap-2">
                       {donor.eligibilityStatus ? (
                         <button className="rounded bg-amber-100 px-3 py-1 text-amber-700" onClick={() => void setDonorApproval(donor.id, false)}>
                           Revoke
@@ -764,78 +781,33 @@ export default function AdminManagementPage() {
           onPrev={() => setDonorsPage((page) => Math.max(0, page - 1))}
           onNext={() => setDonorsPage((page) => page + 1)}
         />
-        {editingDonor ? (
-          <form className="rounded border bg-gray-50 p-3" onSubmit={updateDonor}>
-            <h3 className="mb-2 font-semibold">Edit Donor</h3>
-            <div className="grid gap-2 md:grid-cols-4">
-              <input
-                className="rounded border bg-gray-100 p-2"
-                placeholder="Donor Serial Number (Auto)"
-                value={editingDonor.donorNumber}
-                readOnly
-              />
-              <input
-                className="rounded border p-2"
-                placeholder="Full Name"
-                value={editingDonor.fullName}
-                onChange={(e) => setEditingDonor((v) => (v ? { ...v, fullName: e.target.value } : v))}
-                required
-              />
-              <input
-                className="rounded border p-2"
-                placeholder="Location"
-                value={editingDonor.location}
-                onChange={(e) => setEditingDonor((v) => (v ? { ...v, location: e.target.value } : v))}
-                required
-              />
-              <select
-                className="rounded border p-2"
-                value={editingDonor.bloodGroup}
-                onChange={(e) => setEditingDonor((v) => (v ? { ...v, bloodGroup: e.target.value } : v))}
-              >
-                {bloodGroups.map((group) => (
-                  <option key={group} value={group}>
-                    {bloodGroupLabel[group] ?? group}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button className="btn-primary" type="submit">
-                  Update
-                </button>
-                <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingDonor(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
-        ) : null}
+        {null}
       </div>
       ) : null}
 
       {activeSection === 'hospitals' ? (
       <div id="hospitals" className="card space-y-3">
         <h2 className="text-xl font-semibold">Hospitals</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
+        <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
+          <table className={`min-w-[760px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+            <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b">
-                <th className="py-2">Hospital</th>
-                <th className="py-2">Email</th>
-                <th className="py-2">Code</th>
-                <th className="py-2">Location</th>
-                <th className="py-2">Actions</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Hospital</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Code</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Location</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredHospitals.map((hospital) => (
                 <tr key={hospital.id} className="border-b">
-                  <td className="py-2">{hospital.hospitalName}</td>
-                  <td className="py-2">{hospital.user.email}</td>
-                  <td className="py-2">{hospital.registrationCode}</td>
-                  <td className="py-2">{hospital.location}</td>
-                  <td className="py-2">
-                    <div className="flex gap-2">
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.hospitalName}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.user.email}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.registrationCode}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.location}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="flex flex-wrap gap-2">
                       <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editHospital(hospital)}>Edit</button>
                       <button className="rounded bg-red-100 px-3 py-1 text-red-700" onClick={() => void deleteHospital(hospital.id)}>Delete</button>
                     </div>
@@ -851,46 +823,7 @@ export default function AdminManagementPage() {
           onPrev={() => setHospitalsPage((page) => Math.max(0, page - 1))}
           onNext={() => setHospitalsPage((page) => page + 1)}
         />
-        {editingHospital ? (
-          <form className="rounded border bg-gray-50 p-3" onSubmit={updateHospital}>
-            <h3 className="mb-2 font-semibold">Edit Hospital</h3>
-            <div className="grid gap-2 md:grid-cols-4">
-              <input
-                className="rounded border p-2"
-                placeholder="Hospital Name"
-                value={editingHospital.hospitalName}
-                onChange={(e) => setEditingHospital((v) => (v ? { ...v, hospitalName: e.target.value } : v))}
-                required
-              />
-              <input
-                className="rounded border p-2"
-                placeholder="Location"
-                value={editingHospital.location}
-                onChange={(e) => setEditingHospital((v) => (v ? { ...v, location: e.target.value } : v))}
-                required
-              />
-              <input
-                className="rounded border p-2"
-                placeholder="Contact Name"
-                value={editingHospital.contactName}
-                onChange={(e) => setEditingHospital((v) => (v ? { ...v, contactName: e.target.value } : v))}
-                required
-              />
-              <div className="flex gap-2">
-                <button className="btn-primary" type="submit">
-                  Update
-                </button>
-                <button
-                  className="rounded border px-3 py-2"
-                  type="button"
-                  onClick={() => setEditingHospital(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </form>
-        ) : null}
+        {null}
       </div>
       ) : null}
 
@@ -943,7 +876,7 @@ export default function AdminManagementPage() {
                 })()}
                 <div className="mt-3 rounded border p-3">
                   <p className="text-xs font-semibold text-primary">Admin Override / Correction (Audit Logged)</p>
-                  <div className="mt-2 grid gap-2 md:grid-cols-4">
+                  <div className="mt-2 grid gap-2 lg:grid-cols-4">
                     <input
                       className="rounded border p-2 text-xs"
                       placeholder="transfusedByStaffId"
@@ -1059,30 +992,30 @@ export default function AdminManagementPage() {
         {filteredInventoryLogs.length === 0 ? (
           <p className="text-sm text-muted">No inventory log entries found.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
+          <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
+            <table className={`min-w-[740px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+              <thead className="sticky top-0 z-10 bg-slate-50">
                 <tr className="border-b">
-                  <th className="py-2">Hospital</th>
-                  <th className="py-2">Blood Group</th>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">Units</th>
-                  <th className="py-2">By</th>
-                  <th className="py-2">At</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Hospital</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Blood Group</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Type</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Units</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>By</th>
+                  <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>At</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredInventoryLogs.map((log) => (
                   <tr key={log.id} className="border-b">
-                    <td className="py-2">{log.inventory.hospital?.hospitalName ?? '-'}</td>
-                    <td className="py-2">{log.inventory.bloodGroup}</td>
-                    <td className="py-2">{log.changeType}</td>
-                    <td className="py-2">
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{log.inventory.hospital?.hospitalName ?? '-'}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{log.inventory.bloodGroup}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{log.changeType}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                       {log.previousUnits} to {log.newUnits} ({log.unitsChanged >= 0 ? '+' : ''}
                       {log.unitsChanged})
                     </td>
-                    <td className="py-2">{log.changedBy?.email ?? 'system'}</td>
-                    <td className="py-2">{new Date(log.createdAt).toLocaleString()}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{log.changedBy?.email ?? 'system'}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{new Date(log.createdAt).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1106,6 +1039,62 @@ export default function AdminManagementPage() {
         </p>
       </div>
       ) : null}
+
+      <EditModal
+        open={Boolean(editingUser)}
+        title="Edit User"
+        description="Update role and account status."
+        onClose={() => setEditingUser(null)}
+      >
+        {editingUser ? (
+          <form className="grid gap-3" onSubmit={(event) => void handleUserModalSubmit(event)}>
+            <select className="rounded border p-2" value={editingUser.role} onChange={(e) => setEditingUser((v) => (v ? { ...v, role: e.target.value as Role } : v))}>
+              {adminAssignableRoles.map((role) => (
+                <option key={role} value={role}>{formatRole(role)}</option>
+              ))}
+            </select>
+            <select className="rounded border p-2" value={String(editingUser.isActive)} onChange={(e) => setEditingUser((v) => (v ? { ...v, isActive: e.target.value === 'true' } : v))}>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingUser(null)}>Cancel</button>
+              <button className="btn-primary" disabled={savingModal} type="submit">{savingModal ? 'Saving...' : 'Save'}</button>
+            </div>
+          </form>
+        ) : null}
+      </EditModal>
+
+      <EditModal open={Boolean(editingDonor)} title="Edit Donor" description="Update donor details." onClose={() => setEditingDonor(null)}>
+        {editingDonor ? (
+          <form className="grid gap-3" onSubmit={(event) => void handleDonorModalSubmit(event)}>
+            <input className="rounded border bg-gray-100 p-2" value={editingDonor.donorNumber} readOnly />
+            <input className="rounded border p-2" value={editingDonor.fullName} onChange={(e) => setEditingDonor((v) => (v ? { ...v, fullName: e.target.value } : v))} required />
+            <input className="rounded border p-2" value={editingDonor.location} onChange={(e) => setEditingDonor((v) => (v ? { ...v, location: e.target.value } : v))} required />
+            <select className="rounded border p-2" value={editingDonor.bloodGroup} onChange={(e) => setEditingDonor((v) => (v ? { ...v, bloodGroup: e.target.value } : v))}>
+              {bloodGroups.map((group) => <option key={group} value={group}>{bloodGroupLabel[group] ?? group}</option>)}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingDonor(null)}>Cancel</button>
+              <button className="btn-primary" disabled={savingModal} type="submit">{savingModal ? 'Saving...' : 'Save'}</button>
+            </div>
+          </form>
+        ) : null}
+      </EditModal>
+
+      <EditModal open={Boolean(editingHospital)} title="Edit Hospital" description="Update hospital details." onClose={() => setEditingHospital(null)}>
+        {editingHospital ? (
+          <form className="grid gap-3" onSubmit={(event) => void handleHospitalModalSubmit(event)}>
+            <input className="rounded border p-2" value={editingHospital.hospitalName} onChange={(e) => setEditingHospital((v) => (v ? { ...v, hospitalName: e.target.value } : v))} required />
+            <input className="rounded border p-2" value={editingHospital.location} onChange={(e) => setEditingHospital((v) => (v ? { ...v, location: e.target.value } : v))} required />
+            <input className="rounded border p-2" value={editingHospital.contactName} onChange={(e) => setEditingHospital((v) => (v ? { ...v, contactName: e.target.value } : v))} required />
+            <div className="flex gap-2 justify-end">
+              <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingHospital(null)}>Cancel</button>
+              <button className="btn-primary" disabled={savingModal} type="submit">{savingModal ? 'Saving...' : 'Save'}</button>
+            </div>
+          </form>
+        ) : null}
+      </EditModal>
     </section>
   );
 }

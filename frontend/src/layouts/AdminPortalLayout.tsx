@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { BrandLogo } from '../components/BrandLogo';
+import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner';
 
 const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard Overview', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
@@ -35,7 +36,7 @@ export function AdminPortalLayout() {
   };
 
   return (
-    <section className="grid gap-5 md:grid-cols-[280px_1fr]">
+    <section className="grid gap-5 overflow-x-hidden pt-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:pt-8">
       <aside className="card h-fit space-y-2">
         <div className="flex items-center justify-between gap-3">
           <BrandLogo compact />
@@ -60,7 +61,8 @@ export function AdminPortalLayout() {
         </nav>
       </aside>
 
-      <div>
+      <div className="min-w-0 space-y-5 pt-2 lg:pt-3">
+        <LiveEmergencyAlertBanner />
         <Outlet />
       </div>
     </section>
