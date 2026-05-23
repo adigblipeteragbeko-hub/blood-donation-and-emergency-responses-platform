@@ -12,3 +12,7 @@ coverage/
 /mobile/.expo/
 /backend/dist/
 /frontend/dist/
+
+# Local debug artifacts
+.playwright-mcp/
+docx_extracted.txt
