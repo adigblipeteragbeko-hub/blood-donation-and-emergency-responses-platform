@@ -250,6 +250,11 @@ model Donor {
   dateIssued               DateTime?
   latitude                 Float?
   longitude                Float?
+  areaCommunity            String?
+  city                     String?
+  region                   String?
+  lastLocationUpdateAt     DateTime?
+  locationSharingEnabled   Boolean         @default(false)
   eligibilityStatus        Boolean         @default(true)
   availabilityStatus       Boolean         @default(true)
   emergencyContactName     String
@@ -268,6 +273,9 @@ model Donor {
 
   @@index([bloodGroup])
   @@index([location])
+  @@index([city])
+  @@index([region])
+  @@index([locationSharingEnabled])
   @@index([donorNumber])
   @@index([latitude, longitude])
   @@index([createdAt])
@@ -310,6 +318,8 @@ model Hospital {
 model BloodRequest {
   id                     String                @id @default(cuid())
   hospitalId             String
+  hospitalCenterName     String?
+  ward                   String?
   patientName            String?
   patientCode            String?
   bloodGroup             BloodGroup
@@ -319,6 +329,10 @@ model BloodRequest {
   status                 RequestStatus         @default(OPEN)
   trackingStatus         RequestProgressStatus @default(PENDING)
   location               String
+  emergencyLocation      String?
+  city                   String?
+  region                 String?
+  locationNotes          String?
   latitude               Float?
   longitude              Float?
   notes                  String?
@@ -339,6 +353,8 @@ model BloodRequest {
   @@index([location])
   @@index([bloodGroup])
   @@index([priority])
+  @@index([city])
+  @@index([region])
   @@index([latitude, longitude])
   @@index([createdAt])
 }
