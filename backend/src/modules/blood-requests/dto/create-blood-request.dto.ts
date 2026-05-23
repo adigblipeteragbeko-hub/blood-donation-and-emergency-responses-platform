@@ -1,5 +1,5 @@
 import { BloodGroup, PriorityLevel, RequestType } from '@prisma/client';
-import { IsDateString, IsEnum, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateBloodRequestDto {
   @IsOptional()
@@ -67,6 +67,11 @@ export class CreateBloodRequestDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsIn([5, 10, 20])
+  radiusKm?: 5 | 10 | 20;
 
   @IsDateString()
   requiredBy!: string;

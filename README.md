@@ -92,9 +92,11 @@ The platform includes a protected emergency map for hospital operations:
 
 Backend map APIs:
 
-- `PATCH /maps/donor/location` updates the signed-in donor's own latitude and longitude.
+- `PATCH /maps/donor/location` updates the signed-in donor's own latitude, longitude, area/community, city, region, and location-sharing preference.
 - `GET /maps/operations` returns hospitals, active emergency requests, and authorized donor markers.
 - `GET /maps/nearby-donors?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=50` finds eligible compatible donors inside the selected radius.
+- `GET /maps/donor-coverage` returns authorized regional/city donor coverage counts without exposing donor contact details.
+- `GET /maps/operational-donors?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=20` returns sanitized donor markers for authorized admin/hospital operations only.
 - `GET /public/maps/blood-banks` returns public-safe hospital, blood bank, inventory, and active emergency request map data.
 - `GET /public/maps/blood-banks?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=20` filters nearby centers that currently publish O- units.
 - `GET /public/maps/nearest-blood-source?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=20` returns the nearest matching blood source.
@@ -167,6 +169,12 @@ Invoke-RestMethod -Method Get `
   -Uri 'http://localhost:4000/maps/nearby-donors?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=50' `
   -Headers $adminHeaders
 
+Invoke-RestMethod -Method Get -Uri http://localhost:4000/maps/donor-coverage -Headers $adminHeaders
+
+Invoke-RestMethod -Method Get `
+  -Uri 'http://localhost:4000/maps/operational-donors?bloodGroup=O_NEG&latitude=5.6698&longitude=-0.0166&radiusKm=20' `
+  -Headers $adminHeaders
+
 $donorLogin = Invoke-RestMethod -Method Post -Uri http://localhost:4000/auth/login `
   -ContentType 'application/json' `
   -Body (@{ email = '<donor-email>'; password = '<donor-password>' } | ConvertTo-Json)
@@ -176,15 +184,26 @@ $donorHeaders = @{ Authorization = "Bearer $($donorLogin.data.accessToken)" }
 Invoke-RestMethod -Method Patch -Uri http://localhost:4000/maps/donor/location `
   -Headers $donorHeaders `
   -ContentType 'application/json' `
-  -Body (@{ latitude = 5.6501; longitude = -0.0202; accuracyMeters = 12; source = 'manual_test' } | ConvertTo-Json)
+  -Body (@{
+    latitude = 5.6501
+    longitude = -0.0202
+    areaCommunity = 'Ashaiman Lebanon'
+    city = 'Ashaiman'
+    region = 'Greater Accra'
+    locationSharingEnabled = $true
+    accuracyMeters = 12
+    source = 'manual_test'
+  } | ConvertTo-Json)
 ```
 
 Expected behavior:
 
 - Admin and authorized hospital staff can open `/maps/operations`.
 - Donors can only update their own location.
+- Donor map sharing is opt-in through `locationSharingEnabled`.
 - Donors receive `403 Forbidden` if they try to access `/maps/operations`.
 - Public website routes do not expose donor live coordinates.
+- Public website routes do not expose donor names, phone numbers, emails, or exact donor markers.
 - Successful map access and donor location updates create `AuditLog` records with module `MAP_TRACKING`.
 
 ## Auth + RBAC

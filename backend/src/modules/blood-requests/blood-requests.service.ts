@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   BloodGroup,
+  DonorClinicalStatus,
   DonorResponseStatus,
   InventoryChangeType,
+  NotificationType,
   RequestProgressStatus,
   RequestStatus,
   Role,
@@ -19,6 +21,8 @@ import { AuditService } from '../../common/audit/audit.service';
 import { AlertsService } from '../../common/alerts/alerts.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { getCompatibilityRank, getCompatibleDonorGroups } from '../../common/utils/blood-compatibility';
 
 @Injectable()
 export class BloodRequestsService {
@@ -28,29 +32,8 @@ export class BloodRequestsService {
     private readonly alerts: AlertsService,
     private readonly realtime: RealtimeService,
     private readonly hospitalAccess: HospitalAccessService,
+    private readonly notifications: NotificationsService,
   ) {}
-
-  private getCompatibleGroups(group: BloodGroup): BloodGroup[] {
-    const compatibility: Record<BloodGroup, BloodGroup[]> = {
-      O_NEG: ['O_NEG'],
-      O_POS: ['O_POS', 'O_NEG'],
-      A_NEG: ['A_NEG', 'O_NEG'],
-      A_POS: ['A_POS', 'A_NEG', 'O_POS', 'O_NEG'],
-      B_NEG: ['B_NEG', 'O_NEG'],
-      B_POS: ['B_POS', 'B_NEG', 'O_POS', 'O_NEG'],
-      AB_NEG: ['AB_NEG', 'A_NEG', 'B_NEG', 'O_NEG'],
-      AB_POS: ['AB_POS', 'AB_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'O_POS', 'O_NEG'],
-    };
-
-    return compatibility[group];
-  }
-
-  private compatibilityRank(requested: BloodGroup, donor: BloodGroup): number {
-    if (requested === donor) {
-      return 0;
-    }
-    return this.getCompatibleGroups(requested).indexOf(donor) + 1;
-  }
 
   private mapStatusToTracking(status: RequestStatus): RequestProgressStatus {
     const statusMap: Record<RequestStatus, RequestProgressStatus> = {
@@ -118,9 +101,10 @@ export class BloodRequestsService {
     const hospital = await this.hospitalAccess.getHospitalForUser(userId);
 
     const donorTarget = dto.type === 'EMERGENCY' || dto.priority === 'CRITICAL' ? 100 : 50;
-    const compatibleGroups = this.getCompatibleGroups(dto.bloodGroup);
+    const compatibleGroups = getCompatibleDonorGroups(dto.bloodGroup);
     const normalizedLocation = dto.location.trim();
     const requiredByDate = new Date(dto.requiredBy);
+    const radiusKm = dto.radiusKm ?? 10;
 
     if (!normalizedLocation) {
       throw new BadRequestException('location is required');
@@ -144,6 +128,22 @@ export class BloodRequestsService {
         bloodGroup: { in: compatibleGroups },
         eligibilityStatus: true,
         availabilityStatus: true,
+        user: {
+          isActive: true,
+          emailVerified: true,
+        },
+        clinicalRecords: {
+          some: { status: DonorClinicalStatus.APPROVED },
+          none: {
+            status: {
+              in: [
+                DonorClinicalStatus.REJECTED,
+                DonorClinicalStatus.TEMPORARILY_DEFERRED,
+                DonorClinicalStatus.PERMANENTLY_DEFERRED,
+              ],
+            },
+          },
+        },
         ...(dto.type === 'EMERGENCY' && typeof dto.latitude === 'number' && typeof dto.longitude === 'number'
           ? {
               locationSharingEnabled: true,
@@ -170,8 +170,20 @@ export class BloodRequestsService {
             ? this.distanceKm(dto.latitude, dto.longitude, donor.latitude, donor.longitude)
             : null,
       }))
+      .filter((donor) => {
+        if (
+          dto.type === 'EMERGENCY' &&
+          typeof dto.latitude === 'number' &&
+          typeof dto.longitude === 'number' &&
+          donor.distanceKm !== null
+        ) {
+          return donor.distanceKm <= radiusKm;
+        }
+        return true;
+      })
       .sort((a, b) => {
-        const compatibilityDelta = this.compatibilityRank(dto.bloodGroup, a.bloodGroup) - this.compatibilityRank(dto.bloodGroup, b.bloodGroup);
+        const compatibilityDelta =
+          getCompatibilityRank(dto.bloodGroup, a.bloodGroup) - getCompatibilityRank(dto.bloodGroup, b.bloodGroup);
         if (compatibilityDelta !== 0) return compatibilityDelta;
         if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
         if (a.distanceKm !== null) return -1;
@@ -183,6 +195,7 @@ export class BloodRequestsService {
     const matchedDonors = rankedDonors.map((donor) => ({
       id: donor.id,
       userId: donor.userId,
+      distanceKm: donor.distanceKm,
     }));
 
     if (matchedDonors.length < dto.unitsNeeded && dto.type === 'EMERGENCY') {
@@ -233,6 +246,7 @@ export class BloodRequestsService {
 
     await this.audit.log('BLOOD_REQUEST_CREATED', 'BLOOD_REQUEST', userId, request.id, {
       matchedDonorCount: matchedDonors.length,
+      matchingRadiusKm: radiusKm,
     });
 
     await this.prisma.bloodRequestUpdate.create({
@@ -258,23 +272,41 @@ export class BloodRequestsService {
 
     await Promise.all(
       matchedDonors.map((donor) =>
-        this.prisma.notification.create({
-          data: {
-            userId: donor.userId,
-            bloodRequestId: request.id,
-            title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} ${dto.bloodGroup} blood request`,
-            body: `Hospital in ${normalizedLocation} needs ${dto.unitsNeeded} units.`,
-            channel: 'IN_APP',
-            delivered: true,
-          },
+        this.notifications.createAndBroadcastNotification({
+          userId: donor.userId,
+          bloodRequestId: request.id,
+          title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} ${dto.bloodGroup} blood request`,
+          body: [
+            `${hospital.hospitalName} needs ${dto.unitsNeeded} units (${dto.bloodGroup}).`,
+            `Urgency: ${dto.priority}.`,
+            `Required by: ${requiredByDate.toLocaleString()}.`,
+            donor.distanceKm !== null ? `Distance: ${donor.distanceKm.toFixed(1)} km.` : null,
+            `Respond now: /donor/emergency-requests?requestId=${request.id}`,
+          ]
+            .filter(Boolean)
+            .join(' '),
+          channel: 'IN_APP',
+          type: NotificationType.EMERGENCY_REQUEST,
+          delivered: true,
         }),
       ),
     );
+
+    if (process.env.SMS_ENABLED === 'true' && matchedDonors.length > 0) {
+      await this.audit.log('EMERGENCY_SMS_DISPATCH_TRIGGERED', 'BLOOD_REQUEST', userId, request.id, {
+        matchedDonorCount: matchedDonors.length,
+      });
+      this.alerts.notifyCritical('EMERGENCY_SMS_DISPATCH_TRIGGERED', {
+        requestId: request.id,
+        matchedDonorCount: matchedDonors.length,
+      });
+    }
 
     await this.audit.log('REQUEST_SLA_INITIALIZED', 'BLOOD_REQUEST', userId, request.id, {
       reminderMinutes: [3, 6],
       escalationMinutes: 10,
       matchedDonorCount: matchedDonors.length,
+      matchingRadiusKm: radiusKm,
     });
 
     this.realtime.broadcastEmergencyRequest({

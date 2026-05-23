@@ -219,6 +219,7 @@ export async function createHospitalRequest(payload: {
   notes?: string;
   latitude?: number;
   longitude?: number;
+  radiusKm?: 5 | 10 | 20;
 }) {
   const response = await api.post<ApiEnvelope<BloodRequestItem>>('/blood-requests', payload);
   return unwrap(response.data);
@@ -292,6 +293,11 @@ export async function respondToBloodRequest(
   payload: { responseStatus: DonorResponseStatus; notes?: string },
 ) {
   const response = await api.post<ApiEnvelope<DonorResponseItem>>(`/blood-requests/${id}/respond`, payload);
+  return unwrap(response.data);
+}
+
+export async function updateDonorAvailability(available: boolean) {
+  const response = await api.patch<ApiEnvelope<{ availabilityStatus: boolean }>>('/donors/availability', { available });
   return unwrap(response.data);
 }
 
