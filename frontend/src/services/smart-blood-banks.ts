@@ -42,17 +42,30 @@ export type SmartEmergencyRequest = {
   id: string;
   hospitalId: string;
   hospitalName: string;
+  hospitalCenterName?: string | null;
+  ward?: string | null;
   bloodGroup: BloodGroup;
   bloodGroupLabel: string;
   unitsNeeded: number;
   priority: string;
   status: string;
+  trackingStatus: string;
   location: string;
+  emergencyLocation?: string | null;
+  city?: string | null;
+  region?: string | null;
+  locationNotes?: string | null;
+  notes?: string | null;
   latitude: number;
   longitude: number;
   createdAt: string;
   requiredBy: string;
   distanceKm: number | null;
+  nearby: {
+    radius5km: { compatibleDonors: number; bloodBanks: number; hospitalsWithStock: number };
+    radius10km: { compatibleDonors: number; bloodBanks: number; hospitalsWithStock: number };
+    radius20km: { compatibleDonors: number; bloodBanks: number; hospitalsWithStock: number };
+  };
 };
 
 export type SmartBloodBankMapResponse = {

@@ -10,6 +10,7 @@ import {
   SmartBloodBankMapResponse,
   SmartEmergencyRequest,
 } from '../services/smart-blood-banks';
+import { ENGLISH_FRIENDLY_TILE_ATTRIBUTION, ENGLISH_FRIENDLY_TILE_URL } from '../constants/map-tiles';
 
 const GHANA_CENTER: [number, number] = [7.9465, -1.0232];
 const BLOOD_GROUPS: { value: BloodGroup | ''; label: string }[] = [
@@ -112,14 +113,38 @@ function CenterPopup({ center }: { center: SmartBloodBankCenter }) {
 
 function RequestPopup({ request }: { request: SmartEmergencyRequest }) {
   return (
-    <div className="w-64 space-y-2 text-sm text-slate-700">
+    <div className="w-72 space-y-2 text-sm text-slate-700">
       <p className="text-xs font-black uppercase tracking-[0.18em] text-red-700">Emergency Request</p>
       <h3 className="text-base font-black text-slate-950">{request.bloodGroupLabel} needed</h3>
-      <p>{request.unitsNeeded} unit(s) at {request.hospitalName}</p>
-      <p className="text-xs text-slate-500">{request.location} • {request.distanceKm !== null ? `${request.distanceKm} km away` : 'distance unavailable'}</p>
-      <span className="inline-flex rounded-full bg-red-50 px-2 py-1 text-[11px] font-bold uppercase text-red-700">
-        {request.priority}
-      </span>
+      <p>{request.unitsNeeded} unit(s) at {request.hospitalCenterName ?? request.hospitalName}</p>
+      <p className="text-xs text-slate-500">
+        {request.emergencyLocation ?? request.location}
+        {request.ward ? ` • ${request.ward}` : ''}
+        {request.city || request.region ? ` • ${[request.city, request.region].filter(Boolean).join(', ')}` : ''}
+      </p>
+      <p className="text-xs text-slate-500">
+        Need by {new Date(request.requiredBy).toLocaleString()}
+        {request.distanceKm !== null ? ` • ${request.distanceKm} km away` : ''}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <span className="inline-flex rounded-full bg-red-50 px-2 py-1 text-[11px] font-bold uppercase text-red-700">
+          {request.priority}
+        </span>
+        <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold uppercase text-slate-700">
+          {request.status}/{request.trackingStatus}
+        </span>
+      </div>
+      {request.locationNotes || request.notes ? (
+        <p className="rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-600">
+          {request.locationNotes ?? request.notes}
+        </p>
+      ) : null}
+      <div className="rounded-lg border border-red-100 p-2 text-xs">
+        <p className="font-bold text-slate-800">Nearby coordination</p>
+        <p>5km: {request.nearby.radius5km.compatibleDonors} donors • {request.nearby.radius5km.hospitalsWithStock} hospitals</p>
+        <p>10km: {request.nearby.radius10km.compatibleDonors} donors • {request.nearby.radius10km.hospitalsWithStock} hospitals</p>
+        <p>20km: {request.nearby.radius20km.compatibleDonors} donors • {request.nearby.radius20km.hospitalsWithStock} hospitals</p>
+      </div>
     </div>
   );
 }
@@ -218,12 +243,12 @@ export function SmartBloodBankMap() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="rounded-[2rem] border border-red-100 bg-white p-5 shadow-xl shadow-slate-950/5 md:p-7">
+    <section className="max-w-full space-y-6 overflow-x-hidden">
+      <div className="rounded-[2rem] border border-red-100 bg-white p-4 shadow-xl shadow-slate-950/5 sm:p-5 md:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-xs font-black uppercase tracking-[0.28em] text-red-700">Smart blood bank locator</p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-5xl">
+            <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl md:text-5xl">
               Find the nearest safe blood source fast
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
@@ -237,7 +262,7 @@ export function SmartBloodBankMap() {
 
         {locationMessage ? <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">{locationMessage}</p> : null}
 
-        <div className="mt-6 grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
+        <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
           <input
             className="legacy-input"
             onChange={(event) => setSearch(event.target.value)}
@@ -272,30 +297,30 @@ export function SmartBloodBankMap() {
         </article>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ['Centers Found', data?.summary.totalCenters ?? 0],
           ['Units Available', data?.summary.totalUnitsAvailable ?? 0],
           ['Critical Centers', data?.summary.criticalStockCenters ?? 0],
           ['Active Emergencies', data?.summary.activeEmergencyRequests ?? 0],
         ].map(([label, value]) => (
-          <article key={label} className="rounded-[1.5rem] border border-red-100 bg-white p-5 shadow-sm">
+          <article key={label} className="min-w-0 rounded-[1.5rem] border border-red-100 bg-white p-4 shadow-sm sm:p-5">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{label}</p>
-            <p className="mt-2 text-3xl font-black text-primary">{value}</p>
+            <p className="mt-2 text-2xl font-black text-primary sm:text-3xl">{value}</p>
           </article>
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.75fr]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.75fr)]">
         <div className="overflow-hidden rounded-[2rem] border border-red-100 bg-white shadow-xl shadow-slate-950/5">
           {loading ? (
-            <div className="flex h-[560px] items-center justify-center text-sm font-bold text-slate-500">Loading smart blood bank map...</div>
+            <div className="flex h-[420px] items-center justify-center text-sm font-bold text-slate-500 sm:h-[500px] xl:h-[560px]">Loading smart blood bank map...</div>
           ) : data?.centers.length ? (
-            <MapContainer center={mapCenter} className="h-[560px] w-full" scrollWheelZoom zoom={selectedCenter ? 13 : 7}>
+            <MapContainer center={mapCenter} className="h-[420px] w-full sm:h-[500px] xl:h-[560px]" scrollWheelZoom zoom={selectedCenter ? 13 : 7}>
               <RecenterMap center={mapCenter} zoom={selectedCenter ? 13 : 7} />
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution={ENGLISH_FRIENDLY_TILE_ATTRIBUTION}
+                url={ENGLISH_FRIENDLY_TILE_URL}
               />
               {userLocation ? (
                 <Marker icon={userIcon} position={[userLocation.latitude, userLocation.longitude]}>
@@ -319,7 +344,7 @@ export function SmartBloodBankMap() {
               ))}
             </MapContainer>
           ) : (
-            <div className="flex h-[560px] items-center justify-center p-6 text-center">
+            <div className="flex h-[420px] items-center justify-center p-6 text-center sm:h-[500px] xl:h-[560px]">
               <div>
                 <h2 className="text-2xl font-black text-slate-900">No centers match your filters</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">Try increasing the radius, clearing the blood group filter, or searching another city.</p>
@@ -396,9 +421,17 @@ export function SmartBloodBankMap() {
               <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-100 bg-red-50/50 p-4">
                 <div>
                   <p className="text-sm font-black text-slate-950">{request.bloodGroupLabel} • {request.unitsNeeded} unit(s)</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">{request.hospitalName} • {request.location}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {request.hospitalCenterName ?? request.hospitalName} • {request.emergencyLocation ?? request.location}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {request.ward ? `${request.ward} • ` : ''}{[request.city, request.region].filter(Boolean).join(', ')}
+                  </p>
                 </div>
-                <span className="rounded-full bg-primary px-3 py-1 text-xs font-black uppercase text-white">{request.priority}</span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-black uppercase text-white">{request.priority}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold uppercase text-slate-700">{request.status}/{request.trackingStatus}</span>
+                </div>
               </div>
             ))}
           </div>

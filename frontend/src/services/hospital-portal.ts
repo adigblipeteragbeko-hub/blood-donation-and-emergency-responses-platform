@@ -63,6 +63,8 @@ export type DonorResponseItem = {
 
 export type BloodRequestItem = {
   id: string;
+  hospitalCenterName?: string | null;
+  ward?: string | null;
   patientName?: string | null;
   patientCode?: string | null;
   bloodGroup: BloodGroup;
@@ -72,6 +74,10 @@ export type BloodRequestItem = {
   status: RequestStatus;
   trackingStatus: RequestProgressStatus;
   location: string;
+  emergencyLocation?: string | null;
+  city?: string | null;
+  region?: string | null;
+  locationNotes?: string | null;
   requiredBy: string;
   createdAt: string;
   notes?: string | null;
@@ -102,6 +108,16 @@ export type NotificationItem = {
   body: string;
   delivered: boolean;
   createdAt: string;
+};
+
+export type TypeaheadPayload = {
+  hospitals: Array<{ id: string; hospitalName: string; location: string }>;
+  donors: Array<{ id: string; fullName: string; bloodGroup: BloodGroup; location: string }>;
+  bloodGroups: string[];
+  locations: string[];
+  emergencyRequests: Array<{ id: string; bloodGroup: BloodGroup; location: string; unitsNeeded: number; priority: PriorityLevel }>;
+  inventory: Array<{ id: string; bloodGroup: BloodGroup; availableUnits: number; hospital: { hospitalName: string; location: string } }>;
+  donationCenters: Array<{ id: string; hospitalName: string; location: string }>;
 };
 
 export type HospitalProfile = {
@@ -186,6 +202,8 @@ export async function createInventoryLog(
 }
 
 export async function createHospitalRequest(payload: {
+  hospitalCenterName?: string;
+  ward?: string;
   patientName?: string;
   patientCode?: string;
   bloodGroup: BloodGroup;
@@ -193,8 +211,14 @@ export async function createHospitalRequest(payload: {
   type: 'STANDARD' | 'EMERGENCY';
   priority: PriorityLevel;
   location: string;
+  emergencyLocation?: string;
+  city?: string;
+  region?: string;
+  locationNotes?: string;
   requiredBy: string;
   notes?: string;
+  latitude?: number;
+  longitude?: number;
 }) {
   const response = await api.post<ApiEnvelope<BloodRequestItem>>('/blood-requests', payload);
   return unwrap(response.data);
@@ -328,5 +352,10 @@ export async function submitOfficeUseForm(donorId: string, officeUseOnly: Record
 
 export async function approveDonorEligibilityByHospital(donorId: string, approved: boolean) {
   const response = await api.patch<ApiEnvelope<any>>(`/hospitals/eligibility-submissions/${donorId}/approve`, { approved });
+  return unwrap(response.data);
+}
+
+export async function getTypeaheadSuggestions(query: string) {
+  const response = await api.get<ApiEnvelope<TypeaheadPayload>>('/hospitals/typeahead', { params: { q: query } });
   return unwrap(response.data);
 }

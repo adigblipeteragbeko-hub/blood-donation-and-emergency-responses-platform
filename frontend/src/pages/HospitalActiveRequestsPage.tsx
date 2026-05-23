@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BloodRequestItem,
   DonorResponseStatus,
@@ -17,6 +18,8 @@ const trackingOptions: RequestProgressStatus[] = ['PENDING', 'MATCHED', 'IN_PROG
 const donorResponseOptions: DonorResponseStatus[] = ['PENDING', 'ACCEPTED', 'DECLINED', 'DONATED'];
 
 export default function HospitalActiveRequestsPage() {
+  const [searchParams] = useSearchParams();
+  const focusRequestId = searchParams.get('requestId') ?? '';
   const [items, setItems] = useState<BloodRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -65,6 +68,17 @@ export default function HospitalActiveRequestsPage() {
     [items, searchTerm],
   );
 
+  useEffect(() => {
+    if (!focusRequestId) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`hospital-request-${focusRequestId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [focusRequestId, filteredItems.length]);
+
   const changeStatus = async (id: string, status: RequestStatus) => {
     setMessage('');
     try {
@@ -110,7 +124,11 @@ export default function HospitalActiveRequestsPage() {
             {filteredItems.map((item) => {
               const trackingDraft = ensureTrackingDraft(item);
               return (
-                <article key={item.id} className="rounded-xl border border-red-100 p-4">
+                <article
+                  id={`hospital-request-${item.id}`}
+                  key={item.id}
+                  className={`rounded-xl border border-red-100 p-4 ${focusRequestId === item.id ? 'ring-2 ring-red-300' : ''}`}
+                >
                   <div className="grid gap-2 md:grid-cols-3">
                     <p className="text-sm">
                       <span className="font-semibold">Blood:</span>{' '}
@@ -130,6 +148,24 @@ export default function HospitalActiveRequestsPage() {
                     </p>
                     <p className="text-sm">
                       <span className="font-semibold">Tracking:</span> {item.trackingStatus}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-semibold">Center:</span> {item.hospitalCenterName ?? item.hospital?.hospitalName ?? 'N/A'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-semibold">Ward:</span> {item.ward ?? 'N/A'}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-semibold">Region:</span> {[item.city, item.region].filter(Boolean).join(', ') || 'N/A'}
+                    </p>
+                    <p className="text-sm md:col-span-3">
+                      <span className="font-semibold">Emergency Location:</span> {item.emergencyLocation ?? item.location}
+                    </p>
+                    <p className="text-sm md:col-span-3">
+                      <span className="font-semibold">Location Notes:</span> {item.locationNotes ?? 'N/A'}
+                    </p>
+                    <p className="text-sm md:col-span-3">
+                      <span className="font-semibold">Emergency Notes:</span> {item.notes ?? 'N/A'}
                     </p>
                   </div>
 
