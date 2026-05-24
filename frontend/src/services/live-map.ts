@@ -121,8 +121,10 @@ export async function getOperationalDonors(params?: {
 
 export function createRealtimeSocket(): Socket {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+  const accessToken = localStorage.getItem('accessToken');
   return io(`${baseUrl}/realtime`, {
     transports: ['websocket', 'polling'],
     withCredentials: true,
+    auth: accessToken ? { token: `Bearer ${accessToken}` } : undefined,
   });
 }

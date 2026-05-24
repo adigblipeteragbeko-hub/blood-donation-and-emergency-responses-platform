@@ -38,6 +38,13 @@ export default function HospitalRegisterPage() {
         email: form.email,
         password: form.password,
         role: 'HOSPITAL_STAFF',
+        hospitalProfile: {
+          hospitalName: form.hospitalName,
+          address: form.address,
+          location: form.address,
+          contactName: form.inCharge,
+          contactPhone: `${form.contactCode}${form.contactNumber}`,
+        },
       });
       setForm({ ...emptyForm });
       navigate('/verify-email', { state: { email: form.email, role: 'hospital' } });

@@ -53,6 +53,21 @@ export class AuthService {
     return `DON-${serial}`;
   }
 
+  private async buildHospitalRegistrationCode() {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = `HOS-${Date.now().toString().slice(-8)}-${randomInt(100, 999)}`;
+      const exists = await this.prisma.hospital.findUnique({
+        where: { registrationCode: candidate },
+        select: { id: true },
+      });
+      if (!exists) {
+        return candidate;
+      }
+    }
+
+    return `HOS-${randomBytes(4).toString('hex').toUpperCase()}`;
+  }
+
   async register(payload: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: payload.email } });
     if (existing) {
@@ -61,6 +76,9 @@ export class AuthService {
 
     if (payload.role === 'DONOR' && !payload.donorProfile) {
       throw new BadRequestException('Donor profile details are required');
+    }
+    if (payload.role === 'HOSPITAL_STAFF' && !payload.hospitalProfile) {
+      throw new BadRequestException('Hospital profile details are required');
     }
 
     const user = await this.prisma.$transaction(async (tx) => {
@@ -91,6 +109,22 @@ export class AuthService {
             availabilityStatus: false,
             emergencyContactName: payload.donorProfile.emergencyContactName,
             emergencyContactPhone: payload.donorProfile.emergencyContactPhone,
+          },
+        });
+      }
+
+      if (payload.role === 'HOSPITAL_STAFF' && payload.hospitalProfile) {
+        const registrationCode = await this.buildHospitalRegistrationCode();
+        await tx.hospital.create({
+          data: {
+            userId: createdUser.id,
+            hospitalName: payload.hospitalProfile.hospitalName,
+            registrationCode,
+            address: payload.hospitalProfile.address,
+            location: payload.hospitalProfile.location?.trim() || payload.hospitalProfile.address,
+            contactName: payload.hospitalProfile.contactName,
+            contactPhone: payload.hospitalProfile.contactPhone,
+            isApproved: false,
           },
         });
       }

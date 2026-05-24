@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsEmail, IsIn, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
 import { RegisterDonorProfileDto } from './register-donor-profile.dto';
+import { RegisterHospitalProfileDto } from './register-hospital-profile.dto';
 
 export class RegisterDto {
   @IsEmail()
@@ -17,4 +18,9 @@ export class RegisterDto {
   @ValidateNested()
   @Type(() => RegisterDonorProfileDto)
   donorProfile?: RegisterDonorProfileDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RegisterHospitalProfileDto)
+  hospitalProfile?: RegisterHospitalProfileDto;
 }
