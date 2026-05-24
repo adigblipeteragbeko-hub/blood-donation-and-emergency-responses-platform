@@ -65,10 +65,12 @@ export function LiveEmergencyAlertBanner() {
     const timer = window.setInterval(loadAlerts, 30000);
     const socket = createRealtimeSocket();
     socket.on('emergency.request.updated', loadAlerts);
+    socket.on('emergency.request.public.updated', loadAlerts);
     return () => {
       mounted = false;
       window.clearInterval(timer);
       socket.off('emergency.request.updated', loadAlerts);
+      socket.off('emergency.request.public.updated', loadAlerts);
       socket.disconnect();
     };
   }, []);

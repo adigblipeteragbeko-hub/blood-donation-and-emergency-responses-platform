@@ -84,6 +84,7 @@ export function LiveOperationsMap({ mode = 'operations' }: { mode?: 'operations'
     });
     socket.on('donor.response.updated', () => void loadMap());
     socket.on('emergency.request.updated', () => void loadMap());
+    socket.on('emergency.request.public.updated', () => void loadMap());
     return () => {
       socket.disconnect();
     };

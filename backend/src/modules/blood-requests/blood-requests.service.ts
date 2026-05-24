@@ -309,13 +309,15 @@ export class BloodRequestsService {
       matchingRadiusKm: radiusKm,
     });
 
-    this.realtime.broadcastEmergencyRequest({
+    await this.realtime.broadcastEmergencyRequest({
       requestId: request.id,
       status: request.status,
       trackingStatus: request.trackingStatus,
       bloodGroup: request.bloodGroup,
       unitsNeeded: request.unitsNeeded,
       priority: request.priority,
+      requiredBy: request.requiredBy,
+      hospitalCenterName: request.hospitalCenterName,
       location: request.location,
       emergencyLocation: request.emergencyLocation,
       city: request.city,
@@ -325,6 +327,11 @@ export class BloodRequestsService {
       longitude: request.longitude,
       hospitalId: request.hospitalId,
       matchedDonorCount: matchedDonors.length,
+    }, {
+      requestId: request.id,
+      hospitalId: request.hospitalId,
+      matchedDonorUserIds: matchedDonors.map((donor) => donor.userId),
+      isPublicEmergency: request.type === 'EMERGENCY',
     });
 
     return request;
@@ -563,11 +570,16 @@ export class BloodRequestsService {
     });
 
     await this.audit.log('BLOOD_REQUEST_STATUS_UPDATED', 'BLOOD_REQUEST', userId, id, dto);
-    this.realtime.broadcastEmergencyRequest({
+    await this.realtime.broadcastEmergencyRequest({
       requestId: id,
       status: updated.status,
       trackingStatus: updated.trackingStatus,
       changedBy: userId,
+      hospitalId: request.hospitalId,
+    }, {
+      requestId: id,
+      hospitalId: request.hospitalId,
+      isPublicEmergency: request.type === 'EMERGENCY',
     });
     return updated;
   }
@@ -656,11 +668,16 @@ export class BloodRequestsService {
       patientEncounterId: dto.patientEncounterId,
     });
 
-    this.realtime.broadcastEmergencyRequest({
+    await this.realtime.broadcastEmergencyRequest({
       requestId: id,
       trackingStatus: dto.newStatus,
       changedBy: userId,
       comment: dto.comment ?? null,
+      hospitalId: request.hospitalId,
+    }, {
+      requestId: id,
+      hospitalId: request.hospitalId,
+      isPublicEmergency: request.type === 'EMERGENCY',
     });
 
     return {

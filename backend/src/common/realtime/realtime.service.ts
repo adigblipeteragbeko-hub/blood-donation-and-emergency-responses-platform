@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { RealtimeGateway } from './realtime.gateway';
+import { PrismaService } from '../../prisma.service';
 
 @Injectable()
 export class RealtimeService {
-  constructor(private readonly gateway: RealtimeGateway) {}
+  constructor(
+    private readonly gateway: RealtimeGateway,
+    private readonly prisma: PrismaService,
+  ) {}
   private readonly operationsRoles = [
     Role.SUPER_ADMIN,
     Role.ADMIN,
@@ -14,8 +18,47 @@ export class RealtimeService {
     Role.INVENTORY_OFFICER,
   ];
 
-  broadcastEmergencyRequest(payload: unknown) {
-    this.gateway.emitEvent('emergency.request.updated', payload);
+  async broadcastEmergencyRequest(
+    payload: Record<string, unknown>,
+    context: { requestId: string; hospitalId: string; matchedDonorUserIds?: string[]; isPublicEmergency?: boolean },
+  ) {
+    const recipientIds = new Set<string>(context.matchedDonorUserIds ?? []);
+
+    const [hospitalRecipients, matchedDonorsFromDb] = await Promise.all([
+      this.prisma.hospital.findUnique({
+        where: { id: context.hospitalId },
+        select: {
+          userId: true,
+          staffMembers: {
+            select: { userId: true, user: { select: { isActive: true } } },
+          },
+        },
+      }),
+      context.matchedDonorUserIds
+        ? Promise.resolve([] as { userId: string }[])
+        : this.prisma.donor.findMany({
+            where: { donorMatches: { some: { id: context.requestId } } },
+            select: { userId: true },
+          }),
+    ]);
+
+    if (hospitalRecipients?.userId) {
+      recipientIds.add(hospitalRecipients.userId);
+    }
+
+    hospitalRecipients?.staffMembers
+      .filter((staff) => staff.user.isActive)
+      .forEach((staff) => recipientIds.add(staff.userId));
+
+    matchedDonorsFromDb.forEach((donor) => recipientIds.add(donor.userId));
+
+    recipientIds.forEach((userId) => this.gateway.emitToUser(userId, 'emergency.request.updated', payload));
+
+    this.gateway.emitToRoles([Role.ADMIN, Role.SUPER_ADMIN], 'emergency.request.updated', payload);
+
+    if (context.isPublicEmergency) {
+      this.gateway.emitToPublic('emergency.request.public.updated', this.sanitizeEmergencyPublicPayload(payload));
+    }
   }
 
   broadcastDonorResponse(payload: unknown) {
@@ -40,5 +83,24 @@ export class RealtimeService {
 
   broadcastWebsiteAnnouncement(payload: unknown) {
     this.gateway.emitToPublic('website.announcement.updated', payload);
+  }
+
+  private sanitizeEmergencyPublicPayload(payload: Record<string, unknown>) {
+    return {
+      requestId: payload.requestId ?? null,
+      status: payload.status ?? null,
+      trackingStatus: payload.trackingStatus ?? null,
+      bloodGroup: payload.bloodGroup ?? null,
+      unitsNeeded: payload.unitsNeeded ?? null,
+      priority: payload.priority ?? null,
+      hospitalCenterName: payload.hospitalCenterName ?? null,
+      location: payload.location ?? null,
+      emergencyLocation: payload.emergencyLocation ?? null,
+      city: payload.city ?? null,
+      region: payload.region ?? null,
+      latitude: payload.latitude ?? null,
+      longitude: payload.longitude ?? null,
+      requiredBy: payload.requiredBy ?? null,
+    };
   }
 }

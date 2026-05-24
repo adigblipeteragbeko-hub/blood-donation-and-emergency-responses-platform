@@ -199,6 +199,7 @@ export function SmartBloodBankMap() {
 
     socket.on('inventory.updated', refreshMapData);
     socket.on('emergency.request.updated', refreshMapData);
+    socket.on('emergency.request.public.updated', refreshMapData);
 
     const interval = window.setInterval(refreshMapData, 45000);
 
@@ -206,6 +207,7 @@ export function SmartBloodBankMap() {
       window.clearInterval(interval);
       socket.off('inventory.updated', refreshMapData);
       socket.off('emergency.request.updated', refreshMapData);
+      socket.off('emergency.request.public.updated', refreshMapData);
       socket.disconnect();
     };
   }, [loadCenters]);
