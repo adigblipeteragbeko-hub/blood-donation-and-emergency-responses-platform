@@ -48,10 +48,10 @@ const officeUseInitial = {
 };
 
 const staffRoleOptions: StaffRole[] = [
-  'HOSPITAL_ADMIN',
   'HOSPITAL_STAFF',
-  'INVENTORY_OFFICER',
-  'DONOR_REVIEW_OFFICER',
+  'HOSPITAL_STAFF',
+  'BLOOD_BANK_OFFICER',
+  'BLOOD_BANK_OFFICER',
 ];
 
 const staffStatusOptions: StaffAccountStatus[] = ['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'INACTIVE'];
@@ -127,10 +127,10 @@ export default function HospitalStaffManagementPage() {
   const [activeDonorId, setActiveDonorId] = useState('');
   const [officeUse, setOfficeUse] = useState(officeUseInitial);
 
-  const canManageStaff = user?.role === 'HOSPITAL_ADMIN' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const canManageStaff = user?.role === 'HOSPITAL_STAFF' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   const canReviewDonors =
-    user?.role === 'HOSPITAL_ADMIN' ||
-    user?.role === 'DONOR_REVIEW_OFFICER' ||
+    user?.role === 'HOSPITAL_STAFF' ||
+    user?.role === 'BLOOD_BANK_OFFICER' ||
     user?.role === 'ADMIN' ||
     user?.role === 'SUPER_ADMIN';
 
@@ -420,7 +420,7 @@ export default function HospitalStaffManagementPage() {
             <article className="card">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Review Officers</p>
               <p className="mt-2 text-3xl font-bold text-primary">
-                {staff.filter((item) => item.user.role === 'DONOR_REVIEW_OFFICER').length}
+                {staff.filter((item) => item.user.role === 'BLOOD_BANK_OFFICER').length}
               </p>
               <p className="mt-2 text-sm text-muted">Dedicated officers for screening and approval workflow.</p>
             </article>
@@ -920,3 +920,4 @@ export default function HospitalStaffManagementPage() {
     </section>
   );
 }
+

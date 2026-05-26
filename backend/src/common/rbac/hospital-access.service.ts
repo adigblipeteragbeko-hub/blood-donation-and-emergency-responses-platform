@@ -27,27 +27,7 @@ export class HospitalAccessService {
       return directHospital as HospitalWithMembership;
     }
 
-    const staffMembership = await this.prisma.staffProfile.findUnique({
-      where: { userId },
-      include: {
-        hospital: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                role: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!staffMembership?.hospital) {
-      throw new NotFoundException('Hospital profile not found for this account');
-    }
-
-    return staffMembership.hospital as HospitalWithMembership;
+    throw new NotFoundException('Hospital profile not found for this account');
   }
 
   async assertHospitalAccess(hospitalId: string, userId: string, role: Role) {
@@ -68,10 +48,7 @@ export class HospitalAccessService {
 
     return {
       hospital: {
-        OR: [
-          { userId },
-          { staffMembers: { some: { userId } } },
-        ],
+        userId,
       },
     };
   }

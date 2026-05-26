@@ -18,9 +18,9 @@ import {
 const LOCATION_VIEW_ROLES = new Set<Role>([
   Role.SUPER_ADMIN,
   Role.ADMIN,
-  Role.HOSPITAL_ADMIN,
   Role.HOSPITAL_STAFF,
-  Role.DONOR_REVIEW_OFFICER,
+  Role.HOSPITAL_STAFF,
+  Role.BLOOD_BANK_OFFICER,
 ]);
 
 const BLOOD_GROUPS: BloodGroup[] = [
@@ -687,10 +687,8 @@ export class MapsService {
   async getOperationsMap(userId: string, role: Role, ipAddress?: string, device?: string) {
     this.assertCanViewLiveLocations(role);
 
-    const hospitalScope =
-      role === Role.HOSPITAL_ADMIN || role === Role.HOSPITAL_STAFF || role === Role.DONOR_REVIEW_OFFICER
-        ? await this.hospitalAccess.getHospitalForUser(userId)
-        : null;
+    const isHospitalOperator = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    const hospitalScope = isHospitalOperator ? await this.hospitalAccess.getHospitalForUser(userId) : null;
 
     const [hospitals, requests, donors] = await Promise.all([
       this.prisma.hospital.findMany({
@@ -765,3 +763,4 @@ export class MapsService {
     return { hospitals, requests, donors };
   }
 }
+

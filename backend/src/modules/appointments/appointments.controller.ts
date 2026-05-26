@@ -22,7 +22,7 @@ export class AppointmentsController {
     return this.appointmentsService.create(user.id, dto);
   }
 
-  @Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
   @Post('hospital')
   createByHospital(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalAppointmentDto) {
     return this.appointmentsService.createByHospital(user.id, dto);
@@ -32,10 +32,10 @@ export class AppointmentsController {
     Role.ADMIN,
     Role.SUPER_ADMIN,
     Role.DONOR,
-    Role.HOSPITAL_ADMIN,
     Role.HOSPITAL_STAFF,
-    Role.INVENTORY_OFFICER,
-    Role.DONOR_REVIEW_OFFICER,
+    Role.HOSPITAL_STAFF,
+    Role.BLOOD_BANK_OFFICER,
+    Role.BLOOD_BANK_OFFICER,
   )
   @Get()
   listForUser(
@@ -45,7 +45,7 @@ export class AppointmentsController {
     return this.appointmentsService.listForUser(user.id, user.role, query);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
@@ -55,3 +55,4 @@ export class AppointmentsController {
     return this.appointmentsService.updateStatus(id, user.id, user.role, dto);
   }
 }
+

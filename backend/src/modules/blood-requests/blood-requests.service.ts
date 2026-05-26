@@ -497,12 +497,8 @@ export class BloodRequestsService {
       throw new NotFoundException('Blood request not found');
     }
 
-    if (
-      role === Role.HOSPITAL_ADMIN ||
-      role === Role.HOSPITAL_STAFF ||
-      role === Role.INVENTORY_OFFICER ||
-      role === Role.DONOR_REVIEW_OFFICER
-    ) {
+    const isHospitalOperator = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    if (isHospitalOperator) {
       await this.hospitalAccess.assertHospitalAccess(request.hospital.id, userId, role);
     }
 
@@ -612,7 +608,7 @@ export class BloodRequestsService {
     }
 
     if (dto.newStatus === RequestProgressStatus.COMPLETED) {
-      if (role !== Role.HOSPITAL_STAFF && role !== Role.HOSPITAL_ADMIN) {
+      if (role !== Role.HOSPITAL_STAFF) {
         throw new BadRequestException('Only hospital staff can mark request as COMPLETED. Admin may use completion correction.');
       }
       if (!dto.transfusedByStaffId || !dto.unitDin || !dto.patientEncounterId) {
@@ -918,11 +914,8 @@ export class BloodRequestsService {
       throw new NotFoundException('Donor response not found');
     }
 
-    if (
-      role === Role.HOSPITAL_ADMIN ||
-      role === Role.HOSPITAL_STAFF ||
-      role === Role.DONOR_REVIEW_OFFICER
-    ) {
+    const canHospitalUpdateResponse = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    if (canHospitalUpdateResponse) {
       await this.hospitalAccess.assertHospitalAccess(response.bloodRequest.hospitalId, userId, role);
     }
 
@@ -965,3 +958,4 @@ export class BloodRequestsService {
     return updated;
   }
 }
+

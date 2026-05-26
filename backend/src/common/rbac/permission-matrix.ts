@@ -13,7 +13,6 @@ export const ROLE_PERMISSION_DEFAULTS: Record<Role, PermissionCode[]> = {
     PermissionCode.AUDIT_LOG_VIEW,
     PermissionCode.AUDIT_LOG_EXPORT,
     PermissionCode.HOSPITAL_OPERATIONS_VIEW,
-    PermissionCode.HOSPITAL_STAFF_MANAGE,
     PermissionCode.HOSPITAL_SETTINGS_MANAGE,
     PermissionCode.INVENTORY_MANAGE,
     PermissionCode.INVENTORY_REPORT_VIEW,
@@ -34,7 +33,6 @@ export const ROLE_PERMISSION_DEFAULTS: Record<Role, PermissionCode[]> = {
     PermissionCode.WEBSITE_CONTENT_MANAGE,
     PermissionCode.AUDIT_LOG_VIEW,
     PermissionCode.HOSPITAL_OPERATIONS_VIEW,
-    PermissionCode.HOSPITAL_STAFF_MANAGE,
     PermissionCode.INVENTORY_MANAGE,
     PermissionCode.INVENTORY_REPORT_VIEW,
     PermissionCode.DONOR_REVIEW_MANAGE,
@@ -46,22 +44,6 @@ export const ROLE_PERMISSION_DEFAULTS: Record<Role, PermissionCode[]> = {
     PermissionCode.APPOINTMENT_MANAGE,
     PermissionCode.REPORT_VIEW,
     PermissionCode.SECURITY_MONITOR_VIEW,
-    PermissionCode.GLOBAL_SEARCH_USE,
-  ],
-  HOSPITAL_ADMIN: [
-    PermissionCode.HOSPITAL_OPERATIONS_VIEW,
-    PermissionCode.HOSPITAL_STAFF_MANAGE,
-    PermissionCode.HOSPITAL_SETTINGS_MANAGE,
-    PermissionCode.INVENTORY_MANAGE,
-    PermissionCode.INVENTORY_REPORT_VIEW,
-    PermissionCode.DONOR_REVIEW_MANAGE,
-    PermissionCode.DONOR_REVIEW_APPROVE,
-    PermissionCode.BLOOD_REQUEST_CREATE,
-    PermissionCode.BLOOD_REQUEST_APPROVE,
-    PermissionCode.BLOOD_REQUEST_PROGRESS_UPDATE,
-    PermissionCode.DONOR_MATCH_VIEW,
-    PermissionCode.APPOINTMENT_MANAGE,
-    PermissionCode.REPORT_VIEW,
     PermissionCode.GLOBAL_SEARCH_USE,
   ],
   HOSPITAL_STAFF: [
@@ -72,37 +54,20 @@ export const ROLE_PERMISSION_DEFAULTS: Record<Role, PermissionCode[]> = {
     PermissionCode.APPOINTMENT_MANAGE,
     PermissionCode.GLOBAL_SEARCH_USE,
   ],
-  INVENTORY_OFFICER: [
+  BLOOD_BANK_OFFICER: [
     PermissionCode.HOSPITAL_OPERATIONS_VIEW,
     PermissionCode.INVENTORY_MANAGE,
     PermissionCode.INVENTORY_REPORT_VIEW,
-    PermissionCode.GLOBAL_SEARCH_USE,
-  ],
-  DONOR_REVIEW_OFFICER: [
-    PermissionCode.HOSPITAL_OPERATIONS_VIEW,
     PermissionCode.DONOR_REVIEW_MANAGE,
     PermissionCode.DONOR_REVIEW_APPROVE,
-    PermissionCode.GLOBAL_SEARCH_USE,
-  ],
-  WEBSITE_CONTENT_ADMIN: [
-    PermissionCode.WEBSITE_CONTENT_MANAGE,
-    PermissionCode.PLATFORM_ANALYTICS_VIEW,
-  ],
-  AUDITOR: [
-    PermissionCode.AUDIT_LOG_VIEW,
-    PermissionCode.AUDIT_LOG_EXPORT,
-    PermissionCode.REPORT_VIEW,
-    PermissionCode.SECURITY_MONITOR_VIEW,
-    PermissionCode.PLATFORM_ANALYTICS_VIEW,
+    PermissionCode.BLOOD_REQUEST_PROGRESS_UPDATE,
+    PermissionCode.DONOR_MATCH_VIEW,
     PermissionCode.GLOBAL_SEARCH_USE,
   ],
   DONOR: [],
 };
 
-export const ROLE_INHERITANCE: Partial<Record<Role, Role[]>> = {
-  SUPER_ADMIN: [Role.ADMIN],
-  HOSPITAL_ADMIN: [Role.HOSPITAL_STAFF],
-};
+export const ROLE_INHERITANCE: Partial<Record<Role, Role[]>> = {};
 
 export function expandRoles(role: Role): Role[] {
   const inherited = ROLE_INHERITANCE[role] ?? [];

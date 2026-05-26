@@ -15,18 +15,12 @@ import { DonorSearchDto } from './dto/donor-search.dto';
 import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
 import { ApproveDonorEligibilityDto } from './dto/approve-donor-eligibility.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
-import { CreateHospitalDepartmentDto } from './dto/create-hospital-department.dto';
-import { UpdateHospitalDepartmentDto } from './dto/update-hospital-department.dto';
-import { CreateHospitalStaffDto } from './dto/create-hospital-staff.dto';
-import { UpdateHospitalStaffDto } from './dto/update-hospital-staff.dto';
-import { UpdateHospitalStaffStatusDto } from './dto/update-hospital-staff-status.dto';
-import { HospitalStaffQueryDto } from './dto/hospital-staff-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
 @Roles(
-  Role.HOSPITAL_ADMIN,
   Role.HOSPITAL_STAFF,
-  Role.DONOR_REVIEW_OFFICER,
+  Role.HOSPITAL_STAFF,
+  Role.BLOOD_BANK_OFFICER,
   Role.ADMIN,
   Role.SUPER_ADMIN,
 )
@@ -83,65 +77,6 @@ export class HospitalsController {
     return this.hospitalsService.approveEligibility(user.id, donorId, dto.approved);
   }
 
-  @Get('departments')
-  @Permissions([PermissionCode.HOSPITAL_OPERATIONS_VIEW], 'all')
-  listDepartments(@CurrentUser() user: { id: string }) {
-    return this.hospitalsService.listDepartments(user.id);
-  }
-
-  @Post('departments')
-  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE], 'all')
-  createDepartment(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalDepartmentDto) {
-    return this.hospitalsService.createDepartment(user.id, dto);
-  }
-
-  @Patch('departments/:departmentId')
-  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE], 'all')
-  updateDepartment(
-    @CurrentUser() user: { id: string },
-    @Param('departmentId') departmentId: string,
-    @Body() dto: UpdateHospitalDepartmentDto,
-  ) {
-    return this.hospitalsService.updateDepartment(user.id, departmentId, dto);
-  }
-
-  @Get('staff')
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.HOSPITAL_OPERATIONS_VIEW], 'any')
-  listStaff(@CurrentUser() user: { id: string }, @Query() query: HospitalStaffQueryDto) {
-    return this.hospitalsService.listStaff(user.id, query);
-  }
-
-  @Post('staff')
-  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE], 'all')
-  createStaff(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalStaffDto) {
-    return this.hospitalsService.createStaff(user.id, dto);
-  }
-
-  @Patch('staff/:staffId')
-  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE], 'all')
-  updateStaff(
-    @CurrentUser() user: { id: string },
-    @Param('staffId') staffId: string,
-    @Body() dto: UpdateHospitalStaffDto,
-  ) {
-    return this.hospitalsService.updateStaff(user.id, staffId, dto);
-  }
-
-  @Patch('staff/:staffId/status')
-  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE], 'all')
-  updateStaffStatus(
-    @CurrentUser() user: { id: string },
-    @Param('staffId') staffId: string,
-    @Body() dto: UpdateHospitalStaffStatusDto,
-  ) {
-    return this.hospitalsService.updateStaffStatus(user.id, staffId, dto);
-  }
-
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_STAFF_MANAGE], 'any')
   @Get('admin')
@@ -174,3 +109,4 @@ export class HospitalsController {
     return this.hospitalsService.removeByAdmin(id, user.id);
   }
 }
+

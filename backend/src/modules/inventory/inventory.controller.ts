@@ -14,7 +14,7 @@ import { InventoryService } from './inventory.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.HOSPITAL_ADMIN, Role.HOSPITAL_STAFF, Role.INVENTORY_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
+@Roles(Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
 @Permissions([PermissionCode.INVENTORY_MANAGE, PermissionCode.INVENTORY_REPORT_VIEW], 'any')
 @Controller('inventory')
 export class InventoryController {
@@ -53,3 +53,4 @@ export class InventoryController {
     return this.inventoryService.createLog(id, user.id, user.role, dto);
   }
 }
+

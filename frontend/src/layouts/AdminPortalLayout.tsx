@@ -12,16 +12,16 @@ type AdminLink = {
 };
 
 const adminLinks: AdminLink[] = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
-  { to: '/admin/website-management', label: 'Website', icon: 'settings', roles: ['SUPER_ADMIN', 'ADMIN', 'WEBSITE_CONTENT_ADMIN'] },
+  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
+  { to: '/admin/website-management', label: 'Website', icon: 'settings', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
   { to: '/admin/live-map', label: 'Live Map', icon: 'map', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/donor-clinical-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=settings', label: 'Users', icon: 'users', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=donors', label: 'Donors', icon: 'heart', roles: ['SUPER_ADMIN', 'ADMIN'] },
   { to: '/admin/management?section=hospitals', label: 'Hospitals', icon: 'hospital', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=request-tracking', label: 'Requests', icon: 'alert', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
-  { to: '/admin/management?section=inventory-tracking', label: 'Inventory', icon: 'inventory', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
-  { to: '/admin/management?section=audit', label: 'Audit', icon: 'reports', roles: ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'] },
+  { to: '/admin/management?section=request-tracking', label: 'Requests', icon: 'alert', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
+  { to: '/admin/management?section=inventory-tracking', label: 'Inventory', icon: 'inventory', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
+  { to: '/admin/management?section=audit', label: 'Audit', icon: 'reports', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
 ];
 
 export function AdminPortalLayout() {
@@ -78,3 +78,4 @@ export function AdminPortalLayout() {
     </section>
   );
 }
+

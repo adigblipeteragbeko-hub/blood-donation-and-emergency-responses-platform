@@ -5,10 +5,6 @@ export function getRoleLandingPath(role?: Role | null) {
     return '/login';
   }
 
-  if (role === 'WEBSITE_CONTENT_ADMIN') {
-    return '/admin/website-management';
-  }
-
   if (ADMIN_PORTAL_ROLES.includes(role)) {
     return '/admin/dashboard';
   }
@@ -17,7 +13,7 @@ export function getRoleLandingPath(role?: Role | null) {
     return '/donor/dashboard';
   }
 
-  if (role === 'INVENTORY_OFFICER') {
+  if (role === 'BLOOD_BANK_OFFICER') {
     return '/hospital/inventory';
   }
 

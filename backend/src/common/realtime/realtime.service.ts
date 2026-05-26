@@ -12,10 +12,8 @@ export class RealtimeService {
   private readonly operationsRoles = [
     Role.SUPER_ADMIN,
     Role.ADMIN,
-    Role.HOSPITAL_ADMIN,
     Role.HOSPITAL_STAFF,
-    Role.DONOR_REVIEW_OFFICER,
-    Role.INVENTORY_OFFICER,
+    Role.BLOOD_BANK_OFFICER,
   ];
 
   async broadcastEmergencyRequest(
@@ -29,9 +27,6 @@ export class RealtimeService {
         where: { id: context.hospitalId },
         select: {
           userId: true,
-          staffMembers: {
-            select: { userId: true, user: { select: { isActive: true } } },
-          },
         },
       }),
       context.matchedDonorUserIds
@@ -45,10 +40,6 @@ export class RealtimeService {
     if (hospitalRecipients?.userId) {
       recipientIds.add(hospitalRecipients.userId);
     }
-
-    hospitalRecipients?.staffMembers
-      .filter((staff) => staff.user.isActive)
-      .forEach((staff) => recipientIds.add(staff.userId));
 
     matchedDonorsFromDb.forEach((donor) => recipientIds.add(donor.userId));
 
@@ -104,3 +95,4 @@ export class RealtimeService {
     };
   }
 }
+

@@ -22,12 +22,12 @@ type Role =
   | 'SUPER_ADMIN'
   | 'ADMIN'
   | 'DONOR'
-  | 'HOSPITAL_ADMIN'
   | 'HOSPITAL_STAFF'
-  | 'INVENTORY_OFFICER'
-  | 'DONOR_REVIEW_OFFICER'
-  | 'WEBSITE_CONTENT_ADMIN'
-  | 'AUDITOR';
+  | 'HOSPITAL_STAFF'
+  | 'BLOOD_BANK_OFFICER'
+  | 'BLOOD_BANK_OFFICER'
+  | 'ADMIN'
+  | 'ADMIN';
 
 type UserItem = {
   id: string;
@@ -66,13 +66,13 @@ const formatRole = (role: Role) =>
     .join(' ');
 const adminAssignableRoles: Role[] = [
   'ADMIN',
-  'WEBSITE_CONTENT_ADMIN',
-  'AUDITOR',
+  'ADMIN',
+  'ADMIN',
   'DONOR',
-  'HOSPITAL_ADMIN',
   'HOSPITAL_STAFF',
-  'INVENTORY_OFFICER',
-  'DONOR_REVIEW_OFFICER',
+  'HOSPITAL_STAFF',
+  'BLOOD_BANK_OFFICER',
+  'BLOOD_BANK_OFFICER',
 ];
 const bloodGroupLabel: Record<string, string> = {
   O_POS: 'O_POS (O+)',
@@ -312,13 +312,13 @@ export default function AdminManagementPage() {
       setError('Donor name fields must contain letters only.');
       return;
     }
-    if (accountRole === 'HOSPITAL_ADMIN' && !nameRule.test(accountForm.contactName)) {
+    if (accountRole === 'HOSPITAL_STAFF' && !nameRule.test(accountForm.contactName)) {
       setError('Contact name must contain letters only.');
       return;
     }
 
     try {
-      if (['ADMIN', 'WEBSITE_CONTENT_ADMIN', 'AUDITOR'].includes(accountRole)) {
+      if (['ADMIN', 'ADMIN', 'ADMIN'].includes(accountRole)) {
         await api.post('/users', {
           email: accountForm.email,
           password: accountForm.password,
@@ -341,7 +341,7 @@ export default function AdminManagementPage() {
         });
       }
 
-      if (accountRole === 'HOSPITAL_ADMIN') {
+      if (accountRole === 'HOSPITAL_STAFF') {
         await api.post('/hospitals/admin', {
           email: accountForm.email,
           password: accountForm.password,
@@ -601,10 +601,10 @@ export default function AdminManagementPage() {
               onChange={(e) => setAccountRole(e.target.value as Role)}
             >
               <option value="DONOR">Donor</option>
-              <option value="HOSPITAL_ADMIN">Hospital Admin</option>
+              <option value="HOSPITAL_STAFF">Hospital Admin</option>
               <option value="ADMIN">Admin</option>
-              <option value="WEBSITE_CONTENT_ADMIN">Website Content Admin</option>
-              <option value="AUDITOR">Auditor</option>
+              <option value="ADMIN">Website Content Admin</option>
+              <option value="ADMIN">ADMIN</option>
             </select>
           </label>
 
@@ -662,7 +662,7 @@ export default function AdminManagementPage() {
           </div>
         ) : null}
 
-        {accountRole === 'HOSPITAL_ADMIN' ? (
+        {accountRole === 'HOSPITAL_STAFF' ? (
           <div className="grid gap-3 md:grid-cols-3">
             <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
@@ -1098,5 +1098,6 @@ export default function AdminManagementPage() {
     </section>
   );
 }
+
 
 

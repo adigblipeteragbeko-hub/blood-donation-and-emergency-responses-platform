@@ -9,8 +9,8 @@ import { expandRoles } from '../../../common/rbac/permission-matrix';
 const AUDIT_SENSITIVE_ROLES = new Set<Role>([
   Role.ADMIN,
   Role.SUPER_ADMIN,
-  Role.AUDITOR,
-  Role.WEBSITE_CONTENT_ADMIN,
+  Role.ADMIN,
+  Role.ADMIN,
 ]);
 
 @Injectable()
@@ -64,3 +64,4 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 }
+

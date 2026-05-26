@@ -10,10 +10,10 @@ export type DepartmentType =
   | 'OTHER';
 
 export type StaffRole =
-  | 'HOSPITAL_ADMIN'
   | 'HOSPITAL_STAFF'
-  | 'INVENTORY_OFFICER'
-  | 'DONOR_REVIEW_OFFICER';
+  | 'HOSPITAL_STAFF'
+  | 'BLOOD_BANK_OFFICER'
+  | 'BLOOD_BANK_OFFICER';
 
 export type StaffAccountStatus = 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED' | 'INACTIVE';
 
@@ -130,3 +130,4 @@ export async function updateHospitalStaffStatus(
   const { data } = await api.patch(`/hospitals/staff/${id}/status`, payload);
   return unwrap<HospitalStaffItem>(data);
 }
+

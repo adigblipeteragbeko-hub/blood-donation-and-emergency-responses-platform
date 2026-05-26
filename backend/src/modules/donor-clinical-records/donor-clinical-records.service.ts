@@ -13,9 +13,8 @@ import {
 } from './dto/donor-clinical-record.dto';
 
 const STAFF_ROLES = new Set<Role>([
-  Role.DONOR_REVIEW_OFFICER,
+  Role.BLOOD_BANK_OFFICER,
   Role.HOSPITAL_STAFF,
-  Role.HOSPITAL_ADMIN,
   Role.SUPER_ADMIN,
   Role.ADMIN,
 ]);
@@ -51,10 +50,14 @@ export class DonorClinicalRecordsService {
     if (!STAFF_ROLES.has(user.role)) throw new ForbiddenException('Clinical review access is restricted.');
     if (!recordId || PLATFORM_REVIEW_ROLES.includes(user.role)) return;
 
-    const staff = await this.prisma.staffProfile.findUnique({ where: { userId: user.id } });
-    if (!staff) return;
-    const record = await this.prisma.donorClinicalRecord.findUnique({ where: { id: recordId }, select: { selectedHospitalId: true } });
-    if (record?.selectedHospitalId && record.selectedHospitalId !== staff.hospitalId) {
+    const record = await this.prisma.donorClinicalRecord.findUnique({
+      where: { id: recordId },
+      select: {
+        selectedHospitalId: true,
+        selectedHospital: { select: { userId: true } },
+      },
+    });
+    if (record?.selectedHospitalId && record.selectedHospital?.userId !== user.id) {
       throw new ForbiddenException('You can only review records submitted to your hospital.');
     }
   }
@@ -257,10 +260,11 @@ export class DonorClinicalRecordsService {
 
   async reviewQueue(query: ReviewQueueQueryDto, user: { id: string; role: Role }) {
     await this.assertStaffAccess(user);
-    const staff = await this.prisma.staffProfile.findUnique({ where: { userId: user.id } });
     const where: any = {};
     if (query.status) where.status = query.status;
-    if (staff && !PLATFORM_REVIEW_ROLES.includes(user.role)) where.selectedHospitalId = staff.hospitalId;
+    if (!PLATFORM_REVIEW_ROLES.includes(user.role)) {
+      where.selectedHospital = { userId: user.id };
+    }
     if (query.search) {
       where.OR = [
         { firstName: { contains: query.search, mode: 'insensitive' } },
@@ -388,3 +392,4 @@ export class DonorClinicalRecordsService {
     return lines.join('\n');
   }
 }
+
