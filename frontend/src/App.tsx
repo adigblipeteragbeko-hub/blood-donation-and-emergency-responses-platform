@@ -44,7 +44,6 @@ const HospitalAppointmentsPage = lazy(() => import('./pages/HospitalAppointments
 const HospitalNotificationsPage = lazy(() => import('./pages/HospitalNotificationsPage'));
 const HospitalReportsPage = lazy(() => import('./pages/HospitalReportsPage'));
 const HospitalEmergencyRequestsPage = lazy(() => import('./pages/HospitalEmergencyRequestsPage'));
-const HospitalStaffManagementPage = lazy(() => import('./pages/HospitalStaffManagementPage'));
 const HospitalProfilePage = lazy(() => import('./pages/HospitalProfilePage'));
 const HospitalSettingsPage = lazy(() => import('./pages/HospitalSettingsPage'));
 const HospitalSupportPage = lazy(() => import('./pages/HospitalSupportPage'));
@@ -152,7 +151,6 @@ function App() {
             <Route path="notifications" element={<HospitalNotificationsPage />} />
             <Route path="reports" element={<HospitalReportsPage />} />
             <Route path="emergency-requests" element={<HospitalEmergencyRequestsPage />} />
-            <Route path="staff" element={<HospitalStaffManagementPage />} />
             <Route path="profile" element={<HospitalProfilePage />} />
             <Route path="settings" element={<HospitalSettingsPage />} />
             <Route path="support" element={<HospitalSupportPage />} />

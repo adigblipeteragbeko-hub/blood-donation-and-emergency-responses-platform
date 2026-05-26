@@ -11,24 +11,23 @@ type PortalLink = {
 };
 
 const coreLinks: PortalLink[] = [
-  { to: '/hospital/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF'] },
-  { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/appointments', label: 'Appointments', icon: 'clock', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/notifications', label: 'Notifications', icon: 'notification', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_STAFF'] },
+  { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/appointments', label: 'Appointments', icon: 'clock', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/notifications', label: 'Notifications', icon: 'notification', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
   { to: '/hospital/reports', label: 'Reports', icon: 'reports', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
 ];
 
 const moreLinks: PortalLink[] = [
-  { to: '/hospital/emergency-requests', label: 'Emergency', icon: 'alert', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF'] },
-  { to: '/hospital/staff', label: 'Staff', icon: 'users', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/profile', label: 'Profile', icon: 'hospital', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF'] },
+  { to: '/hospital/emergency-requests', label: 'Emergency', icon: 'alert', roles: ['HOSPITAL_STAFF'] },
+  { to: '/hospital/profile', label: 'Profile', icon: 'hospital', roles: ['HOSPITAL_STAFF'] },
   { to: '/hospital/settings', label: 'Settings', icon: 'settings', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/support', label: 'Support', icon: 'notification', roles: ['HOSPITAL_STAFF', 'HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/support', label: 'Support', icon: 'notification', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
 ];
 
 function linkClass(isActive: boolean) {
