@@ -4,7 +4,6 @@ import { AuditService } from '../../common/audit/audit.service';
 import { ActivityService } from '../../common/activity/activity.service';
 import { PrismaService } from '../../prisma.service';
 import {
-  DonationOutcomeDto,
   HealthAnswerDto,
   OfficeUseDto,
   ReviewQueueQueryDto,
@@ -18,6 +17,7 @@ const STAFF_ROLES = new Set<Role>([
   Role.SUPER_ADMIN,
   Role.ADMIN,
 ]);
+
 const PLATFORM_REVIEW_ROLES: Role[] = [Role.ADMIN, Role.SUPER_ADMIN];
 
 const RISK_YES_KEYS = new Set([
@@ -32,8 +32,10 @@ export class DonorClinicalRecordsService {
     private readonly activity: ActivityService,
   ) {}
 
-  private date(value?: string) {
-    return value ? new Date(value) : undefined;
+  private date(value?: string | null) {
+    if (!value) return undefined;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
   }
 
   private json(value: unknown) {
@@ -65,7 +67,7 @@ export class DonorClinicalRecordsService {
   private async snapshot(recordId: string, actorUserId: string | undefined, reason: string) {
     const record = await this.prisma.donorClinicalRecord.findUnique({
       where: { id: recordId },
-      include: { healthAnswers: true, clinicalReview: true, donationOutcome: true },
+      include: { healthAnswers: true, clinicalReview: true },
     });
     if (!record) return;
     await this.prisma.donorClinicalFormVersion.create({
@@ -100,12 +102,12 @@ export class DonorClinicalRecordsService {
   private recordPayload(dto: UpsertDonorClinicalDraftDto) {
     return {
       selectedHospitalId: dto.selectedHospitalId,
-      formDate: this.date(dto.formDate),
+      formDate: this.date(dto.formDate) ?? new Date(),
       venue: dto.venue,
       title: dto.title,
       firstName: dto.firstName,
+      otherNames: dto.otherNames,
       lastName: dto.lastName,
-      callingName: dto.callingName,
       dateOfBirth: this.date(dto.dateOfBirth),
       sex: dto.sex,
       areaOfResidence: dto.areaOfResidence,
@@ -119,12 +121,13 @@ export class DonorClinicalRecordsService {
       doNotContactForDonation: dto.doNotContactForDonation ?? false,
       donorType: dto.donorType ?? 'VOLUNTARY',
       hasDonatedBefore: dto.hasDonatedBefore,
-      lastDonationDate: this.date(dto.lastDonationDate),
-      numberOfVoluntaryDonations: dto.numberOfVoluntaryDonations ?? 0,
+      lastDonationDate: dto.hasDonatedBefore === false ? null : this.date(dto.lastDonationDate),
+      numberOfVoluntaryDonations: dto.hasDonatedBefore === false ? 0 : dto.numberOfVoluntaryDonations ?? 0,
       numberOfReplacementDonations: dto.numberOfReplacementDonations ?? 0,
-      donorCardNumber: dto.donorCardNumber,
+      donorCardNumber: dto.hasDonatedBefore === false ? '' : dto.donorCardNumber,
       patientName: dto.patientName,
       patientHospital: dto.patientHospital,
+      requestReference: dto.requestReference?.trim() || null,
       ward: dto.ward,
       relationshipToPatient: dto.relationshipToPatient,
       clerkingOfficerName: dto.clerkingOfficerName,
@@ -134,10 +137,7 @@ export class DonorClinicalRecordsService {
       contactConsent: dto.contactConsent ?? false,
       staffEligibilityConsent: dto.staffEligibilityConsent ?? false,
       dataUseConsent: dto.dataUseConsent ?? false,
-      donorSignature: dto.donorSignature,
       declarationDate: this.date(dto.declarationDate),
-      counsellorName: dto.counsellorName,
-      counsellorSignature: dto.counsellorSignature,
     };
   }
 
@@ -155,7 +155,6 @@ export class DonorClinicalRecordsService {
     reviewer: { select: { id: true, email: true, role: true } },
     healthAnswers: { orderBy: { questionKey: 'asc' as const } },
     clinicalReview: true,
-    donationOutcome: true,
     auditTrails: { orderBy: { createdAt: 'desc' as const }, take: 20, include: { actor: { select: { email: true, role: true } } } },
   };
 
@@ -207,11 +206,26 @@ export class DonorClinicalRecordsService {
   }
 
   private validateSubmission(record: any) {
-    const required = ['selectedHospitalId', 'firstName', 'lastName', 'dateOfBirth', 'sex', 'phoneNumber', 'email'];
+    const required = ['selectedHospitalId', 'firstName', 'lastName', 'dateOfBirth', 'sex', 'areaOfResidence', 'idType', 'idNumber', 'phoneNumber', 'email'];
     const missing = required.filter((key) => !record[key]);
     if (missing.length) throw new BadRequestException(`Missing required clinical fields: ${missing.join(', ')}`);
-    if (!record.declarationConfirmed || !record.testingConsent || !record.staffEligibilityConsent || !record.dataUseConsent) {
+    if (!record.declarationConfirmed || !record.testingConsent || !record.contactConsent || !record.staffEligibilityConsent) {
       throw new BadRequestException('All required donor declaration confirmations must be accepted.');
+    }
+    if (record.hasDonatedBefore) {
+      if (!record.lastDonationDate) {
+        throw new BadRequestException('Please provide your last donation date.');
+      }
+      if (Number(record.numberOfVoluntaryDonations ?? 0) <= 0) {
+        throw new BadRequestException('Please enter total previous donations.');
+      }
+    }
+    if (record.donorType === 'REPLACEMENT_FAMILY') {
+      const replacementRequired = ['patientName', 'requestReference', 'patientHospital', 'relationshipToPatient'];
+      const missingReplacement = replacementRequired.filter((key) => !record[key]);
+      if (missingReplacement.length) {
+        throw new BadRequestException(`Missing replacement donor fields: ${missingReplacement.join(', ')}`);
+      }
     }
     if (!record.healthAnswers || record.healthAnswers.length < 22) {
       throw new BadRequestException('All 22 health questionnaire questions must be answered.');
@@ -226,13 +240,30 @@ export class DonorClinicalRecordsService {
     if (!record || record.donorId !== donor.id) throw new NotFoundException('Clinical record not found');
     if (record.status !== DonorClinicalStatus.DRAFT) throw new BadRequestException('Only draft records can be submitted.');
     this.validateSubmission(record);
+    if (record.donorType === 'REPLACEMENT_FAMILY' && record.requestReference) {
+      const request = await this.prisma.bloodRequest.findUnique({
+        where: { requestReference: record.requestReference },
+        select: { id: true },
+      });
+      if (!request) {
+        throw new BadRequestException('Request Reference was not found. Enter a valid BDR reference.');
+      }
+    }
 
     const updated = await this.prisma.donorClinicalRecord.update({
       where: { id },
       data: { status: DonorClinicalStatus.SUBMITTED, isLocked: true, submittedAt: new Date() },
     });
     await this.prisma.donor.update({ where: { id: donor.id }, data: { eligibilityStatus: false, availabilityStatus: false } });
-    await this.clinicalAudit(id, userId, 'DONOR_CLINICAL_SUBMITTED', 'Donor submitted National Blood Service style clinical record.', record, updated);
+    const donorReference = donor.donorNumber ?? donor.id;
+    await this.clinicalAudit(
+      id,
+      userId,
+      'DONOR_CLINICAL_SUBMITTED',
+      `Donor ${donorReference} submitted eligibility declaration at ${updated.submittedAt?.toISOString()}.`,
+      record,
+      updated,
+    );
     await this.activity.log({
       actorUserId: userId,
       actorName: donor.fullName,
@@ -255,7 +286,18 @@ export class DonorClinicalRecordsService {
       orderBy: { createdAt: 'desc' },
       include: this.includeAll,
     });
-    return { items: records, latest: records[0] ?? null };
+    return {
+      items: records,
+      latest: records[0] ?? null,
+      donorProfile: {
+        firstName: donor.firstName,
+        otherNames: donor.otherNames,
+        surname: donor.surname,
+        fullName: donor.fullName,
+        email: donor.user.email,
+        phone: donor.phone,
+      },
+    };
   }
 
   async reviewQueue(query: ReviewQueueQueryDto, user: { id: string; role: Role }) {
@@ -268,6 +310,7 @@ export class DonorClinicalRecordsService {
     if (query.search) {
       where.OR = [
         { firstName: { contains: query.search, mode: 'insensitive' } },
+        { otherNames: { contains: query.search, mode: 'insensitive' } },
         { lastName: { contains: query.search, mode: 'insensitive' } },
         { donor: { fullName: { contains: query.search, mode: 'insensitive' } } },
         { donor: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
@@ -327,48 +370,37 @@ export class DonorClinicalRecordsService {
             ? DonorClinicalStatus.REJECTED
             : DonorClinicalStatus.OFFICE_USE_COMPLETED;
 
+    const { confirmedBloodGroup, ...clinicalReviewDto } = dto;
+    if (!dto.nurseName?.trim()) {
+      throw new BadRequestException('Please provide the nurse name before completing Office Use.');
+    }
+    if (nextStatus === DonorClinicalStatus.APPROVED && (confirmedBloodGroup ?? existing.donor.bloodGroup) === 'UNKNOWN') {
+      throw new BadRequestException('Confirm the donor blood group before approving eligibility.');
+    }
+
     await this.prisma.donorClinicalReview.upsert({
       where: { clinicalRecordId: id },
-      update: { ...dto, reviewedById: user.id, reviewedAt: new Date() } as any,
-      create: { clinicalRecordId: id, ...dto, reviewedById: user.id, reviewedAt: new Date() } as any,
+      update: { ...clinicalReviewDto, reviewedById: user.id, reviewedAt: new Date() } as any,
+      create: { clinicalRecordId: id, ...clinicalReviewDto, reviewedById: user.id, reviewedAt: new Date() } as any,
     });
     const updated = await this.prisma.donorClinicalRecord.update({
       where: { id },
-      data: { status: nextStatus, reviewerId: user.id, officeCompletedAt: new Date(), finalDecisionAt: new Date() },
+      data: {
+        status: nextStatus,
+        reviewerId: user.id,
+        officeCompletedAt: new Date(),
+        finalDecisionAt: new Date(),
+      },
     });
     await this.prisma.donor.update({
       where: { id: existing.donorId },
-      data: { eligibilityStatus: nextStatus === DonorClinicalStatus.APPROVED, availabilityStatus: false },
+      data: {
+        ...(confirmedBloodGroup ? { bloodGroup: confirmedBloodGroup } : {}),
+        eligibilityStatus: nextStatus === DonorClinicalStatus.APPROVED,
+        availabilityStatus: false,
+      },
     });
     await this.clinicalAudit(id, user.id, 'DONOR_CLINICAL_OFFICE_USE_COMPLETED', `Office-use screening completed with ${nextStatus}.`, existing, dto);
-    return this.getById(id, user);
-  }
-
-  async donationOutcome(id: string, dto: DonationOutcomeDto, user: { id: string; role: Role }) {
-    await this.assertStaffAccess(user, id);
-    const existing = await this.prisma.donorClinicalRecord.findUnique({ where: { id }, include: { donor: true, selectedHospital: true } });
-    if (!existing) throw new NotFoundException('Clinical record not found');
-    if (existing.status !== DonorClinicalStatus.APPROVED) throw new BadRequestException('Donation outcome can only be recorded after approval.');
-    await this.prisma.donorClinicalDonationOutcome.upsert({
-      where: { clinicalRecordId: id },
-      update: { ...dto, bleedStartTime: this.date(dto.bleedStartTime), bleedEndTime: this.date(dto.bleedEndTime) } as any,
-      create: { clinicalRecordId: id, ...dto, bleedStartTime: this.date(dto.bleedStartTime), bleedEndTime: this.date(dto.bleedEndTime) } as any,
-    });
-    if (dto.outcomeOfPhlebotomy === 'SUCCESSFUL') {
-      await this.prisma.donation.create({
-        data: {
-          donorId: existing.donorId,
-          hospitalId: existing.selectedHospitalId,
-          bloodGroup: existing.donor.bloodGroup,
-          donatedAt: dto.bleedEndTime ? new Date(dto.bleedEndTime) : new Date(),
-          unitsDonated: 1,
-          location: existing.selectedHospital?.location ?? existing.venue ?? 'Donation center',
-          screeningResult: 'Approved clinical record donation',
-          notes: dto.donationNumber,
-        },
-      });
-    }
-    await this.clinicalAudit(id, user.id, 'DONOR_CLINICAL_DONATION_OUTCOME_RECORDED', 'Donation outcome section recorded.', existing, dto);
     return this.getById(id, user);
   }
 
@@ -378,7 +410,7 @@ export class DonorClinicalRecordsService {
       'NATIONAL BLOOD SERVICE GHANA - DONOR CLINICAL RECORD',
       `Record ID: ${record.id}`,
       `Status: ${record.status}`,
-      `Donor: ${record.firstName ?? ''} ${record.lastName ?? ''}`,
+      `Donor: ${[record.lastName, record.firstName, record.otherNames].filter(Boolean).join(' ') || record.donor.fullName}`,
       `Email: ${record.email ?? record.donor.user.email}`,
       `Hospital: ${record.selectedHospital?.hospitalName ?? 'Not selected'}`,
       '',
@@ -386,10 +418,13 @@ export class DonorClinicalRecordsService {
       ...record.healthAnswers.map((a) => `${a.questionKey}. ${a.questionText} - ${a.answer ? 'YES' : 'NO'} ${a.details ? `(${a.details})` : ''}`),
       '',
       `Review Notes: ${record.reviewNotes ?? ''}`,
-      `Office Use Outcome: ${record.clinicalReview?.outcomeOfScreening ?? ''}`,
-      `Donation Number: ${record.donationOutcome?.donationNumber ?? ''}`,
+      `Office Use Screening Outcome: ${record.clinicalReview?.outcomeOfScreening ?? ''}`,
+      `Qualifies: ${record.clinicalReview?.qualifiesToDonate ?? ''}`,
+      `Nurse Name: ${record.clinicalReview?.nurseName ?? ''}`,
+      `Temporary Deferral Duration: ${record.clinicalReview?.temporaryDeferralDuration ?? ''}`,
     ];
     return lines.join('\n');
   }
 }
+
 

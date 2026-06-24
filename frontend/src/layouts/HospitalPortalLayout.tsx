@@ -15,6 +15,7 @@ const coreLinks: PortalLink[] = [
   { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
   { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_STAFF'] },
   { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/request-history', label: 'Request History', icon: 'reports', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
   { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
   { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
   { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },

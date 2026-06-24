@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { bloodGroups } from '../constants/blood-groups';
+import { bloodGroups, confirmedBloodGroups } from '../constants/blood-groups';
 import {
   DashboardOverview,
   getAdminActivityFeed,
@@ -757,7 +757,7 @@ export default function AdminDashboardPage() {
             className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700"
           >
             <option value="">All blood types</option>
-            {bloodGroups.map((group) => (
+            {confirmedBloodGroups.map((group) => (
               <option key={group.value} value={group.value}>
                 {group.label}
               </option>
@@ -802,7 +802,7 @@ export default function AdminDashboardPage() {
           <input
             value={emergencyFilters.search}
             onChange={(event) => setEmergencyFilters((current) => ({ ...current, search: event.target.value, skip: 0 }))}
-            placeholder="Search patient code, location, hospital"
+            placeholder="Search request reference, location, hospital"
             className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 placeholder:text-slate-400"
           />
         </div>
@@ -1311,7 +1311,7 @@ export default function AdminDashboardPage() {
                 searchResults.requests.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-3">
                     <p className="font-semibold text-slate-900">{bloodGroupLabel[item.bloodGroup] ?? item.bloodGroup} • {item.hospital.hospitalName}</p>
-                    <p className="text-sm text-slate-500">{item.patientName ?? item.patientCode ?? 'Unnamed case'} • {item.location}</p>
+                    <p className="text-sm text-slate-500">{item.requestReference ?? item.patientName ?? 'Request'} • {item.location}</p>
                   </div>
                 ))
               ) : (
@@ -1322,7 +1322,8 @@ export default function AdminDashboardPage() {
               {searchResults.appointments.length ? (
                 searchResults.appointments.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <p className="font-semibold text-slate-900">{item.donor.fullName}</p>
+                    <p className="font-semibold text-slate-900">{item.appointmentReference}</p>
+                    <p className="text-sm text-slate-700">{item.donor.fullName}</p>
                     <p className="text-sm text-slate-500">{item.hospital.hospitalName} • {formatDateTime(item.scheduledAt)}</p>
                   </div>
                 ))

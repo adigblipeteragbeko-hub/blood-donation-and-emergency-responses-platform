@@ -13,22 +13,24 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-@Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  @Permissions([PermissionCode.PLATFORM_ANALYTICS_VIEW], 'any')
   findAll(@Query() query: PaginationQueryDto) {
     return this.usersService.findAll(query);
   }
 
   @Post()
+  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
   create(@Body() dto: CreateUserAdminDto, @CurrentUser() user: { id: string }) {
     return this.usersService.create(dto, user.id);
   }
 
   @Patch(':id')
+  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
@@ -38,6 +40,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @Permissions([PermissionCode.PLATFORM_ANALYTICS_VIEW, PermissionCode.RBAC_MANAGE], 'any')
   remove(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.usersService.remove(id, user.id);
   }

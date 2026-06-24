@@ -23,11 +23,24 @@ export type DonorClinicalRecord = {
   id: string;
   status: ClinicalStatus;
   selectedHospitalId?: string | null;
+  venue?: string | null;
   firstName?: string | null;
+  otherNames?: string | null;
   lastName?: string | null;
   email?: string | null;
   phoneNumber?: string | null;
   areaOfResidence?: string | null;
+  addressOrWorkplace?: string | null;
+  idType?: string | null;
+  idNumber?: string | null;
+  donorType?: string | null;
+  hasDonatedBefore?: boolean | null;
+  lastDonationDate?: string | null;
+  donorCardNumber?: string | null;
+  patientName?: string | null;
+  patientHospital?: string | null;
+  requestReference?: string | null;
+  relationshipToPatient?: string | null;
   dateOfBirth?: string | null;
   sex?: string | null;
   donorRiskFlag: boolean;
@@ -40,17 +53,39 @@ export type DonorClinicalRecord = {
   officeCompletedAt?: string | null;
   finalDecisionAt?: string | null;
   healthAnswers?: HealthAnswer[];
-  donor?: { id: string; fullName: string; bloodGroup: string; location: string; user?: { email: string } };
+  donor?: {
+    id: string;
+    donorNumber?: string | null;
+    fullName: string;
+    firstName?: string | null;
+    otherNames?: string | null;
+    surname?: string | null;
+    bloodGroup: string;
+    location: string;
+    lastDonationDate?: string | null;
+    nextEligibilityDate?: string | null;
+    user?: { email: string };
+  };
   selectedHospital?: { id: string; hospitalName: string; location: string } | null;
   clinicalReview?: any;
-  donationOutcome?: any;
   auditTrails?: Array<{ id: string; action: string; description?: string; createdAt: string; actor?: { email: string; role: string } | null }>;
 };
 
 export type ClinicalDraftPayload = Record<string, unknown> & { healthAnswers?: HealthAnswer[] };
 
 export async function getMyClinicalRecords() {
-  return unwrap<{ items: DonorClinicalRecord[]; latest: DonorClinicalRecord | null }>(await api.get('/donor-clinical-records/me'));
+  return unwrap<{
+    items: DonorClinicalRecord[];
+    latest: DonorClinicalRecord | null;
+    donorProfile?: {
+      firstName?: string | null;
+      otherNames?: string | null;
+      surname?: string | null;
+      fullName?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    };
+  }>(await api.get('/donor-clinical-records/me'));
 }
 
 export async function saveClinicalDraft(payload: ClinicalDraftPayload, id?: string) {
@@ -78,10 +113,6 @@ export async function updateOfficeUse(id: string, payload: Record<string, unknow
   return unwrap<DonorClinicalRecord>(await api.patch(`/donor-clinical-records/${id}/office-use`, payload));
 }
 
-export async function updateDonationOutcome(id: string, payload: Record<string, unknown>) {
-  return unwrap<DonorClinicalRecord>(await api.patch(`/donor-clinical-records/${id}/donation-outcome`, payload));
-}
-
 export async function downloadClinicalRecordExport(id: string) {
   const response = await api.get(`/donor-clinical-records/${id}/pdf`, { responseType: 'blob' });
   const url = window.URL.createObjectURL(response.data);
@@ -93,3 +124,4 @@ export async function downloadClinicalRecordExport(id: string) {
   link.remove();
   window.URL.revokeObjectURL(url);
 }
+

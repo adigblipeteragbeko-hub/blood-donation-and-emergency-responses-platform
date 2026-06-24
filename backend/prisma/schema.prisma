@@ -44,6 +44,7 @@ enum PermissionCode {
 }
 
 enum BloodGroup {
+  UNKNOWN
   O_POS
   O_NEG
   A_POS
@@ -57,6 +58,12 @@ enum BloodGroup {
 enum RequestType {
   STANDARD
   EMERGENCY
+}
+
+enum RequestSource {
+  DONORS_ONLY
+  HOSPITALS_ONLY
+  DONORS_AND_HOSPITALS
 }
 
 enum RequestStatus {
@@ -82,6 +89,13 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum AppointmentType {
+  BLOOD_DONATION
+  ELIGIBILITY_SCREENING
+  FOLLOW_UP
+  EMERGENCY_DONATION
+}
+
 enum RequestProgressStatus {
   PENDING
   MATCHED
@@ -102,6 +116,25 @@ enum DonorResponseStatus {
   ACCEPTED
   DECLINED
   DONATED
+}
+
+enum HospitalRequestResponseType {
+  OFFERED
+  CANNOT_FULFILL
+}
+
+enum HospitalRequestResponseStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum HospitalBloodTransferStatus {
+  ACCEPTED
+  DISPATCHED
+  RECEIVED
+  CANCELLED
 }
 
 enum NotificationType {
@@ -179,47 +212,56 @@ enum SecurityEventSeverity {
   CRITICAL
 }
 
+enum DonorProfileVisibility {
+  PRIVATE
+  PUBLIC
+}
+
 model User {
-  id                      String                   @id @default(cuid())
-  email                   String                   @unique
-  passwordHash            String
-  role                    Role
-  emailVerified           Boolean                  @default(false)
-  isActive                Boolean                  @default(true)
-  failedLoginCount        Int                      @default(0)
-  lockedUntil             DateTime?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  donorProfile            Donor?
-  hospitalProfile         Hospital?
-  refreshTokens           RefreshToken[]
-  sessionLogs             SessionLog[]
-  emailVerificationTokens EmailVerificationToken[]
-  notifications           Notification[]
+  id                       String                    @id @default(cuid())
+  email                    String                    @unique
+  passwordHash             String
+  role                     Role
+  emailVerified            Boolean                   @default(false)
+  isActive                 Boolean                   @default(true)
+  failedLoginCount         Int                       @default(0)
+  lockedUntil              DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  donorProfile             Donor?
+  hospitalProfile          Hospital?
+  refreshTokens            RefreshToken[]
+  sessionLogs              SessionLog[]
+  emailVerificationTokens  EmailVerificationToken[]
+  notifications            Notification[]
   websiteAnnouncementReads WebsiteAnnouncementRead[]
-  auditLogs               AuditLog[]               @relation("AuditActor")
-  bloodRequestUpdates     BloodRequestUpdate[]     @relation("RequestUpdateActor")
-  inventoryUpdates        InventoryItem[]          @relation("InventoryUpdatedBy")
-  inventoryLogs           InventoryLog[]           @relation("InventoryLogActor")
-  donorResponses          DonorResponse[]
-  activityLogs            ActivityLog[]            @relation("ActivityActor")
-  securityEvents          SecurityEvent[]          @relation("SecurityActor")
-  donorEligibilityReviews DonorEligibilityReview[] @relation("DonorEligibilityReviewer")
+  auditLogs                AuditLog[]                @relation("AuditActor")
+  bloodRequestUpdates      BloodRequestUpdate[]      @relation("RequestUpdateActor")
+  inventoryUpdates         InventoryItem[]           @relation("InventoryUpdatedBy")
+  inventoryLogs            InventoryLog[]            @relation("InventoryLogActor")
+  donorResponses           DonorResponse[]
+  activityLogs             ActivityLog[]             @relation("ActivityActor")
+  securityEvents           SecurityEvent[]           @relation("SecurityActor")
+  donorEligibilityReviews  DonorEligibilityReview[]  @relation("DonorEligibilityReviewer")
   donorClinicalRecords     DonorClinicalRecord[]     @relation("DonorClinicalReviewer")
   donorClinicalAuditTrails DonorClinicalAuditTrail[] @relation("DonorClinicalAuditActor")
-  approvedHospitals       Hospital[]               @relation("HospitalApprovedBy")
-  rolePermissionOverrides UserPermissionOverride[]
+  approvedHospitals        Hospital[]                @relation("HospitalApprovedBy")
+  rolePermissionOverrides  UserPermissionOverride[]
 
   @@index([role])
   @@index([createdAt])
 }
 
 model Donor {
-  id                       String          @id @default(cuid())
-  userId                   String          @unique
-  donorNumber              String?         @unique
+  id                       String                   @id @default(cuid())
+  userId                   String                   @unique
+  donorNumber              String?                  @unique
   fullName                 String
+  firstName                String?
+  otherNames               String?
+  surname                  String?
   phone                    String?
+  alternativePhoneNumber   String?
   dateOfBirth              DateTime?
   bloodGroup               BloodGroup
   location                 String
@@ -232,104 +274,132 @@ model Donor {
   areaCommunity            String?
   city                     String?
   region                   String?
+  preferredHospitalId      String?
   lastLocationUpdateAt     DateTime?
-  locationSharingEnabled   Boolean         @default(false)
-  eligibilityStatus        Boolean         @default(true)
-  availabilityStatus       Boolean         @default(true)
+  locationSharingEnabled   Boolean                  @default(false)
+  eligibilityStatus        Boolean                  @default(true)
+  availabilityStatus       Boolean                  @default(true)
+  lastDonationDate         DateTime?
+  nextEligibilityDate      DateTime?
   emergencyContactName     String
   emergencyContactPhone    String
-  notificationEmailEnabled Boolean         @default(true)
-  notificationSmsEnabled   Boolean         @default(false)
-  createdAt                DateTime        @default(now())
-  updatedAt                DateTime        @updatedAt
-  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emergencyContactRelationship String?
+  notificationEmailEnabled Boolean                  @default(true)
+  notificationSmsEnabled   Boolean                  @default(false)
+  profileVisibility        DonorProfileVisibility   @default(PRIVATE)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  user                     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredHospital        Hospital?                @relation("DonorPreferredHospital", fields: [preferredHospitalId], references: [id], onDelete: SetNull)
   donationHistory          Donation[]
   appointments             Appointment[]
-  donorMatches             BloodRequest[]  @relation("MatchedDonors")
+  donorMatches             BloodRequest[]           @relation("MatchedDonors")
   donorResponses           DonorResponse[]
   eligibilityReviews       DonorEligibilityReview[]
   clinicalRecords          DonorClinicalRecord[]
 
-  @@index([bloodGroup])
-  @@index([location])
+    @@index([bloodGroup])
+    @@index([surname])
+    @@index([location])
   @@index([city])
   @@index([region])
   @@index([locationSharingEnabled])
   @@index([donorNumber])
+  @@index([nextEligibilityDate])
+  @@index([profileVisibility])
   @@index([latitude, longitude])
+  @@index([preferredHospitalId])
   @@index([createdAt])
 }
 
 model Hospital {
-  id               String          @id @default(cuid())
-  userId           String          @unique
-  hospitalName     String
-  registrationCode String          @unique
-  address          String
-  location         String
-  latitude         Float?
-  longitude        Float?
-  contactName      String
-  contactPhone     String
-  isApproved       Boolean         @default(true)
-  approvedAt       DateTime?
-  approvedById     String?
-  approvalNotes    String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  approvedBy       User?           @relation("HospitalApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  bloodRequests    BloodRequest[]
-  inventoryItems   InventoryItem[]
-  appointments     Appointment[]
-  donations        Donation[]
-  eligibilityReviews DonorEligibilityReview[]
+  id                   String                   @id @default(cuid())
+  userId               String                   @unique
+  hospitalName         String
+  registrationCode     String                   @unique
+  address              String
+  location             String
+  hospitalCode         String?                  @unique
+  city                 String
+  region               String
+  latitude             Float
+  longitude            Float
+  bloodBankAvailable   Boolean                  @default(true)
+  contactName          String
+  contactPhone         String
+  isApproved           Boolean                  @default(true)
+  approvedAt           DateTime?
+  approvedById         String?
+  approvalNotes        String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy           User?                    @relation("HospitalApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  bloodRequests        BloodRequest[]
+  inventoryItems       InventoryItem[]
+  appointments         Appointment[]
+  donations            Donation[]
+  hospitalResponses    HospitalBloodRequestResponse[]
+  bloodTransfersOut    HospitalBloodTransfer[]       @relation("SupplyingHospitalTransfers")
+  bloodTransfersIn     HospitalBloodTransfer[]       @relation("ReceivingHospitalTransfers")
+  eligibilityReviews   DonorEligibilityReview[]
   donorClinicalRecords DonorClinicalRecord[]
+  preferredByDonors    Donor[]                  @relation("DonorPreferredHospital")
 
   @@index([location])
   @@index([isApproved])
   @@index([latitude, longitude])
+  @@index([city])
+  @@index([region])
+  @@index([bloodBankAvailable])
   @@index([createdAt])
 }
 
 model BloodRequest {
-  id                     String                @id @default(cuid())
-  hospitalId             String
-  hospitalCenterName     String?
-  ward                   String?
-  patientName            String?
-  patientCode            String?
-  bloodGroup             BloodGroup
-  unitsNeeded            Int
-  type                   RequestType
-  priority               PriorityLevel         @default(MEDIUM)
-  status                 RequestStatus         @default(OPEN)
-  trackingStatus         RequestProgressStatus @default(PENDING)
-  location               String
-  emergencyLocation      String?
-  city                   String?
-  region                 String?
-  locationNotes          String?
-  latitude               Float?
-  longitude              Float?
-  notes                  String?
-  requestDate            DateTime              @default(now())
-  requiredBy             DateTime
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
-  hospital               Hospital              @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  matchedDonors          Donor[]               @relation("MatchedDonors")
-  notificationDispatches Notification[]
-  updates                BloodRequestUpdate[]
-  donorResponses         DonorResponse[]
-  appointments           Appointment[]
-  donations              Donation[]
+  id                       String                @id @default(cuid())
+  hospitalId               String
+  hospitalCenterName       String?
+  ward                     String?
+  patientName              String?
+  requestReference         String                @unique
+  hospitalPatientReference String?
+  patientCode              String?
+  bloodGroup               BloodGroup
+  unitsNeeded              Int
+  type                     RequestType
+  priority                 PriorityLevel         @default(MEDIUM)
+  requestSource            RequestSource         @default(DONORS_AND_HOSPITALS)
+  status                   RequestStatus         @default(OPEN)
+  trackingStatus           RequestProgressStatus @default(PENDING)
+  location                 String
+  emergencyLocation        String?
+  city                     String?
+  region                   String?
+  locationNotes            String?
+  latitude                 Float?
+  longitude                Float?
+  notes                    String?
+  requestDate              DateTime              @default(now())
+  requiredBy               DateTime
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  hospital                 Hospital              @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  matchedDonors            Donor[]               @relation("MatchedDonors")
+  notificationDispatches   Notification[]
+  updates                  BloodRequestUpdate[]
+  donorResponses           DonorResponse[]
+  hospitalResponses        HospitalBloodRequestResponse[]
+  hospitalTransfers        HospitalBloodTransfer[]
+  appointments             Appointment[]
+  donations                Donation[]
 
   @@index([status])
   @@index([hospitalId])
   @@index([location])
+  @@index([hospitalPatientReference])
   @@index([bloodGroup])
   @@index([priority])
+  @@index([requestSource])
   @@index([city])
   @@index([region])
   @@index([latitude, longitude])
@@ -337,19 +407,19 @@ model BloodRequest {
 }
 
 model InventoryItem {
-  id             String         @id @default(cuid())
-  hospitalId     String
-  bloodGroup     BloodGroup
-  availableUnits Int
-  expiringUnits  Int            @default(0)
-  lowThreshold   Int            @default(7)
-  criticalThreshold Int         @default(3)
-  updatedById    String?
-  lastUpdated    DateTime       @updatedAt
-  createdAt      DateTime       @default(now())
-  hospital       Hospital       @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  updatedBy      User?          @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  logs           InventoryLog[]
+  id                String         @id @default(cuid())
+  hospitalId        String
+  bloodGroup        BloodGroup
+  availableUnits    Int
+  expiringUnits     Int            @default(0)
+  lowThreshold      Int            @default(7)
+  criticalThreshold Int            @default(3)
+  updatedById       String?
+  lastUpdated       DateTime       @updatedAt
+  createdAt         DateTime       @default(now())
+  hospital          Hospital       @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  updatedBy         User?          @relation("InventoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  logs              InventoryLog[]
 
   @@unique([hospitalId, bloodGroup])
   @@index([hospitalId])
@@ -358,27 +428,40 @@ model InventoryItem {
 }
 
 model Appointment {
-  id             String            @id @default(cuid())
-  donorId        String
-  hospitalId     String
-  bloodRequestId String?
-  scheduledAt    DateTime
-  status         AppointmentStatus @default(SCHEDULED)
-  notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  donor          Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
-  hospital       Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  bloodRequest   BloodRequest?     @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
+  id                   String            @id @default(cuid())
+  appointmentReference String            @unique
+  donorId              String
+  hospitalId           String
+  bloodRequestId       String?
+  scheduledAt          DateTime
+  appointmentType      AppointmentType   @default(BLOOD_DONATION)
+  status               AppointmentStatus @default(SCHEDULED)
+  notes                String?
+  completedAt          DateTime?
+  unitsCollected       Int?
+  volumeCollectedMl    Int?
+  donationNumber       String?
+  donationNotes        String?
+  donationPostedAt     DateTime?
+  donationId           String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  donor                Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  hospital             Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  bloodRequest         BloodRequest?     @relation(fields: [bloodRequestId], references: [id], onDelete: SetNull)
 
   @@index([scheduledAt])
+  @@index([appointmentReference])
+  @@index([donationNumber])
   @@index([donorId])
   @@index([hospitalId])
+  @@index([donationPostedAt])
   @@index([createdAt])
 }
 
 model Donation {
   id              String        @id @default(cuid())
+  donationNumber  String?       @unique
   donorId         String
   hospitalId      String?
   bloodRequestId  String?
@@ -395,6 +478,7 @@ model Donation {
 
   @@index([donorId])
   @@index([hospitalId])
+  @@index([donationNumber])
   @@index([createdAt])
 }
 
@@ -478,19 +562,19 @@ model AuditLog {
 }
 
 model BloodRequestUpdate {
-  id             String                 @id @default(cuid())
-  bloodRequestId String
-  updatedById    String?
-  oldStatus      RequestProgressStatus?
-  newStatus      RequestProgressStatus
-  comment        String?
+  id                  String                 @id @default(cuid())
+  bloodRequestId      String
+  updatedById         String?
+  oldStatus           RequestProgressStatus?
+  newStatus           RequestProgressStatus
+  comment             String?
   transfusedByStaffId String?
   unitDin             String?
   patientEncounterId  String?
   overrideReason      String?
-  createdAt      DateTime               @default(now())
-  bloodRequest   BloodRequest           @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
-  updatedBy      User?                  @relation("RequestUpdateActor", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime               @default(now())
+  bloodRequest        BloodRequest           @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
+  updatedBy           User?                  @relation("RequestUpdateActor", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([bloodRequestId, createdAt])
   @@index([createdAt])
@@ -524,7 +608,7 @@ model DonorResponse {
   updatedAt      DateTime            @updatedAt
   bloodRequest   BloodRequest        @relation(fields: [bloodRequestId], references: [id], onDelete: Cascade)
   donor          Donor               @relation(fields: [donorId], references: [id], onDelete: Cascade)
-  User           User?               @relation(fields: [userId], references: [id])
+  User           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId         String?
 
   @@unique([bloodRequestId, donorId])
@@ -534,26 +618,80 @@ model DonorResponse {
   @@index([createdAt])
 }
 
+model HospitalBloodRequestResponse {
+  id                   String                        @id @default(cuid())
+  requestId            String
+  respondingHospitalId String
+  responseType         HospitalRequestResponseType
+  unitsOffered         Int?
+  bloodGroupOffered    BloodGroup?
+  note                 String?
+  status               HospitalRequestResponseStatus @default(PENDING)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  request              BloodRequest                  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  respondingHospital   Hospital                      @relation(fields: [respondingHospitalId], references: [id], onDelete: Cascade)
+  transfer             HospitalBloodTransfer?
+
+  @@unique([requestId, respondingHospitalId])
+  @@index([requestId])
+  @@index([respondingHospitalId])
+  @@index([responseType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model HospitalBloodTransfer {
+  id                    String                      @id @default(cuid())
+  requestId             String
+  responseId            String                      @unique
+  supplyingHospitalId   String
+  receivingHospitalId   String
+  bloodGroup            BloodGroup
+  units                 Int
+  dispatchedUnits       Int?
+  receivedUnits         Int?
+  status                HospitalBloodTransferStatus @default(ACCEPTED)
+  dispatchNote          String?
+  dispatchReference     String?
+  receivedNote          String?
+  receivedCondition     String?
+  dispatchedAt          DateTime?
+  receivedAt            DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  request               BloodRequest                @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  response              HospitalBloodRequestResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  supplyingHospital     Hospital                    @relation("SupplyingHospitalTransfers", fields: [supplyingHospitalId], references: [id], onDelete: Cascade)
+  receivingHospital     Hospital                    @relation("ReceivingHospitalTransfers", fields: [receivingHospitalId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([supplyingHospitalId])
+  @@index([receivingHospitalId])
+  @@index([status])
+  @@index([createdAt])
+}
+
 model DonorEligibilityReview {
-  id                  String            @id @default(cuid())
-  donorId             String
-  selectedHospitalId  String?
-  status              DonorReviewStatus @default(SUBMITTED)
-  reviewNotes         String?
-  officeUseNotes      String?
-  clinicalRiskFlag    Boolean           @default(false)
-  clinicalRiskNotes   String?
-  submittedAt         DateTime          @default(now())
-  hospitalReviewedAt  DateTime?
-  officeCompletedAt   DateTime?
-  approvedAt          DateTime?
-  rejectedAt          DateTime?
-  reviewerId          String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  donor               Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
-  selectedHospital    Hospital?         @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
-  reviewer            User?             @relation("DonorEligibilityReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  id                 String            @id @default(cuid())
+  donorId            String
+  selectedHospitalId String?
+  status             DonorReviewStatus @default(SUBMITTED)
+  reviewNotes        String?
+  officeUseNotes     String?
+  clinicalRiskFlag   Boolean           @default(false)
+  clinicalRiskNotes  String?
+  submittedAt        DateTime          @default(now())
+  hospitalReviewedAt DateTime?
+  officeCompletedAt  DateTime?
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  reviewerId         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  donor              Donor             @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  selectedHospital   Hospital?         @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
+  reviewer           User?             @relation("DonorEligibilityReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
 
   @@index([donorId])
   @@index([selectedHospitalId])
@@ -561,77 +699,77 @@ model DonorEligibilityReview {
   @@index([createdAt])
 }
 
-
 model DonorClinicalRecord {
-  id                         String              @id @default(cuid())
-  donorId                    String
-  selectedHospitalId         String?
-  reviewerId                 String?
-  status                     DonorClinicalStatus @default(DRAFT)
-  version                    Int                 @default(1)
-  isLocked                   Boolean             @default(false)
-  submittedAt                DateTime?
-  hospitalReviewedAt         DateTime?
-  officeCompletedAt          DateTime?
-  finalDecisionAt            DateTime?
+  id                 String              @id @default(cuid())
+  donorId            String
+  selectedHospitalId String?
+  reviewerId         String?
+  status             DonorClinicalStatus @default(DRAFT)
+  version            Int                 @default(1)
+  isLocked           Boolean             @default(false)
+  submittedAt        DateTime?
+  hospitalReviewedAt DateTime?
+  officeCompletedAt  DateTime?
+  finalDecisionAt    DateTime?
 
-  formDate                   DateTime?
-  venue                      String?
-  title                      String?
-  firstName                  String?
-  lastName                   String?
-  callingName                String?
-  dateOfBirth                DateTime?
-  sex                        String?
-  areaOfResidence            String?
-  addressOrWorkplace         String?
-  occupation                 String?
-  idType                     String?
-  idNumber                   String?
-  phoneNumber                String?
-  email                      String?
-  preferredContactMethod     String?
-  doNotContactForDonation    Boolean             @default(false)
+  formDate                DateTime?
+  venue                   String?
+  title                   String?
+  firstName               String?
+  otherNames              String?
+  lastName                String?
+  dateOfBirth             DateTime?
+  sex                     String?
+  areaOfResidence         String?
+  addressOrWorkplace      String?
+  occupation              String?
+  idType                  String?
+  idNumber                String?
+  phoneNumber             String?
+  email                   String?
+  preferredContactMethod  String?
+  doNotContactForDonation Boolean   @default(false)
 
-  donorType                  String?             @default("VOLUNTARY")
-  hasDonatedBefore           Boolean?
-  lastDonationDate           DateTime?
-  numberOfVoluntaryDonations Int                 @default(0)
-  numberOfReplacementDonations Int               @default(0)
-  donorCardNumber            String?
+  donorType                    String?   @default("VOLUNTARY")
+  hasDonatedBefore             Boolean?
+  lastDonationDate             DateTime?
+  numberOfVoluntaryDonations   Int       @default(0)
+  numberOfReplacementDonations Int       @default(0)
+  donorCardNumber              String?
 
-  patientName                String?
-  patientHospital            String?
-  ward                       String?
-  relationshipToPatient      String?
-  clerkingOfficerName        String?
-  clerkingOfficerSignature   String?
+  patientName              String?
+  patientHospital          String?
+  requestReference         String?
+  ward                     String?
+  relationshipToPatient    String?
+  clerkingOfficerName      String?
+  clerkingOfficerSignature String?
 
-  declarationConfirmed       Boolean             @default(false)
-  testingConsent             Boolean             @default(false)
-  contactConsent             Boolean             @default(false)
-  staffEligibilityConsent     Boolean             @default(false)
-  dataUseConsent             Boolean             @default(false)
-  donorSignature             String?
-  declarationDate            DateTime?
-  counsellorName             String?
-  counsellorSignature        String?
+  declarationConfirmed    Boolean   @default(false)
+  testingConsent          Boolean   @default(false)
+  contactConsent          Boolean   @default(false)
+  staffEligibilityConsent Boolean   @default(false)
+  dataUseConsent          Boolean   @default(false)
+  donorSignature          String?
+  declarationDate         DateTime?
+  counsellorName          String?
+  counsellorSignature     String?
 
-  donorRiskFlag              Boolean             @default(false)
-  donorRiskSummary           String?
-  reviewNotes                String?
+  donorRiskFlag    Boolean @default(false)
+  donorRiskSummary String?
+  reviewNotes      String?
 
-  createdAt                  DateTime            @default(now())
-  updatedAt                  DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  donor                      Donor               @relation(fields: [donorId], references: [id], onDelete: Cascade)
-  selectedHospital           Hospital?           @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
-  reviewer                   User?               @relation("DonorClinicalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  healthAnswers              DonorClinicalHealthAnswer[]
-  clinicalReview             DonorClinicalReview?
-  donationOutcome            DonorClinicalDonationOutcome?
-  versions                   DonorClinicalFormVersion[]
-  auditTrails                DonorClinicalAuditTrail[]
+  donor            Donor                         @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  selectedHospital Hospital?                     @relation(fields: [selectedHospitalId], references: [id], onDelete: SetNull)
+  reviewer         User?                         @relation("DonorClinicalReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  healthAnswers    DonorClinicalHealthAnswer[]
+  clinicalReview   DonorClinicalReview?
+  donationOutcome  DonorClinicalDonationOutcome?
+  versions         DonorClinicalFormVersion[]
+  auditTrails      DonorClinicalAuditTrail[]
 
   @@index([donorId])
   @@index([selectedHospitalId])
@@ -658,56 +796,62 @@ model DonorClinicalHealthAnswer {
 }
 
 model DonorClinicalReview {
-  id                         String                   @id @default(cuid())
-  clinicalRecordId           String                   @unique
-  appearancePassed           ClinicalPassFail?
-  medicalHistoryPassed       ClinicalPassFail?
-  weightKg                   Float?
-  bloodPressure              String?
-  pulseBpm                   Int?
-  haemoglobinLevel           Float?
-  hbByCuSO4Passed            ClinicalPassFail?
-  hbSagChecked               ClinicalYesNo?
-  hbSagResult                String?
-  qualifiesToDonate          ClinicalYesNo?
-  outcomeOfScreening         ClinicalScreeningOutcome?
-  permanentDeferralReasons   String[]                 @default([])
-  temporaryDeferralReasons   String[]                 @default([])
-  temporaryDeferralDuration  String?
-  comments                   String?
-  nurseName                  String?
-  nurseSignature             String?
-  reviewedById               String?
-  reviewedAt                 DateTime?
-  createdAt                  DateTime                 @default(now())
-  updatedAt                  DateTime                 @updatedAt
-  clinicalRecord             DonorClinicalRecord      @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+  id                        String                    @id @default(cuid())
+  clinicalRecordId          String                    @unique
+  appearancePassed          ClinicalPassFail?
+  medicalHistoryPassed      ClinicalPassFail?
+  weightKg                  Float?
+  bloodPressure             String?
+  pulseBpm                  Int?
+  haemoglobinLevel          Float?
+  hbByCuSO4Passed           ClinicalPassFail?
+  hbSagChecked              ClinicalYesNo?
+  hbSagResult               String?
+  qualifiesToDonate         ClinicalYesNo?
+  outcomeOfScreening        ClinicalScreeningOutcome?
+  permanentDeferralReasons  String[]                  @default([])
+  temporaryDeferralReasons  String[]                  @default([])
+  temporaryDeferralDuration String?
+  comments                  String?
+  nurseName                 String?
+  nurseSignature            String?
+  reviewedById              String?
+  reviewedAt                DateTime?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  clinicalRecord            DonorClinicalRecord       @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
 
   @@index([reviewedAt])
 }
 
 model DonorClinicalDonationOutcome {
-  id                    String              @id @default(cuid())
-  clinicalRecordId      String              @unique
-  donationNumber        String?
-  packType              PackType?
-  bleedStartTime        DateTime?
-  bleedEndTime          DateTime?
-  dryPack               Boolean             @default(false)
-  apheresis             Boolean             @default(false)
-  testOnly              Boolean             @default(false)
-  didNotBleed           Boolean             @default(false)
-  outcomeOfPhlebotomy   PhlebotomyOutcome?
-  unsuccessfulReason    String?
-  venousAccessIssue     Boolean             @default(false)
-  underbledMl           Int?
-  donorReaction         Boolean             @default(false)
-  adverseEvents         String[]            @default([])
-  nurseName             String?
-  nurseSignature        String?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  clinicalRecord        DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+  id                  String              @id @default(cuid())
+  clinicalRecordId    String              @unique
+  donationNumber      String?
+  packType            PackType?
+  bleedStartTime      DateTime?
+  bleedEndTime        DateTime?
+  dryPack             Boolean             @default(false)
+  apheresis           Boolean             @default(false)
+  testOnly            Boolean             @default(false)
+  didNotBleed         Boolean             @default(false)
+  outcomeOfPhlebotomy PhlebotomyOutcome?
+  unitsCollected       Int?
+  volumeCollectedMl    Int?
+  inventoryPostedAt    DateTime?
+  donationId           String?
+  unsuccessfulReason  String?
+  venousAccessIssue   Boolean             @default(false)
+  underbledMl         Int?
+  donorReaction       Boolean             @default(false)
+  adverseEvents       String[]            @default([])
+  nurseName           String?
+  nurseSignature      String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  clinicalRecord      DonorClinicalRecord @relation(fields: [clinicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryPostedAt])
 }
 
 model DonorClinicalFormVersion {
@@ -800,13 +944,13 @@ model RolePermission {
 
 model UserPermissionOverride {
   id         String         @id @default(cuid())
-  userId      String
-  permission  PermissionCode
-  isGranted   Boolean
-  reason      String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  permission PermissionCode
+  isGranted  Boolean
+  reason     String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permission])
   @@index([userId])
@@ -920,33 +1064,33 @@ model PartnerHospital {
 }
 
 model WebsiteFooterSettings {
-  id               String   @id @default(cuid())
-  singletonKey     String   @unique @default("default")
+  id                      String   @id @default(cuid())
+  singletonKey            String   @unique @default("default")
   emergencyPhonePrimary   String
   emergencyPhoneSecondary String?
-  supportEmail     String
-  facebookUrl      String?
-  instagramUrl     String?
-  linkedinUrl      String?
-  footerText       String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  supportEmail            String
+  facebookUrl             String?
+  instagramUrl            String?
+  linkedinUrl             String?
+  footerText              String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 model WebsiteAnnouncement {
-  id         String                   @id @default(cuid())
-  sourceKey  String                   @unique
-  sourceType WebsiteAnnouncementType
-  title      String
-  message    String
-  href       String
-  priority   PriorityLevel            @default(MEDIUM)
-  badge      String?
-  isPublished Boolean                 @default(true)
-  expiresAt  DateTime?
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @updatedAt
-  reads      WebsiteAnnouncementRead[]
+  id          String                    @id @default(cuid())
+  sourceKey   String                    @unique
+  sourceType  WebsiteAnnouncementType
+  title       String
+  message     String
+  href        String
+  priority    PriorityLevel             @default(MEDIUM)
+  badge       String?
+  isPublished Boolean                   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  reads       WebsiteAnnouncementRead[]
 
   @@index([sourceType, isPublished])
   @@index([expiresAt])

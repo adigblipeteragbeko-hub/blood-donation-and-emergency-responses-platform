@@ -1,25 +1,60 @@
-﻿import { FormEvent, useState } from 'react';
-import { updateDonorLiveLocation } from '../services/live-map';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { getDonorLiveLocation, updateDonorLiveLocation } from '../services/live-map';
 
 export default function DonorLiveLocationPage() {
   const [status, setStatus] = useState('Location sharing is controlled by you. Public users never see donor locations.');
   const [loading, setLoading] = useState(false);
   const [sharingEnabled, setSharingEnabled] = useState(false);
+  const [accuracyMeters, setAccuracyMeters] = useState<number | undefined>(undefined);
   const [form, setForm] = useState({
-    areaCommunity: '',
-    city: '',
-    region: '',
     latitude: '',
     longitude: '',
   });
 
-  const setField = (field: keyof typeof form, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
+  const hasCoordinates = useMemo(() => Boolean(form.latitude.trim() && form.longitude.trim()), [form.latitude, form.longitude]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSavedLocation = async () => {
+      setLoading(true);
+      try {
+        const payload = await getDonorLiveLocation();
+        if (!mounted) return;
+
+        const donor = payload.donor;
+        const savedLatitude = typeof donor.latitude === 'number' ? String(donor.latitude) : '';
+        const savedLongitude = typeof donor.longitude === 'number' ? String(donor.longitude) : '';
+        setForm({ latitude: savedLatitude, longitude: savedLongitude });
+        setSharingEnabled(Boolean(donor.locationSharingEnabled));
+
+        if (donor.locationSharingEnabled && savedLatitude && savedLongitude) {
+          setStatus('Location saved and enabled for authorized emergency coordination.');
+        } else if (donor.locationSharingEnabled) {
+          setStatus('Location sharing is enabled, but no coordinates are saved yet. Please capture your browser location.');
+        } else if (savedLatitude && savedLongitude) {
+          setStatus('Coordinates are saved, but location sharing is disabled.');
+        } else {
+          setStatus('Location sharing is controlled by you. Public users never see donor locations.');
+        }
+      } catch (error: any) {
+        if (!mounted) return;
+        setStatus(error?.response?.data?.error?.message ?? 'Could not load saved location settings.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void loadSavedLocation();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const shareLocation = () => {
     if (!navigator.geolocation) {
-      setStatus('Geolocation is not available on this device. You can still enter your area manually.');
+      setStatus('Browser location is not supported on this device.');
       return;
     }
 
@@ -32,12 +67,13 @@ export default function DonorLiveLocationPage() {
           latitude: String(position.coords.latitude),
           longitude: String(position.coords.longitude),
         }));
+        setAccuracyMeters(Math.round(position.coords.accuracy));
         setSharingEnabled(true);
-        setStatus(`Location captured. Accuracy about ${Math.round(position.coords.accuracy)}m. Press Save Settings to update securely.`);
+        setStatus('Coordinates captured. Click Save Location Settings to make them available to authorized hospital staff.');
         setLoading(false);
       },
       () => {
-        setStatus('Location permission was denied or unavailable. You can still save your area, city, and region.');
+        setStatus('Location permission was denied. Please allow location access in your browser settings and try again.');
         setLoading(false);
       },
       { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 },
@@ -53,16 +89,29 @@ export default function DonorLiveLocationPage() {
       const latitude = form.latitude.trim() ? Number(form.latitude) : undefined;
       const longitude = form.longitude.trim() ? Number(form.longitude) : undefined;
 
-      await updateDonorLiveLocation({
+      if (sharingEnabled && (latitude === undefined || longitude === undefined)) {
+        setStatus('Please capture your browser location before saving.');
+        return;
+      }
+
+      const payload = await updateDonorLiveLocation({
         latitude,
         longitude,
-        areaCommunity: form.areaCommunity,
-        city: form.city,
-        region: form.region,
         locationSharingEnabled: sharingEnabled,
-        source: latitude !== undefined && longitude !== undefined ? 'donor_portal' : 'manual_area_update',
+        accuracyMeters,
+        source: latitude !== undefined && longitude !== undefined ? 'donor_portal' : 'location_sharing_settings',
       });
-      setStatus(sharingEnabled ? 'Location sharing is enabled for authorized emergency coordination.' : 'Location sharing is disabled. Your coordinates are hidden from operations maps.');
+      const donor = payload.donor;
+      setForm({
+        latitude: typeof donor.latitude === 'number' ? String(donor.latitude) : '',
+        longitude: typeof donor.longitude === 'number' ? String(donor.longitude) : '',
+      });
+      setSharingEnabled(Boolean(donor.locationSharingEnabled));
+      setStatus(
+        donor.locationSharingEnabled
+          ? 'Location saved successfully for authorized emergency coordination.'
+          : 'Location sharing is disabled. Your coordinates are hidden from operations maps.',
+      );
     } catch (error: any) {
       setStatus(error?.response?.data?.error?.message ?? 'Could not update location settings.');
     } finally {
@@ -76,7 +125,7 @@ export default function DonorLiveLocationPage() {
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-600">Privacy controlled</p>
         <h1 className="text-2xl font-bold text-primary">Donor Location Settings</h1>
         <p className="text-sm text-muted">
-          Share your area and optional live coordinates so hospitals can find compatible donors faster during emergencies.
+          Control whether your captured coordinates can be used privately for emergency donor coordination.
         </p>
       </div>
 
@@ -88,7 +137,7 @@ export default function DonorLiveLocationPage() {
         <label className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4">
           <span>
             <span className="block text-sm font-bold text-primary">Enable secure location sharing</span>
-            <span className="block text-xs text-muted">Only admins and authorized hospital staff can see donor coverage.</span>
+            <span className="block text-xs text-muted">Only authorized admins and hospital staff can use this for emergency coordination.</span>
           </span>
           <input
             className="h-5 w-5 accent-red-600"
@@ -98,29 +147,28 @@ export default function DonorLiveLocationPage() {
           />
         </label>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-primary">Area / Community</span>
-            <input className="legacy-input" placeholder="e.g. Ashaiman Lebanon" value={form.areaCommunity} onChange={(event) => setField('areaCommunity', event.target.value)} />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-primary">City</span>
-            <input className="legacy-input" placeholder="e.g. Tema" value={form.city} onChange={(event) => setField('city', event.target.value)} />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-primary">Region</span>
-            <input className="legacy-input" placeholder="e.g. Greater Accra" value={form.region} onChange={(event) => setField('region', event.target.value)} />
-          </label>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Current Location Status</p>
+          <p className="mt-1 text-sm text-primary">
+            {hasCoordinates
+              ? sharingEnabled
+                ? 'Coordinates saved or captured for secure emergency coordination.'
+                : 'Coordinates captured, but sharing is currently disabled.'
+              : 'Location not captured yet.'}
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Area, community, city, and residential address are managed in the Health Eligibility Form.
+          </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm font-semibold text-primary">Latitude</span>
-            <input className="legacy-input" inputMode="decimal" placeholder="Captured automatically or entered manually" value={form.latitude} onChange={(event) => setField('latitude', event.target.value)} />
+            <input className="legacy-input bg-slate-50" readOnly placeholder="Captured automatically" value={form.latitude} />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-primary">Longitude</span>
-            <input className="legacy-input" inputMode="decimal" placeholder="Captured automatically or entered manually" value={form.longitude} onChange={(event) => setField('longitude', event.target.value)} />
+            <input className="legacy-input bg-slate-50" readOnly placeholder="Captured automatically" value={form.longitude} />
           </label>
         </div>
 

@@ -7,6 +7,8 @@ const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
 
 export type MapDonor = {
   id: string;
+  donorNumber?: string | null;
+  fullName?: string | null;
   bloodGroup: BloodGroup;
   location: string;
   areaCommunity?: string | null;
@@ -18,6 +20,23 @@ export type MapDonor = {
   lastLocationUpdateAt?: string | null;
   updatedAt: string;
   distanceKm?: number;
+  availabilityStatus?: boolean;
+  eligibilityStatus?: boolean;
+  lastDonationDate?: string | null;
+  nextEligibilityDate?: string | null;
+  clinicalStatus?: string | null;
+  preferredDonationCenter?: {
+    id: string;
+    hospitalName: string;
+    city?: string | null;
+    region?: string | null;
+  } | null;
+  distanceFromCurrentHospitalKm?: number | null;
+  totalDonations?: number;
+  responseCount?: number;
+  acceptedResponseCount?: number;
+  operationalStatus?: 'AVAILABLE' | 'COOLDOWN' | 'COOLDOWN_ENDING_SOON' | 'DEFERRED' | 'UNAVAILABLE';
+  cooldownDaysRemaining?: number;
 };
 
 export type DonorCoveragePayload = {
@@ -40,10 +59,17 @@ export type MapHospital = {
   id: string;
   hospitalName: string;
   location: string;
+  city?: string | null;
+  region?: string | null;
   address: string;
   contactPhone: string;
+  isApproved?: boolean;
+  bloodBankAvailable?: boolean;
   latitude: number | null;
   longitude: number | null;
+  inventoryItems?: { bloodGroup: BloodGroup; availableUnits: number }[];
+  totalUnits?: number;
+  stockStatus?: 'stable' | 'low' | 'critical';
 };
 
 export type MapBloodRequest = {
@@ -73,6 +99,7 @@ export type OperationsMapPayload = {
   hospitals: MapHospital[];
   requests: MapBloodRequest[];
   donors: MapDonor[];
+  currentHospitalId?: string | null;
 };
 
 export async function getOperationsMap() {
@@ -101,6 +128,11 @@ export async function updateDonorLiveLocation(payload: {
   source?: string;
 }) {
   const response = await api.patch<ApiEnvelope<{ message: string; donor: MapDonor }>>('/maps/donor/location', payload);
+  return unwrap(response.data);
+}
+
+export async function getDonorLiveLocation() {
+  const response = await api.get<ApiEnvelope<{ message: string; donor: MapDonor }>>('/maps/donor/location');
   return unwrap(response.data);
 }
 

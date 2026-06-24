@@ -1,13 +1,32 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 
+type AvailabilityStatus = {
+  availabilityStatus?: boolean;
+  healthFormCompleted?: boolean;
+  healthFormSubmitted?: boolean;
+  adminApproved?: boolean;
+  canSetAvailable?: boolean;
+  reason?: string;
+  reviewStatus?: string | null;
+  officeUseCompleted?: boolean;
+  bloodGroupConfirmed?: boolean;
+  bloodGroup?: string;
+  lastDonationDate?: string | null;
+  nextEligibilityDate?: string | null;
+  blockedByRecentDonation?: boolean;
+  accountActive?: boolean;
+  emailVerified?: boolean;
+};
+
 export default function AvailabilityStatusPage() {
   const [available, setAvailable] = useState<boolean | null>(null);
-  const [healthFormCompleted, setHealthFormCompleted] = useState(false);
-  const [adminApproved, setAdminApproved] = useState(false);
+  const [status, setStatus] = useState<AvailabilityStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const formatStatus = (value?: string | null) => value ? value.replace(/_/g, ' ') : 'Not started';
+  const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not recorded';
 
   const loadStatus = async () => {
     setLoading(true);
@@ -16,8 +35,7 @@ export default function AvailabilityStatusPage() {
       const response = await api.get('/donors/eligibility/status');
       const data = response.data?.data ?? response.data;
       setAvailable(Boolean(data?.availabilityStatus));
-      setHealthFormCompleted(Boolean(data?.healthFormCompleted));
-      setAdminApproved(Boolean(data?.adminApproved));
+      setStatus(data ?? null);
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -57,21 +75,41 @@ export default function AvailabilityStatusPage() {
       <div className="rounded border border-gray-200 p-4">
         <p className="text-sm text-gray-600">Current status</p>
         <p className="text-xl font-bold text-primary">
-          {available === null ? 'Not set' : available ? 'Available for Donation' : 'Not Available'}
+          {available === null
+            ? 'Not set'
+            : status?.blockedByRecentDonation
+              ? 'Cooldown Active'
+              : available
+                ? 'Available for Donation'
+                : 'Not Available'}
         </p>
-        <p className="mt-2 text-sm text-gray-600">Eligibility form: {healthFormCompleted ? 'Completed' : 'Not completed'}</p>
-        <p className="text-sm text-gray-600">Admin approval: {adminApproved ? 'Approved' : 'Pending approval'}</p>
+        <div className="mt-3 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+          <p>Eligibility form: {status?.healthFormCompleted ? 'Approved' : status?.healthFormSubmitted ? 'Submitted' : 'Not completed'}</p>
+          <p>Clinical status: {formatStatus(status?.reviewStatus)}</p>
+          <p>Office use: {status?.officeUseCompleted ? 'Completed' : 'Pending'}</p>
+          <p>Blood group: {status?.bloodGroupConfirmed ? status?.bloodGroup : 'Pending confirmation'}</p>
+          <p>Final approval: {status?.adminApproved ? 'Approved' : 'Pending approval'}</p>
+          <p>Email verification: {status?.emailVerified ? 'Verified' : 'Required'}</p>
+          <p>Last donation: {formatDate(status?.lastDonationDate)}</p>
+          <p>Next eligibility: {formatDate(status?.nextEligibilityDate)}</p>
+        </div>
       </div>
       <div className="flex gap-2">
-        <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-60" onClick={() => void updateAvailability(true)} type="button" disabled={saving || !healthFormCompleted || !adminApproved}>
+        <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-60" onClick={() => void updateAvailability(true)} type="button" disabled={saving || !status?.canSetAvailable}>
           Set Available
         </button>
         <button className="rounded-lg border border-red-300 px-4 py-2 font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => void updateAvailability(false)} type="button" disabled={saving}>
           Set Not Available
         </button>
       </div>
-      {!healthFormCompleted ? <p className="text-sm text-amber-700">Complete Health & Eligibility Form first.</p> : null}
-      {healthFormCompleted && !adminApproved ? <p className="text-sm text-amber-700">Your form is submitted. Wait for admin approval before setting available.</p> : null}
+      {status?.reason ? (
+        <p className={`text-sm ${status.canSetAvailable ? 'text-green-700' : 'text-amber-700'}`}>{status.reason}</p>
+      ) : null}
+      {status?.blockedByRecentDonation ? (
+        <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          You recently completed a donation. Availability is locked until the next eligibility date.
+        </p>
+      ) : null}
     </section>
   );
 }

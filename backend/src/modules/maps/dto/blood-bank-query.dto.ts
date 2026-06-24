@@ -8,6 +8,14 @@ export class BloodBankQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @IsOptional()
   @IsEnum(BloodGroup)
   bloodGroup?: BloodGroup;
 
@@ -32,6 +40,11 @@ export class BloodBankQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   emergencyMode?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  emergencyReadyOnly?: boolean;
 }
 
 export class NearestBloodSourceQueryDto {

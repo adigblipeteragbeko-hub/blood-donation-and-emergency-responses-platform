@@ -67,6 +67,8 @@ export type SmartEmergencyRequest = {
 
 export type SmartBloodBankSummary = {
   totalCenters: number;
+  totalMatchingCenters: number;
+  withinRadiusCenters: number;
   centersWithPublishedInventory: number;
   totalUnitsAvailable: number;
   lowStockCenters: number;
@@ -74,6 +76,11 @@ export type SmartBloodBankSummary = {
   activeEmergencyRequests: number;
   nearestCenter: SmartBloodBankCenter | null;
   nearestMatchingSource: SmartBloodBankCenter | null;
+  radiusFallback: {
+    applied: boolean;
+    requestedRadiusKm: number | null;
+    nearestOutsideRadius: SmartBloodBankCenter | null;
+  };
 };
 
 export type SmartBloodBankMapResponse = {
@@ -87,5 +94,8 @@ export type SmartBloodBankMapResponse = {
     latitude: number | null;
     longitude: number | null;
     emergencyMode: boolean;
+    city: string | null;
+    region: string | null;
+    emergencyReadyOnly: boolean;
   };
 };

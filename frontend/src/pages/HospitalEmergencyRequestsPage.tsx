@@ -2,10 +2,10 @@ import { FormEvent, useState } from 'react';
 import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { bloodGroups } from '../constants/blood-groups';
+import { confirmedBloodGroups } from '../constants/blood-groups';
 import { ENGLISH_FRIENDLY_TILE_ATTRIBUTION, ENGLISH_FRIENDLY_TILE_URL } from '../constants/map-tiles';
 import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
-import { BloodGroup, createHospitalRequest, getTypeaheadSuggestions } from '../services/hospital-portal';
+import { BloodGroup, RequestSource, createHospitalRequest, getTypeaheadSuggestions } from '../services/hospital-portal';
 import { AppIcon } from '../components/ui/AppIcon';
 
 const GHANA_CENTER: [number, number] = [7.9465, -1.0232];
@@ -48,6 +48,7 @@ export default function HospitalEmergencyRequestsPage() {
   const [city, setCity] = useState('');
   const [region, setRegion] = useState('');
   const [locationNotes, setLocationNotes] = useState('');
+  const [requestSource, setRequestSource] = useState<RequestSource>('DONORS_AND_HOSPITALS');
   const [radiusKm, setRadiusKm] = useState<5 | 10 | 20>(10);
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
   const [notes, setNotes] = useState('');
@@ -87,7 +88,7 @@ export default function HospitalEmergencyRequestsPage() {
     setSubmitting(true);
     setMessage('');
     try {
-      await createHospitalRequest({
+      const request = await createHospitalRequest({
         hospitalCenterName,
         ward,
         bloodGroup,
@@ -99,13 +100,14 @@ export default function HospitalEmergencyRequestsPage() {
         city,
         region,
         locationNotes,
+        requestSource,
         latitude,
         longitude,
         radiusKm,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
-      setMessage('Emergency request broadcasted with location-aware coordination.');
+      setMessage(`Emergency request broadcasted. Request Reference: ${request.requestReference}`);
       setUnitsNeeded(1);
       setRequiredBy(defaultRequiredBy());
       setNotes('');
@@ -128,6 +130,9 @@ export default function HospitalEmergencyRequestsPage() {
       </div>
 
       <form className="card mx-auto grid w-full max-w-4xl gap-3 rounded-2xl shadow-sm md:grid-cols-2" onSubmit={submit}>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 md:col-span-2">
+          Request Reference: Will be generated automatically
+        </div>
         <AsyncTypeahead
           label="Hospital / Center Name"
           value={hospitalCenterName}
@@ -154,7 +159,7 @@ export default function HospitalEmergencyRequestsPage() {
         <label className="text-sm font-semibold">
           Emergency Blood Group
           <select className="legacy-input mt-1" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}>
-            {bloodGroups.map((group) => (
+            {confirmedBloodGroups.map((group) => (
               <option key={group.value} value={group.value}>
                 {group.label}
               </option>
@@ -215,6 +220,17 @@ export default function HospitalEmergencyRequestsPage() {
             <option value={10}>10 km</option>
             <option value={20}>20 km</option>
           </select>
+        </label>
+        <label className="text-sm font-semibold md:col-span-2">
+          Request Source
+          <select className="legacy-input mt-1" value={requestSource} onChange={(e) => setRequestSource(e.target.value as RequestSource)}>
+            <option value="DONORS_ONLY">Donors Only</option>
+            <option value="HOSPITALS_ONLY">Hospitals Only</option>
+            <option value="DONORS_AND_HOSPITALS">Donors + Hospitals</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Donors Only: notify approved compatible donors. Hospitals Only: search registered hospitals/blood-banks with stock. Donors + Hospitals: notify both for fastest response.
+          </p>
         </label>
         <label className="text-sm font-semibold">
           Location Notes

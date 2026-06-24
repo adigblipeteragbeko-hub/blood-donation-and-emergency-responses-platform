@@ -1,4 +1,4 @@
-import { BloodGroup, PriorityLevel, RequestType } from '@prisma/client';
+import { BloodGroup, PriorityLevel, RequestSource, RequestType } from '@prisma/client';
 import { IsDateString, IsEnum, IsIn, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateBloodRequestDto {
@@ -20,6 +20,11 @@ export class CreateBloodRequestDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
+  hospitalPatientReference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   patientCode?: string;
 
   @IsEnum(BloodGroup)
@@ -34,6 +39,10 @@ export class CreateBloodRequestDto {
 
   @IsEnum(PriorityLevel)
   priority!: PriorityLevel;
+
+  @IsOptional()
+  @IsEnum(RequestSource)
+  requestSource?: RequestSource;
 
   @IsString()
   @IsNotEmpty()

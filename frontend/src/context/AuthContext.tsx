@@ -76,9 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-          const response = await api.post('/auth/refresh', null, {
-            headers: { Authorization: `Bearer ${refreshToken}` },
-          });
+          const response = await api.post('/auth/refresh', { refreshToken });
           const tokens = unwrapApiResponse<{ accessToken: string; refreshToken: string }>(response.data);
           const storedUser = readStoredUser();
 

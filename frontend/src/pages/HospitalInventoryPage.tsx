@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { bloodGroups } from '../constants/blood-groups';
+import { confirmedBloodGroups } from '../constants/blood-groups';
 import {
   BloodGroup,
   InventoryChangeType,
@@ -129,7 +129,7 @@ export default function HospitalInventoryPage() {
         <label className="text-sm font-semibold">
           Blood Group
           <select className="legacy-input mt-1" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}>
-            {bloodGroups.map((group) => (
+            {confirmedBloodGroups.map((group) => (
               <option key={group.value} value={group.value}>
                 {group.label}
               </option>
@@ -169,7 +169,7 @@ export default function HospitalInventoryPage() {
             <tbody>
               {filteredItems.map((item) => (
                 <tr key={item.id} className="border-b last:border-b-0">
-                  <td className="py-2 pr-4">{bloodGroups.find((group) => group.value === item.bloodGroup)?.label ?? item.bloodGroup}</td>
+                  <td className="py-2 pr-4">{confirmedBloodGroups.find((group) => group.value === item.bloodGroup)?.label ?? item.bloodGroup}</td>
                   <td className="py-2 pr-4">{item.availableUnits}</td>
                   <td className="py-2 pr-4">{new Date(item.lastUpdated).toLocaleString()}</td>
                 </tr>

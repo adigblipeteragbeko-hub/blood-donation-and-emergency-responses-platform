@@ -3,8 +3,10 @@ import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { FilterBox, Pager } from '../components/TableControls';
 import { EditModal } from '../components/ui/EditModal';
+import { HospitalLocationPicker } from '../components/ui/HospitalLocationPicker';
 import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
 import { countryCodes } from '../constants/country-codes';
+import { useAuth } from '../hooks/useAuth';
 import {
   adminCorrectCompletionEvidence,
   BloodRequestItem,
@@ -40,8 +42,16 @@ type DonorItem = {
   id: string;
   donorNumber?: string;
   fullName: string;
+  firstName?: string | null;
+  otherNames?: string | null;
+  surname?: string | null;
+  phone?: string | null;
+  alternativePhoneNumber?: string | null;
   bloodGroup: string;
   location: string;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
   availabilityStatus: boolean;
   eligibilityStatus: boolean;
   user: { id: string; email: string; role: Role; isActive: boolean };
@@ -52,12 +62,18 @@ type HospitalItem = {
   hospitalName: string;
   registrationCode: string;
   location: string;
+  city?: string | null;
+  region?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isApproved?: boolean;
+  bloodBankAvailable?: boolean;
   contactName: string;
   contactPhone: string;
   user: { id: string; email: string; role: Role; isActive: boolean };
 };
 
-const bloodGroups = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'];
+const bloodGroups = ['UNKNOWN', 'O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'];
 const formatRole = (role: Role) =>
   role
     .toLowerCase()
@@ -75,6 +91,7 @@ const adminAssignableRoles: Role[] = [
   'BLOOD_BANK_OFFICER',
 ];
 const bloodGroupLabel: Record<string, string> = {
+  UNKNOWN: 'Unknown / Not Tested Yet',
   O_POS: 'O_POS (O+)',
   O_NEG: 'O_NEG (O-)',
   A_POS: 'A_POS (A+)',
@@ -86,17 +103,30 @@ const bloodGroupLabel: Record<string, string> = {
 };
 const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const nameRule = /^[A-Za-z\s'-]+$/;
+const relationshipOptions = ['Father', 'Mother', 'Brother', 'Sister', 'Spouse', 'Guardian', 'Friend', 'Relative', 'Other'];
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+const resolveHospitalMapStatus = (hospital: HospitalItem): 'Map Ready' | 'Coordinates Missing' | 'Pending Approval' => {
+  if (!hospital.isApproved) return 'Pending Approval';
+  const hasCoordinates = typeof hospital.latitude === 'number' && typeof hospital.longitude === 'number';
+  return hasCoordinates ? 'Map Ready' : 'Coordinates Missing';
+};
+
+const splitPhone = (value?: string | null) => {
+  const match = `${value ?? ''}`.match(/^(\+\d{1,4})(\d+)$/);
+  return { code: match?.[1] ?? '+233', number: match?.[2] ?? '' };
+};
 
 export default function AdminManagementPage() {
   const location = useLocation();
+  const { user: currentUser } = useAuth();
   const activeSection =
     new URLSearchParams(location.search).get('section') || location.hash?.replace('#', '') || 'settings';
   const [users, setUsers] = useState<UserItem[]>([]);
   const [donors, setDonors] = useState<DonorItem[]>([]);
   const [hospitals, setHospitals] = useState<HospitalItem[]>([]);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [requestTracking, setRequestTracking] = useState<BloodRequestItem[]>([]);
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLogItem[]>([]);
@@ -109,6 +139,13 @@ export default function AdminManagementPage() {
     email: '',
     password: '',
     fullName: '',
+    firstName: '',
+    otherNames: '',
+    surname: '',
+    primaryPhoneCode: '+233',
+    primaryPhone: '',
+    alternativePhoneCode: '+233',
+    alternativePhone: '',
     bloodGroup: '',
     location: '',
     eligibilityStatus: true,
@@ -116,10 +153,15 @@ export default function AdminManagementPage() {
     emergencyContactName: '',
     emergencyContactCode: '+233',
     emergencyContactPhone: '',
+    emergencyContactRelationship: '',
     hospitalName: '',
     registrationCode: '',
     address: '',
     contactName: '',
+    city: '',
+    region: '',
+    latitude: '',
+    longitude: '',
     contactCode: '+233',
     contactPhone: '',
   });
@@ -128,13 +170,25 @@ export default function AdminManagementPage() {
     id: string;
     donorNumber: string;
     fullName: string;
+    firstName: string;
+    otherNames: string;
+    surname: string;
+    phone: string;
+    alternativePhoneNumber: string;
     location: string;
     bloodGroup: string;
+    emergencyContactName: string;
+    emergencyContactPhone: string;
+    emergencyContactRelationship: string;
   } | null>(null);
   const [editingHospital, setEditingHospital] = useState<{
     id: string;
     hospitalName: string;
     location: string;
+    city: string;
+    region: string;
+    latitude: string;
+    longitude: string;
     contactName: string;
   } | null>(null);
   const [usersPage, setUsersPage] = useState(0);
@@ -151,6 +205,8 @@ export default function AdminManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [savingModal, setSavingModal] = useState(false);
   const [compactDensity, setCompactDensity] = useState(false);
+  const [capturingAccountHospitalLocation, setCapturingAccountHospitalLocation] = useState(false);
+  const [capturingEditHospitalLocation, setCapturingEditHospitalLocation] = useState(false);
 
   const loadUsers = async (page = usersPage) => {
     const skip = page * PAGE_SIZE;
@@ -205,8 +261,22 @@ export default function AdminManagementPage() {
       } else if (activeSection === 'inventory-tracking') {
         await loadInventoryLogData();
       }
-    } catch {
-      setError('Failed to load admin data. Make sure you are logged in as admin.');
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      const sectionLabel =
+        activeSection === 'settings'
+          ? 'users'
+          : activeSection === 'donors'
+            ? 'donors'
+            : activeSection === 'hospitals'
+              ? 'hospitals'
+              : activeSection === 'request-tracking'
+                ? 'request tracking'
+                : activeSection === 'inventory-tracking'
+                  ? 'inventory tracking'
+                  : 'admin management data';
+      setError(extracted ?? `Unable to load ${sectionLabel}. Please refresh or contact support.`);
     } finally {
       setLoading(false);
     }
@@ -280,6 +350,13 @@ export default function AdminManagementPage() {
       email: '',
       password: '',
       fullName: '',
+      firstName: '',
+      otherNames: '',
+      surname: '',
+      primaryPhoneCode: '+233',
+      primaryPhone: '',
+      alternativePhoneCode: '+233',
+      alternativePhone: '',
       bloodGroup: '',
       location: '',
       eligibilityStatus: true,
@@ -287,10 +364,15 @@ export default function AdminManagementPage() {
       emergencyContactName: '',
       emergencyContactCode: '+233',
       emergencyContactPhone: '',
+      emergencyContactRelationship: '',
       hospitalName: '',
       registrationCode: '',
       address: '',
       contactName: '',
+      city: '',
+      region: '',
+      latitude: '',
+      longitude: '',
       contactCode: '+233',
       contactPhone: '',
     });
@@ -303,17 +385,46 @@ export default function AdminManagementPage() {
   const createAccount = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
 
     if (!passwordRule.test(accountForm.password)) {
       setError('Password must be at least 8 characters and include uppercase, lowercase, and special character.');
       return;
     }
-    if (accountRole === 'DONOR' && (!nameRule.test(accountForm.fullName) || !nameRule.test(accountForm.emergencyContactName))) {
+    if (
+      accountRole === 'DONOR' &&
+      (!nameRule.test(accountForm.firstName) ||
+        (accountForm.otherNames && !nameRule.test(accountForm.otherNames)) ||
+        !nameRule.test(accountForm.surname) ||
+        !nameRule.test(accountForm.emergencyContactName))
+    ) {
       setError('Donor name fields must contain letters only.');
+      return;
+    }
+    if (accountRole === 'DONOR' && (!accountForm.primaryPhone.trim() || !accountForm.emergencyContactPhone.trim() || !accountForm.emergencyContactRelationship)) {
+      setError('Primary phone number, emergency contact phone number, and relationship are required for donor accounts.');
       return;
     }
     if (accountRole === 'HOSPITAL_STAFF' && !nameRule.test(accountForm.contactName)) {
       setError('Contact name must contain letters only.');
+      return;
+    }
+    if (accountRole === 'HOSPITAL_STAFF' && (!accountForm.city.trim() || !accountForm.region.trim())) {
+      setError('City and region are required for emergency requests and live map coordination.');
+      return;
+    }
+    const latitude = accountForm.latitude.trim() ? Number(accountForm.latitude) : undefined;
+    const longitude = accountForm.longitude.trim() ? Number(accountForm.longitude) : undefined;
+    if (accountRole === 'HOSPITAL_STAFF' && (latitude === undefined || longitude === undefined)) {
+      setError('Please select the hospital location on the map.');
+      return;
+    }
+    if (accountRole === 'HOSPITAL_STAFF' && latitude !== undefined && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
+      setError('Latitude must be between -90 and 90.');
+      return;
+    }
+    if (accountRole === 'HOSPITAL_STAFF' && longitude !== undefined && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
+      setError('Longitude must be between -180 and 180.');
       return;
     }
 
@@ -328,16 +439,23 @@ export default function AdminManagementPage() {
       }
 
       if (accountRole === 'DONOR') {
+        const fullName = [accountForm.surname, accountForm.firstName, accountForm.otherNames].filter(Boolean).join(' ');
         await api.post('/donors/admin', {
           email: accountForm.email,
           password: accountForm.password,
-          fullName: accountForm.fullName,
+          fullName,
+          firstName: accountForm.firstName,
+          otherNames: accountForm.otherNames || undefined,
+          surname: accountForm.surname,
+          phone: `${accountForm.primaryPhoneCode}${accountForm.primaryPhone}`,
+          alternativePhoneNumber: accountForm.alternativePhone ? `${accountForm.alternativePhoneCode}${accountForm.alternativePhone}` : undefined,
           bloodGroup: accountForm.bloodGroup,
           location: accountForm.location,
           eligibilityStatus: accountForm.eligibilityStatus,
           availabilityStatus: accountForm.availabilityStatus,
           emergencyContactName: accountForm.emergencyContactName,
           emergencyContactPhone: `${accountForm.emergencyContactCode}${accountForm.emergencyContactPhone}`,
+          emergencyContactRelationship: accountForm.emergencyContactRelationship,
         });
       }
 
@@ -349,12 +467,23 @@ export default function AdminManagementPage() {
           registrationCode: accountForm.registrationCode,
           address: accountForm.address,
           location: accountForm.location,
+          city: accountForm.city || undefined,
+          region: accountForm.region || undefined,
+          latitude,
+          longitude,
           contactName: accountForm.contactName,
           contactPhone: `${accountForm.contactCode}${accountForm.contactPhone}`,
         });
       }
 
       resetAccountForm();
+      setSuccessMessage(
+        accountRole === 'DONOR'
+          ? 'Donor created successfully.'
+          : accountRole === 'HOSPITAL_STAFF'
+            ? 'Hospital created successfully.'
+            : 'User created successfully.',
+      );
       await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
@@ -378,6 +507,7 @@ export default function AdminManagementPage() {
         isActive: editingUser.isActive,
       });
       setEditingUser(null);
+      setSuccessMessage('User updated successfully.');
       await refreshCurrentSection();
     } catch {
       setError('Could not update user.');
@@ -385,25 +515,58 @@ export default function AdminManagementPage() {
   };
 
   const deleteUser = async (id: string) => {
+    if (id === currentUser?.id) {
+      setError('You cannot delete the currently logged-in admin account.');
+      setSuccessMessage('');
+      return;
+    }
+
     if (!confirm('Delete this user?')) {
       return;
     }
 
     try {
       await api.delete(`/users/${id}`);
+      setError('');
+      setSuccessMessage('User deleted successfully.');
       await refreshCurrentSection();
-    } catch {
-      setError('Could not delete user.');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setSuccessMessage('');
+
+      if (status === 401 || status === 403) {
+        setError(extracted ?? 'Unauthorized.');
+      } else if (status === 400) {
+        setError(extracted ?? 'Unable to delete user because related records exist.');
+      } else if (status >= 500) {
+        setError(extracted ?? 'Server error while deleting user.');
+      } else {
+        setError(extracted ?? 'Could not delete user.');
+      }
     }
   };
 
   const editDonor = (donor: DonorItem) => {
+    const primaryPhone = splitPhone(donor.phone);
+    const alternativePhone = splitPhone(donor.alternativePhoneNumber);
+    const emergencyPhone = splitPhone(donor.emergencyContactPhone);
+    const legacyNameParts = donor.fullName.trim().split(/\s+/).filter(Boolean);
     setEditingDonor({
       id: donor.id,
       donorNumber: donor.donorNumber ?? '',
       fullName: donor.fullName,
+      firstName: donor.firstName ?? legacyNameParts[1] ?? legacyNameParts[0] ?? '',
+      otherNames: donor.otherNames ?? legacyNameParts.slice(2).join(' '),
+      surname: donor.surname ?? (legacyNameParts.length > 1 ? legacyNameParts[0] : ''),
+      phone: `${primaryPhone.code}${primaryPhone.number}`,
+      alternativePhoneNumber: alternativePhone.number ? `${alternativePhone.code}${alternativePhone.number}` : '',
       location: donor.location,
       bloodGroup: donor.bloodGroup,
+      emergencyContactName: donor.emergencyContactName ?? '',
+      emergencyContactPhone: emergencyPhone.number ? `${emergencyPhone.code}${emergencyPhone.number}` : '',
+      emergencyContactRelationship: donor.emergencyContactRelationship ?? '',
     });
   };
 
@@ -413,17 +576,27 @@ export default function AdminManagementPage() {
       return;
     }
     try {
+      const fullName = [editingDonor.surname, editingDonor.firstName, editingDonor.otherNames].filter(Boolean).join(' ') || editingDonor.fullName;
       await api.patch(`/donors/admin/${editingDonor.id}`, {
-        fullName: editingDonor.fullName,
+        fullName,
+        firstName: editingDonor.firstName,
+        otherNames: editingDonor.otherNames || undefined,
+        surname: editingDonor.surname,
+        phone: editingDonor.phone || undefined,
+        alternativePhoneNumber: editingDonor.alternativePhoneNumber || undefined,
         location: editingDonor.location,
         bloodGroup: editingDonor.bloodGroup,
+        emergencyContactName: editingDonor.emergencyContactName || undefined,
+        emergencyContactPhone: editingDonor.emergencyContactPhone || undefined,
+        emergencyContactRelationship: editingDonor.emergencyContactRelationship || undefined,
       });
       setEditingDonor(null);
+      setSuccessMessage('Donor updated successfully.');
       await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Could not update donor.');
+      setError(extracted ?? 'Unable to update donor. Please check required fields.');
     }
   };
 
@@ -443,6 +616,7 @@ export default function AdminManagementPage() {
   const setDonorApproval = async (id: string, approved: boolean) => {
     try {
       await api.patch(`/donors/admin/${id}/eligibility`, { approved });
+      setSuccessMessage(approved ? 'Donor approved successfully.' : 'Donor rejected successfully.');
       await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
@@ -456,6 +630,10 @@ export default function AdminManagementPage() {
       id: hospital.id,
       hospitalName: hospital.hospitalName,
       location: hospital.location,
+      city: hospital.city ?? '',
+      region: hospital.region ?? '',
+      latitude: typeof hospital.latitude === 'number' ? String(hospital.latitude) : '',
+      longitude: typeof hospital.longitude === 'number' ? String(hospital.longitude) : '',
       contactName: hospital.contactName,
     });
   };
@@ -465,17 +643,88 @@ export default function AdminManagementPage() {
     if (!editingHospital) {
       return;
     }
+    const latitude = editingHospital.latitude.trim() ? Number(editingHospital.latitude) : undefined;
+    const longitude = editingHospital.longitude.trim() ? Number(editingHospital.longitude) : undefined;
+    if (!editingHospital.city.trim() || !editingHospital.region.trim()) {
+      setError('City and region are required for emergency requests and live map coordination.');
+      return;
+    }
+    if (latitude === undefined || longitude === undefined) {
+      setError('Please select the hospital location on the map.');
+      return;
+    }
+    if (latitude !== undefined && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
+      setError('Latitude must be between -90 and 90.');
+      return;
+    }
+    if (longitude !== undefined && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
+      setError('Longitude must be between -180 and 180.');
+      return;
+    }
     try {
       await api.patch(`/hospitals/admin/${editingHospital.id}`, {
         hospitalName: editingHospital.hospitalName,
         location: editingHospital.location,
+        city: editingHospital.city || undefined,
+        region: editingHospital.region || undefined,
+        latitude,
+        longitude,
         contactName: editingHospital.contactName,
       });
       setEditingHospital(null);
+      setSuccessMessage('Hospital updated successfully.');
       await refreshCurrentSection();
     } catch {
       setError('Could not update hospital.');
     }
+  };
+
+  const useBrowserLocationForAccountHospital = () => {
+    setError('');
+    if (!navigator.geolocation) {
+      setError('Browser geolocation is not available. Please pick the hospital location on the map.');
+      return;
+    }
+    setCapturingAccountHospitalLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setAccountForm((v) => ({
+          ...v,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+        }));
+        setSuccessMessage('Browser location captured. Confirm the pin is on the hospital before saving.');
+        setCapturingAccountHospitalLocation(false);
+      },
+      () => {
+        setError('Could not capture browser location. Please pick the hospital location on the map.');
+        setCapturingAccountHospitalLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 20000 },
+    );
+  };
+
+  const useBrowserLocationForEditingHospital = () => {
+    setError('');
+    if (!navigator.geolocation) {
+      setError('Browser geolocation is not available. Please pick the hospital location on the map.');
+      return;
+    }
+    setCapturingEditHospitalLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setEditingHospital((v) =>
+          v ? { ...v, latitude: String(position.coords.latitude), longitude: String(position.coords.longitude) } : v,
+        );
+        setSuccessMessage('Browser location captured. Confirm the pin is on the hospital before saving.');
+        setCapturingEditHospitalLocation(false);
+      },
+      () => {
+        setError('Could not capture browser location. Please pick the hospital location on the map.');
+        setCapturingEditHospitalLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 20000 },
+    );
   };
 
   const deleteHospital = async (id: string) => {
@@ -518,6 +767,7 @@ export default function AdminManagementPage() {
       includesTerm(request.bloodGroup) ||
       includesTerm(request.status) ||
       includesTerm(request.trackingStatus) ||
+      includesTerm(request.requestSource) ||
       includesTerm(String(request.unitsNeeded)),
   );
   const filteredInventoryLogs = inventoryLogs.filter(
@@ -550,6 +800,7 @@ export default function AdminManagementPage() {
     <section className="space-y-6 pt-2 md:pt-3">
       <h1 className="text-2xl font-bold text-primary">Admin Control Center</h1>
       {error && <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {successMessage && <p className="rounded bg-green-50 p-3 text-sm text-green-700">{successMessage}</p>}
       {loading && <p className="text-sm text-muted">Loading data...</p>}
       <div className="flex items-center justify-end">
         <button
@@ -638,7 +889,9 @@ export default function AdminManagementPage() {
 
         {accountRole === 'DONOR' ? (
           <div className="grid gap-3 md:grid-cols-3">
-            <input className="rounded border p-2" placeholder="Full Name" value={accountForm.fullName} onChange={(e) => setAccountForm((v) => ({ ...v, fullName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
+            <input className="rounded border p-2" placeholder="First Name *" value={accountForm.firstName} onChange={(e) => setAccountForm((v) => ({ ...v, firstName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="First name should contain letters only" required />
+            <input className="rounded border p-2" placeholder="Other Name(s)" value={accountForm.otherNames} onChange={(e) => setAccountForm((v) => ({ ...v, otherNames: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Other names should contain letters only" />
+            <input className="rounded border p-2" placeholder="Surname *" value={accountForm.surname} onChange={(e) => setAccountForm((v) => ({ ...v, surname: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Surname should contain letters only" required />
             <select className="rounded border p-2" value={accountForm.bloodGroup} onChange={(e) => setAccountForm((v) => ({ ...v, bloodGroup: e.target.value }))} required>
               <option value="">Select Blood Group</option>
               {bloodGroups.map((group) => (
@@ -648,7 +901,27 @@ export default function AdminManagementPage() {
               ))}
             </select>
             <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
-            <input className="rounded border p-2" placeholder="Emergency Contact Name" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
+            <div className="grid grid-cols-[1fr_2fr] gap-2">
+              <select className="rounded border p-2" value={accountForm.primaryPhoneCode} onChange={(e) => setAccountForm((v) => ({ ...v, primaryPhoneCode: e.target.value }))}>
+                {countryCodes.map((code) => (
+                  <option key={code.value} value={code.value}>
+                    {code.label}
+                  </option>
+                ))}
+              </select>
+              <input className="rounded border p-2" placeholder="Primary Phone Number *" value={accountForm.primaryPhone} onChange={(e) => setAccountForm((v) => ({ ...v, primaryPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" required />
+            </div>
+            <div className="grid grid-cols-[1fr_2fr] gap-2">
+              <select className="rounded border p-2" value={accountForm.alternativePhoneCode} onChange={(e) => setAccountForm((v) => ({ ...v, alternativePhoneCode: e.target.value }))}>
+                {countryCodes.map((code) => (
+                  <option key={code.value} value={code.value}>
+                    {code.label}
+                  </option>
+                ))}
+              </select>
+              <input className="rounded border p-2" placeholder="Alternative Phone Number" value={accountForm.alternativePhone} onChange={(e) => setAccountForm((v) => ({ ...v, alternativePhone: e.target.value.replace(/\D/g, '') }))} pattern="\d*" inputMode="numeric" />
+            </div>
+            <input className="rounded border p-2" placeholder="Emergency Contact Name *" value={accountForm.emergencyContactName} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <div className="grid grid-cols-[1fr_2fr] gap-2">
               <select className="rounded border p-2" value={accountForm.emergencyContactCode} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactCode: e.target.value }))}>
                 {countryCodes.map((code) => (
@@ -657,8 +930,14 @@ export default function AdminManagementPage() {
                   </option>
                 ))}
               </select>
-              <input className="rounded border p-2" placeholder="Emergency Contact Number" value={accountForm.emergencyContactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" title="Number field should contain digits only" required />
+              <input className="rounded border p-2" placeholder="Emergency Contact Phone Number *" value={accountForm.emergencyContactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" title="Number field should contain digits only" required />
             </div>
+            <select className="rounded border p-2" value={accountForm.emergencyContactRelationship} onChange={(e) => setAccountForm((v) => ({ ...v, emergencyContactRelationship: e.target.value }))} required>
+              <option value="">Relationship to Donor *</option>
+              {relationshipOptions.map((relationship) => (
+                <option key={relationship} value={relationship}>{relationship}</option>
+              ))}
+            </select>
           </div>
         ) : null}
 
@@ -668,6 +947,10 @@ export default function AdminManagementPage() {
             <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
             <input className="rounded border p-2" placeholder="Address" value={accountForm.address} onChange={(e) => setAccountForm((v) => ({ ...v, address: e.target.value }))} required />
             <input className="rounded border p-2" placeholder="Location" value={accountForm.location} onChange={(e) => setAccountForm((v) => ({ ...v, location: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="City *" value={accountForm.city} onChange={(e) => setAccountForm((v) => ({ ...v, city: e.target.value }))} required />
+            <input className="rounded border p-2" placeholder="Region *" value={accountForm.region} onChange={(e) => setAccountForm((v) => ({ ...v, region: e.target.value }))} required />
+            <input className="rounded border bg-slate-50 p-2" placeholder="Latitude (e.g. 5.6698)" inputMode="decimal" value={accountForm.latitude} readOnly />
+            <input className="rounded border bg-slate-50 p-2" placeholder="Longitude (e.g. -0.0166)" inputMode="decimal" value={accountForm.longitude} readOnly />
             <input className="rounded border p-2" placeholder="Contact Name" value={accountForm.contactName} onChange={(e) => setAccountForm((v) => ({ ...v, contactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <div className="grid grid-cols-[1fr_2fr] gap-2">
               <select className="rounded border p-2" value={accountForm.contactCode} onChange={(e) => setAccountForm((v) => ({ ...v, contactCode: e.target.value }))}>
@@ -679,6 +962,34 @@ export default function AdminManagementPage() {
               </select>
               <input className="rounded border p-2" placeholder="Contact Number" value={accountForm.contactPhone} onChange={(e) => setAccountForm((v) => ({ ...v, contactPhone: e.target.value.replace(/\D/g, '') }))} pattern="\d+" inputMode="numeric" title="Number field should contain digits only" required />
             </div>
+            <div className="space-y-2 md:col-span-3">
+              <p className="text-sm font-semibold text-slate-700">Select hospital location on the map</p>
+              <p className="text-xs text-slate-500">
+                These location details are required for emergency requests, nearest blood source search, donor matching, and live map coordination.
+              </p>
+              <button
+                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-primary transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={capturingAccountHospitalLocation}
+                type="button"
+                onClick={useBrowserLocationForAccountHospital}
+              >
+                {capturingAccountHospitalLocation ? 'Capturing location...' : 'Use Browser Location'}
+              </button>
+              <p className="text-xs text-slate-500">Click the hospital location on the map or drag the pin to set coordinates.</p>
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <HospitalLocationPicker
+                  latitude={accountForm.latitude.trim() ? Number(accountForm.latitude) : null}
+                  longitude={accountForm.longitude.trim() ? Number(accountForm.longitude) : null}
+                  onChange={(nextLat, nextLng) =>
+                    setAccountForm((v) => ({ ...v, latitude: String(nextLat), longitude: String(nextLng) }))
+                  }
+                  className="h-64 w-full"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 md:col-span-3">
+              Latitude and longitude help this hospital appear correctly on the Smart Blood Bank Map.
+            </p>
           </div>
         ) : null}
 
@@ -748,7 +1059,11 @@ export default function AdminManagementPage() {
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.donorNumber ?? '-'}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.fullName}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.user.email}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    {donor.bloodGroup === 'UNKNOWN' ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">Pending Confirmation</span>
+                    ) : bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}
+                  </td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.location}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                     <span className={`rounded px-2 py-1 text-xs font-semibold ${donor.eligibilityStatus ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -796,6 +1111,7 @@ export default function AdminManagementPage() {
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Code</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Location</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Map Status</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
@@ -806,6 +1122,26 @@ export default function AdminManagementPage() {
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.user.email}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.registrationCode}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.location}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                        resolveHospitalMapStatus(hospital) === 'Map Ready'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : resolveHospitalMapStatus(hospital) === 'Pending Approval'
+                            ? 'bg-slate-100 text-slate-700'
+                            : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {resolveHospitalMapStatus(hospital)}
+                      </span>
+                      {hospital.isApproved &&
+                      hospital.bloodBankAvailable &&
+                      !(typeof hospital.latitude === 'number' && typeof hospital.longitude === 'number') ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                          Coordinates Required
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                     <div className="flex flex-wrap gap-2">
                       <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editHospital(hospital)}>Edit</button>
@@ -837,12 +1173,14 @@ export default function AdminManagementPage() {
             {filteredRequests.map((request) => (
               <article key={request.id} className="rounded border p-3">
                 <p className="text-sm font-semibold">
-                  {request.hospital?.hospitalName ?? 'Hospital'}: {request.bloodGroup} ({request.unitsNeeded} units)
+                  {request.requestReference}: {request.hospital?.hospitalName ?? 'Hospital'} needs {request.bloodGroup} ({request.unitsNeeded} units)
                 </p>
                 <p className="text-xs text-gray-600">
                   Workflow {request.status} | Tracking {request.trackingStatus} | Need by{' '}
                   {new Date(request.requiredBy).toLocaleString()}
                 </p>
+                <p className="text-xs text-gray-600">Request Source: {request.requestSource}</p>
+                <p className="text-xs text-gray-600">Hospital Reference: {request.hospitalPatientReference ?? 'N/A'}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(['PENDING', 'MATCHED', 'IN_PROGRESS', 'CANCELLED'] as RequestProgressStatus[]).map((status) => (
                     <button
@@ -1069,10 +1407,25 @@ export default function AdminManagementPage() {
         {editingDonor ? (
           <form className="grid gap-3" onSubmit={(event) => void handleDonorModalSubmit(event)}>
             <input className="rounded border bg-gray-100 p-2" value={editingDonor.donorNumber} readOnly />
-            <input className="rounded border p-2" value={editingDonor.fullName} onChange={(e) => setEditingDonor((v) => (v ? { ...v, fullName: e.target.value } : v))} required />
+            <div className="grid gap-3 md:grid-cols-3">
+              <input className="rounded border p-2" placeholder="First Name *" value={editingDonor.firstName} onChange={(e) => setEditingDonor((v) => (v ? { ...v, firstName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} required />
+              <input className="rounded border p-2" placeholder="Other Name(s)" value={editingDonor.otherNames} onChange={(e) => setEditingDonor((v) => (v ? { ...v, otherNames: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} />
+              <input className="rounded border p-2" placeholder="Surname *" value={editingDonor.surname} onChange={(e) => setEditingDonor((v) => (v ? { ...v, surname: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} required />
+            </div>
+            <input className="rounded border bg-gray-50 p-2 text-sm text-slate-600" value={[editingDonor.surname, editingDonor.firstName, editingDonor.otherNames].filter(Boolean).join(' ') || editingDonor.fullName} readOnly />
+            <input className="rounded border p-2" placeholder="Primary Phone Number (+233...)" value={editingDonor.phone} onChange={(e) => setEditingDonor((v) => (v ? { ...v, phone: e.target.value } : v))} required />
+            <input className="rounded border p-2" placeholder="Alternative Phone Number (Optional)" value={editingDonor.alternativePhoneNumber} onChange={(e) => setEditingDonor((v) => (v ? { ...v, alternativePhoneNumber: e.target.value } : v))} />
             <input className="rounded border p-2" value={editingDonor.location} onChange={(e) => setEditingDonor((v) => (v ? { ...v, location: e.target.value } : v))} required />
             <select className="rounded border p-2" value={editingDonor.bloodGroup} onChange={(e) => setEditingDonor((v) => (v ? { ...v, bloodGroup: e.target.value } : v))}>
               {bloodGroups.map((group) => <option key={group} value={group}>{bloodGroupLabel[group] ?? group}</option>)}
+            </select>
+            <input className="rounded border p-2" placeholder="Emergency Contact Name *" value={editingDonor.emergencyContactName} onChange={(e) => setEditingDonor((v) => (v ? { ...v, emergencyContactName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} required />
+            <input className="rounded border p-2" placeholder="Emergency Contact Phone Number (+233...)" value={editingDonor.emergencyContactPhone} onChange={(e) => setEditingDonor((v) => (v ? { ...v, emergencyContactPhone: e.target.value } : v))} required />
+            <select className="rounded border p-2" value={editingDonor.emergencyContactRelationship} onChange={(e) => setEditingDonor((v) => (v ? { ...v, emergencyContactRelationship: e.target.value } : v))} required>
+              <option value="">Relationship to Donor *</option>
+              {relationshipOptions.map((relationship) => (
+                <option key={relationship} value={relationship}>{relationship}</option>
+              ))}
             </select>
             <div className="flex gap-2 justify-end">
               <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingDonor(null)}>Cancel</button>
@@ -1087,6 +1440,35 @@ export default function AdminManagementPage() {
           <form className="grid gap-3" onSubmit={(event) => void handleHospitalModalSubmit(event)}>
             <input className="rounded border p-2" value={editingHospital.hospitalName} onChange={(e) => setEditingHospital((v) => (v ? { ...v, hospitalName: e.target.value } : v))} required />
             <input className="rounded border p-2" value={editingHospital.location} onChange={(e) => setEditingHospital((v) => (v ? { ...v, location: e.target.value } : v))} required />
+            <input className="rounded border p-2" placeholder="City *" value={editingHospital.city} onChange={(e) => setEditingHospital((v) => (v ? { ...v, city: e.target.value } : v))} required />
+            <input className="rounded border p-2" placeholder="Region *" value={editingHospital.region} onChange={(e) => setEditingHospital((v) => (v ? { ...v, region: e.target.value } : v))} required />
+            <input className="rounded border bg-slate-50 p-2" inputMode="decimal" placeholder="Latitude (e.g. 5.6698)" value={editingHospital.latitude} readOnly />
+            <input className="rounded border bg-slate-50 p-2" inputMode="decimal" placeholder="Longitude (e.g. -0.0166)" value={editingHospital.longitude} readOnly />
+            <p className="text-xs text-slate-500">
+              These location details are required for emergency requests, nearest blood source search, donor matching, and live map coordination.
+            </p>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Select hospital location on the map</p>
+              <p className="text-xs text-slate-500">Click the hospital location on the map or drag the pin to set coordinates.</p>
+              <button
+                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-primary transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={capturingEditHospitalLocation}
+                type="button"
+                onClick={useBrowserLocationForEditingHospital}
+              >
+                {capturingEditHospitalLocation ? 'Capturing location...' : 'Use Browser Location'}
+              </button>
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <HospitalLocationPicker
+                  latitude={editingHospital.latitude.trim() ? Number(editingHospital.latitude) : null}
+                  longitude={editingHospital.longitude.trim() ? Number(editingHospital.longitude) : null}
+                  onChange={(nextLat, nextLng) =>
+                    setEditingHospital((v) => (v ? { ...v, latitude: String(nextLat), longitude: String(nextLng) } : v))
+                  }
+                  className="h-56 w-full"
+                />
+              </div>
+            </div>
             <input className="rounded border p-2" value={editingHospital.contactName} onChange={(e) => setEditingHospital((v) => (v ? { ...v, contactName: e.target.value } : v))} required />
             <div className="flex gap-2 justify-end">
               <button className="rounded border px-3 py-2" type="button" onClick={() => setEditingHospital(null)}>Cancel</button>

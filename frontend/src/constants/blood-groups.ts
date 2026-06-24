@@ -1,4 +1,4 @@
-export const bloodGroups = [
+export const confirmedBloodGroups = [
   { value: 'O_POS', label: 'O_POS (O+)' },
   { value: 'O_NEG', label: 'O_NEG (O-)' },
   { value: 'A_POS', label: 'A_POS (A+)' },
@@ -9,3 +9,7 @@ export const bloodGroups = [
   { value: 'AB_NEG', label: 'AB_NEG (AB-)' },
 ] as const;
 
+export const bloodGroups = [
+  { value: 'UNKNOWN', label: 'Unknown / Not Tested Yet' },
+  ...confirmedBloodGroups,
+] as const;

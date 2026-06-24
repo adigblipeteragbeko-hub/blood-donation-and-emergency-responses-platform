@@ -4,10 +4,14 @@ import { FilterBox, Pager } from '../components/TableControls';
 
 type DonationItem = {
   id: string;
+  donationNumber?: string | null;
   donatedAt: string;
   location: string;
   unitsDonated: number;
+  bloodGroup?: string | null;
   screeningResult?: string | null;
+  notes?: string | null;
+  hospital?: { hospitalName?: string | null; location?: string | null } | null;
 };
 
 export default function HistoryPage() {
@@ -18,12 +22,21 @@ export default function HistoryPage() {
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const pageSize = 25;
+  const nextEligibilityDate = (value: string) => {
+    const date = new Date(value);
+    date.setMonth(date.getMonth() + 2);
+    return date.toLocaleDateString();
+  };
+  const detailFromNotes = (notes: string | null | undefined, label: string) => {
+    const match = notes?.match(new RegExp(`${label}:\\s*([^|]+)`, 'i'));
+    return match?.[1]?.trim() ?? '';
+  };
 
   useEffect(() => {
     const load = async () => {
       try {
         const response = await api.get('/donors/profile');
-        const profile = response.data?.data;
+        const profile = response.data?.data ?? response.data ?? {};
         setDonations((profile?.donationHistory ?? []) as DonationItem[]);
       } catch {
         setError('Could not load donation history.');
@@ -51,6 +64,7 @@ export default function HistoryPage() {
           !searchTerm ||
           item.location.toLowerCase().includes(searchTerm) ||
           String(item.unitsDonated).includes(searchTerm) ||
+          (item.donationNumber ?? '').toLowerCase().includes(searchTerm) ||
           (item.screeningResult ?? 'completed').toLowerCase().includes(searchTerm),
       ),
     [donations, searchTerm],
@@ -80,17 +94,27 @@ export default function HistoryPage() {
             <thead>
               <tr className="border-b border-red-200 text-primary">
                 <th className="py-2">Date</th>
-                <th className="py-2">Location</th>
+                <th className="py-2">Donation Number</th>
+                <th className="py-2">Appointment</th>
+                <th className="py-2">Hospital / Location</th>
+                <th className="py-2">Blood Group</th>
                 <th className="py-2">Units</th>
+                <th className="py-2">Volume</th>
+                <th className="py-2">Next Eligible</th>
                 <th className="py-2">Status</th>
               </tr>
             </thead>
             <tbody>
               {visibleDonations.map((item) => (
                 <tr key={item.id} className="border-b border-gray-100">
-                  <td className="py-2">{new Date(item.donatedAt).toLocaleDateString()}</td>
-                  <td className="py-2">{item.location}</td>
+                  <td className="py-2">{new Date(item.donatedAt).toLocaleString()}</td>
+                  <td className="py-2">{item.donationNumber ?? 'Not assigned'}</td>
+                  <td className="py-2">{detailFromNotes(item.notes, 'Appointment') || 'Not linked'}</td>
+                  <td className="py-2">{item.hospital?.hospitalName ?? item.location}</td>
+                  <td className="py-2">{item.bloodGroup ?? 'Not recorded'}</td>
                   <td className="py-2">{item.unitsDonated}</td>
+                  <td className="py-2">{detailFromNotes(item.notes, 'Volume') || 'Not recorded'}</td>
+                  <td className="py-2">{nextEligibilityDate(item.donatedAt)}</td>
                   <td className="py-2">{item.screeningResult ?? 'Completed'}</td>
                 </tr>
               ))}

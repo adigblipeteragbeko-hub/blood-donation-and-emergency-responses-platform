@@ -10,6 +10,7 @@ import { SecurityEventsService } from '../common/security/security-events.servic
 import { HospitalAccessService } from '../common/rbac/hospital-access.service';
 import { RbacService } from '../common/rbac/rbac.service';
 import { PermissionsGuard } from '../common/rbac/permissions.guard';
+import { GeocodingService } from '../common/maps/geocoding.service';
 
 @Global()
 @Module({
@@ -25,6 +26,7 @@ import { PermissionsGuard } from '../common/rbac/permissions.guard';
     HospitalAccessService,
     RbacService,
     PermissionsGuard,
+    GeocodingService,
   ],
   exports: [
     PrismaService,
@@ -38,6 +40,7 @@ import { PermissionsGuard } from '../common/rbac/permissions.guard';
     HospitalAccessService,
     RbacService,
     PermissionsGuard,
+    GeocodingService,
   ],
 })
 export class CoreModule {}

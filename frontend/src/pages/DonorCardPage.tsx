@@ -8,7 +8,6 @@ type DonorProfile = {
   emergencyContactPhone?: string;
   bloodGroup?: string;
   dateOfBirth?: string;
-  signature?: string;
   passportPhotoUrl?: string;
   location?: string;
   postalAddress?: string;
@@ -108,7 +107,6 @@ export default function DonorCardPage() {
             bloodGroup: profile.bloodGroup ?? '',
             location: profile.location ?? '',
             postalAddress: profile.postalAddress ?? undefined,
-            signature: profile.signature ?? undefined,
             passportPhotoUrl: optimizedDataUrl,
             eligibilityStatus: true,
             availabilityStatus: false,
@@ -182,16 +180,13 @@ export default function DonorCardPage() {
               <span className="font-semibold">NAME:</span> {profile.fullName || '-'}
             </p>
             <p>
-              <span className="font-semibold">TELEPHONE:</span> {cardTelephone}
+              <span className="font-semibold">PRIMARY PHONE NUMBER:</span> {cardTelephone}
             </p>
             <p>
               <span className="font-semibold">BLOOD GROUP:</span> {profile.bloodGroup || '-'}
             </p>
             <p>
               <span className="font-semibold">DATE OF BIRTH:</span> {profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : '-'}
-            </p>
-            <p>
-              <span className="font-semibold">SIGNATURE:</span> {profile.signature || '-'}
             </p>
             <p>
               <span className="font-semibold">DONOR SERIAL NUMBER:</span> {profile.donorNumber || '-'}

@@ -3,7 +3,18 @@ import { getHospitalReportsSummary } from '../services/hospital-portal';
 import { FilterBox } from '../components/TableControls';
 
 type SummaryData = {
-  donationActivity?: { totalDonations: number };
+  donationActivity?: {
+    totalDonations: number;
+    recentDonations?: Array<{
+      id: string;
+      donationNumber?: string | null;
+      donatedAt: string;
+      bloodGroup?: string | null;
+      unitsDonated: number;
+      donor?: { fullName?: string | null; donorNumber?: string | null } | null;
+      hospital?: { hospitalName?: string | null } | null;
+    }>;
+  };
   requestFulfillment?: { totalRequests: number };
   emergencyResponse?: { totalEmergencyRequests: number };
   predictiveAnalytics?: { projected7DayDemand?: number; shortageRisk?: Array<{ riskLevel: string }> };
@@ -98,6 +109,40 @@ export default function HospitalReportsPage() {
           <p className="text-sm font-semibold text-muted">Shortage Risk (High/Critical)</p>
           <p className="mt-2 text-2xl font-bold text-primary">{loading ? '...' : highRiskCount}</p>
         </article>
+      </div>
+
+      <div className="card space-y-3">
+        <h2 className="text-lg font-bold text-primary">Recent Donations</h2>
+        {(summary.donationActivity?.recentDonations ?? []).length === 0 ? (
+          <p className="text-sm text-muted">No recent donations for this period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2 pr-3">Donation Number</th>
+                  <th className="py-2 pr-3">Donor</th>
+                  <th className="py-2 pr-3">Hospital</th>
+                  <th className="py-2 pr-3">Blood</th>
+                  <th className="py-2 pr-3">Units</th>
+                  <th className="py-2 pr-3">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(summary.donationActivity?.recentDonations ?? []).map((donation) => (
+                  <tr key={donation.id} className="border-b last:border-b-0">
+                    <td className="py-2 pr-3 font-semibold">{donation.donationNumber ?? 'Not assigned'}</td>
+                    <td className="py-2 pr-3">{donation.donor?.fullName ?? donation.donor?.donorNumber ?? '-'}</td>
+                    <td className="py-2 pr-3">{donation.hospital?.hospitalName ?? '-'}</td>
+                    <td className="py-2 pr-3">{donation.bloodGroup ?? '-'}</td>
+                    <td className="py-2 pr-3">{donation.unitsDonated}</td>
+                    <td className="py-2 pr-3">{new Date(donation.donatedAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card space-y-3">

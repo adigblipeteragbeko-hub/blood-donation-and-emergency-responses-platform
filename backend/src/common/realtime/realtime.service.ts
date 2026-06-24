@@ -18,9 +18,16 @@ export class RealtimeService {
 
   async broadcastEmergencyRequest(
     payload: Record<string, unknown>,
-    context: { requestId: string; hospitalId: string; matchedDonorUserIds?: string[]; isPublicEmergency?: boolean },
+    context: {
+      requestId: string;
+      hospitalId: string;
+      matchedDonorUserIds?: string[];
+      matchedHospitalUserIds?: string[];
+      isPublicEmergency?: boolean;
+    },
   ) {
     const recipientIds = new Set<string>(context.matchedDonorUserIds ?? []);
+    (context.matchedHospitalUserIds ?? []).forEach((id) => recipientIds.add(id));
 
     const [hospitalRecipients, matchedDonorsFromDb] = await Promise.all([
       this.prisma.hospital.findUnique({
@@ -76,9 +83,15 @@ export class RealtimeService {
     this.gateway.emitToPublic('website.announcement.updated', payload);
   }
 
+  broadcastHospitalMapUpdate(payload: unknown) {
+    this.gateway.emitToRoles(this.operationsRoles, 'hospital.map.updated', payload);
+    this.gateway.emitToPublic('hospital.map.updated', payload);
+  }
+
   private sanitizeEmergencyPublicPayload(payload: Record<string, unknown>) {
     return {
       requestId: payload.requestId ?? null,
+      requestReference: payload.requestReference ?? null,
       status: payload.status ?? null,
       trackingStatus: payload.trackingStatus ?? null,
       bloodGroup: payload.bloodGroup ?? null,

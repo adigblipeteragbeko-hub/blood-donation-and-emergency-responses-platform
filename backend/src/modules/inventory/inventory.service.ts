@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryChangeType, Role } from '@prisma/client';
+import { BloodGroup, InventoryChangeType, Role } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { CreateInventoryLogDto } from './dto/create-inventory-log.dto';
 import { UpsertInventoryDto } from './dto/upsert-inventory.dto';
@@ -65,6 +65,10 @@ export class InventoryService {
 
   async upsert(userId: string, dto: UpsertInventoryDto) {
     const hospital = await this.getHospitalForUser(userId);
+
+    if (dto.bloodGroup === BloodGroup.UNKNOWN) {
+      throw new BadRequestException('Inventory requires a confirmed blood group.');
+    }
 
     const item = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.inventoryItem.findUnique({

@@ -39,6 +39,7 @@ const HospitalDashboardPage = lazy(() => import('./pages/HospitalDashboardPage')
 const HospitalInventoryPage = lazy(() => import('./pages/HospitalInventoryPage'));
 const HospitalRequestBloodPage = lazy(() => import('./pages/HospitalRequestBloodPage'));
 const HospitalActiveRequestsPage = lazy(() => import('./pages/HospitalActiveRequestsPage'));
+const HospitalRequestHistoryPage = lazy(() => import('./pages/HospitalRequestHistoryPage'));
 const HospitalDonorSearchPage = lazy(() => import('./pages/HospitalDonorSearchPage'));
 const HospitalAppointmentsPage = lazy(() => import('./pages/HospitalAppointmentsPage'));
 const HospitalNotificationsPage = lazy(() => import('./pages/HospitalNotificationsPage'));
@@ -144,6 +145,7 @@ function App() {
             <Route path="inventory" element={<HospitalInventoryPage />} />
             <Route path="request-blood" element={<HospitalRequestBloodPage />} />
             <Route path="active-requests" element={<HospitalActiveRequestsPage />} />
+            <Route path="request-history" element={<HospitalRequestHistoryPage />} />
             <Route path="donor-search" element={<HospitalDonorSearchPage />} />
             <Route path="donor-reviews" element={<DonorClinicalReviewQueuePage />} />
             <Route path="live-map" element={<LiveMapPage />} />

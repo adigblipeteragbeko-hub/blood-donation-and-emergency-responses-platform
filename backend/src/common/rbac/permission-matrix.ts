@@ -48,6 +48,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<Role, PermissionCode[]> = {
   ],
   HOSPITAL_STAFF: [
     PermissionCode.HOSPITAL_OPERATIONS_VIEW,
+    PermissionCode.INVENTORY_REPORT_VIEW,
     PermissionCode.BLOOD_REQUEST_CREATE,
     PermissionCode.BLOOD_REQUEST_PROGRESS_UPDATE,
     PermissionCode.DONOR_MATCH_VIEW,

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { bloodGroups } from '../constants/blood-groups';
-import { BloodGroup, PriorityLevel, createHospitalRequest, getHospitalProfile } from '../services/hospital-portal';
+import { useSearchParams } from 'react-router-dom';
+import { confirmedBloodGroups } from '../constants/blood-groups';
+import { BloodGroup, PriorityLevel, RequestSource, createHospitalRequest, getHospitalProfile } from '../services/hospital-portal';
 
 function defaultRequiredBy() {
   const date = new Date();
@@ -9,52 +10,149 @@ function defaultRequiredBy() {
 }
 
 export default function HospitalRequestBloodPage() {
+  const [searchParams] = useSearchParams();
+  const donorContextId = searchParams.get('donorId') ?? '';
+  const bloodGroupContext = searchParams.get('bloodGroup') as BloodGroup | null;
   const [patientName, setPatientName] = useState('');
-  const [patientCode, setPatientCode] = useState('');
-  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O_POS');
+  const [hospitalPatientReference, setHospitalPatientReference] = useState('');
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>(
+    bloodGroupContext && confirmedBloodGroups.some((group) => group.value === bloodGroupContext)
+      ? bloodGroupContext
+      : 'O_POS',
+  );
   const [unitsNeeded, setUnitsNeeded] = useState(1);
-  const [requestType, setRequestType] = useState<'STANDARD' | 'EMERGENCY'>('STANDARD');
-  const [priority, setPriority] = useState<PriorityLevel>('MEDIUM');
+  const [requestType, setRequestType] = useState<'STANDARD' | 'EMERGENCY'>(donorContextId ? 'EMERGENCY' : 'STANDARD');
+  const [priority, setPriority] = useState<PriorityLevel>(donorContextId ? 'HIGH' : 'MEDIUM');
+  const [requestSource, setRequestSource] = useState<RequestSource>('DONORS_AND_HOSPITALS');
+  const [ward, setWard] = useState('');
   const [location, setLocation] = useState('');
+  const [profileHospitalName, setProfileHospitalName] = useState('');
+  const [emergencyCity, setEmergencyCity] = useState('');
+  const [emergencyRegion, setEmergencyRegion] = useState('');
+  const [emergencyLatitude, setEmergencyLatitude] = useState<number | null>(null);
+  const [emergencyLongitude, setEmergencyLongitude] = useState<number | null>(null);
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(donorContextId ? `Map donor context: ${donorContextId}` : '');
   const [message, setMessage] = useState('');
+  const [loadingProfileLocation, setLoadingProfileLocation] = useState(false);
   const [saving, setSaving] = useState(false);
+  const emergencyLocationReady = Boolean(
+    emergencyCity.trim() && emergencyRegion.trim() && emergencyLatitude !== null && emergencyLongitude !== null,
+  );
 
   useEffect(() => {
     const load = async () => {
       try {
         const profile = await getHospitalProfile();
-        setLocation(profile.location ?? '');
+        setProfileHospitalName(profile.hospitalName ?? '');
+        if (!donorContextId) {
+          setLocation(profile.city?.trim() || profile.location?.trim() || '');
+        }
+        const city = profile.city?.trim() ?? '';
+        const region = profile.region?.trim() ?? '';
+        const latitude = typeof profile.latitude === 'number' ? profile.latitude : null;
+        const longitude = typeof profile.longitude === 'number' ? profile.longitude : null;
+        if (city && region && latitude !== null && longitude !== null) {
+          setEmergencyCity(city);
+          setEmergencyRegion(region);
+          setEmergencyLatitude(latitude);
+          setEmergencyLongitude(longitude);
+          setMessage((current) =>
+            current === 'Hospital profile location is incomplete. Please update Hospital Profile before submitting emergency requests.'
+              ? ''
+              : current,
+          );
+        } else if (requestType === 'EMERGENCY') {
+          setMessage('Hospital profile location is incomplete. Please update Hospital Profile before submitting emergency requests.');
+        }
       } catch {
         // keep empty; user can type location
       }
     };
     void load();
-  }, []);
+  }, [donorContextId, requestType]);
+
+  const applyHospitalProfileLocation = async () => {
+    setLoadingProfileLocation(true);
+    setMessage('');
+    try {
+      const profile = await getHospitalProfile();
+      const city = profile.city?.trim() ?? '';
+      const region = profile.region?.trim() ?? '';
+      const latitude = typeof profile.latitude === 'number' ? profile.latitude : null;
+      const longitude = typeof profile.longitude === 'number' ? profile.longitude : null;
+
+      if (!city || !region || latitude === null || longitude === null) {
+        setMessage('Hospital profile location is incomplete. Please update Hospital Profile first.');
+        return;
+      }
+
+      setProfileHospitalName(profile.hospitalName ?? '');
+      setEmergencyCity(city);
+      setEmergencyRegion(region);
+      setEmergencyLatitude(latitude);
+      setEmergencyLongitude(longitude);
+      setLocation(city || profile.location?.trim() || location);
+      setMessage('Hospital profile location applied.');
+    } catch {
+      setMessage('Unable to load hospital profile location. Please try again.');
+    } finally {
+      setLoadingProfileLocation(false);
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     setMessage('');
     try {
-      await createHospitalRequest({
+      const trimmedWard = ward.trim();
+      const trimmedLocation = location.trim();
+
+      if (!trimmedWard) {
+        setMessage('Ward / Unit is required.');
+        return;
+      }
+
+      if (!trimmedLocation) {
+        setMessage('Location is required.');
+        return;
+      }
+
+      if (
+        requestType === 'EMERGENCY' &&
+        (!emergencyCity.trim() || !emergencyRegion.trim() || emergencyLatitude === null || emergencyLongitude === null)
+      ) {
+        setMessage('Use Hospital Profile Location or update Hospital Profile before submitting.');
+        return;
+      }
+
+      const request = await createHospitalRequest({
         patientName: patientName || undefined,
-        patientCode: patientCode || undefined,
+        hospitalPatientReference: hospitalPatientReference || undefined,
+        ward: trimmedWard,
         bloodGroup,
         unitsNeeded,
         type: requestType,
         priority,
-        location,
+        requestSource,
+        location: trimmedLocation,
+        emergencyLocation: requestType === 'EMERGENCY' ? `${trimmedWard}, ${trimmedLocation}` : undefined,
+        city: requestType === 'EMERGENCY' ? emergencyCity.trim() : undefined,
+        region: requestType === 'EMERGENCY' ? emergencyRegion.trim() : undefined,
+        latitude: requestType === 'EMERGENCY' ? emergencyLatitude ?? undefined : undefined,
+        longitude: requestType === 'EMERGENCY' ? emergencyLongitude ?? undefined : undefined,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
-      setMessage('Blood request created successfully.');
+      setMessage(`Blood request created successfully. Request Reference: ${request.requestReference}`);
       setPatientName('');
-      setPatientCode('');
+      setHospitalPatientReference('');
+      setWard('');
       setUnitsNeeded(1);
       setRequestType('STANDARD');
       setPriority('MEDIUM');
+      setRequestSource('DONORS_AND_HOSPITALS');
       setRequiredBy(defaultRequiredBy());
       setNotes('');
     } catch (error: any) {
@@ -68,10 +166,13 @@ export default function HospitalRequestBloodPage() {
     <section className="space-y-5">
       <div className="card">
         <h1 className="text-2xl font-bold text-primary">Request Blood</h1>
-        <p className="text-sm text-muted">Create new blood requests with quantity, urgency, and patient details.</p>
+        <p className="text-sm text-muted">Create blood requests with quantity, urgency, and coordination details.</p>
       </div>
 
       <form className="card grid gap-3 md:grid-cols-2" onSubmit={submit}>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 md:col-span-2">
+          Request Reference: Will be generated automatically
+        </div>
         <label className="text-sm font-semibold">
           Patient Name
           <input
@@ -83,20 +184,20 @@ export default function HospitalRequestBloodPage() {
           />
         </label>
         <label className="text-sm font-semibold">
-          Patient Code
+          Hospital Patient Reference (Optional)
           <input
             className="legacy-input mt-1"
             maxLength={64}
-            placeholder="Use a hospital-safe patient reference"
+            placeholder="Optional internal reference"
             type="text"
-            value={patientCode}
-            onChange={(e) => setPatientCode(e.target.value)}
+            value={hospitalPatientReference}
+            onChange={(e) => setHospitalPatientReference(e.target.value)}
           />
         </label>
         <label className="text-sm font-semibold">
           Blood Group
           <select className="legacy-input mt-1" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}>
-            {bloodGroups.map((group) => (
+            {confirmedBloodGroups.map((group) => (
               <option key={group.value} value={group.value}>
                 {group.label}
               </option>
@@ -134,6 +235,36 @@ export default function HospitalRequestBloodPage() {
             <option value="CRITICAL">CRITICAL</option>
           </select>
         </label>
+        <label className="text-sm font-semibold md:col-span-2">
+          Ward / Unit *
+          <input
+            className="legacy-input mt-1"
+            maxLength={100}
+            placeholder="Trauma Ward, ICU, Emergency Unit, Male Surgical Ward"
+            required
+            type="text"
+            value={ward}
+            onChange={(e) => setWard(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Enter the hospital ward or unit requesting the blood. Keep the location field for the city or area.
+          </p>
+        </label>
+        <label className="text-sm font-semibold md:col-span-2">
+          Request Source
+          <select
+            className="legacy-input mt-1"
+            value={requestSource}
+            onChange={(e) => setRequestSource(e.target.value as RequestSource)}
+          >
+            <option value="DONORS_ONLY">Donors Only</option>
+            <option value="HOSPITALS_ONLY">Hospitals Only</option>
+            <option value="DONORS_AND_HOSPITALS">Donors + Hospitals</option>
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Donors Only: notify approved compatible donors. Hospitals Only: search hospital/blood-bank stock. Donors + Hospitals: fastest dual coordination.
+          </p>
+        </label>
         <label className="text-sm font-semibold">
           Required By
           <input
@@ -144,10 +275,55 @@ export default function HospitalRequestBloodPage() {
             onChange={(e) => setRequiredBy(e.target.value)}
           />
         </label>
-        <label className="text-sm font-semibold md:col-span-2">
+        <div className="text-sm font-semibold md:col-span-2">
           Location
-          <input className="legacy-input mt-1" required type="text" value={location} onChange={(e) => setLocation(e.target.value)} />
-        </label>
+          <input
+            className="legacy-input mt-1"
+            placeholder="Accra"
+            required
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-500">Use the city, town, or area only. Example: Accra.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-primary transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loadingProfileLocation}
+              type="button"
+              onClick={applyHospitalProfileLocation}
+            >
+              {loadingProfileLocation ? 'Loading profile location...' : 'Use Hospital Profile Location'}
+            </button>
+            {emergencyLocationReady ? (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                Emergency location ready: {emergencyCity}, {emergencyRegion}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-500">
+                Emergency requests need saved city, region, latitude, and longitude.
+              </span>
+            )}
+          </div>
+          {emergencyLatitude !== null && emergencyLongitude !== null ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Coordinates: {emergencyLatitude.toFixed(4)}, {emergencyLongitude.toFixed(4)}
+            </p>
+          ) : null}
+          {requestType === 'EMERGENCY' && emergencyLocationReady ? (
+            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <p className="font-black">Emergency Location Ready</p>
+              <p className="mt-1">
+                {profileHospitalName || 'Hospital'} - {emergencyCity}, {emergencyRegion}
+              </p>
+              <p className="text-xs font-semibold">Coordinates available for emergency coordination.</p>
+            </div>
+          ) : requestType === 'EMERGENCY' ? (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+              Hospital profile location is incomplete. Please update Hospital Profile before submitting emergency requests.
+            </div>
+          ) : null}
+        </div>
         <label className="text-sm font-semibold md:col-span-2">
           Patient / Clinical Notes
           <textarea className="legacy-input mt-1 min-h-24" value={notes} onChange={(e) => setNotes(e.target.value)} />

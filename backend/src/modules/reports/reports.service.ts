@@ -24,9 +24,18 @@ export class ReportsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [bloodStock, donations, requests, emergencies, demandByGroup, acceptedResponses, emergencyCompleted] = await Promise.all([
+    const [bloodStock, donations, recentDonations, requests, emergencies, demandByGroup, acceptedResponses, emergencyCompleted] = await Promise.all([
       this.prisma.inventoryItem.groupBy({ by: ['bloodGroup'], _sum: { availableUnits: true } }),
       this.prisma.donation.count({ where }),
+      this.prisma.donation.findMany({
+        where,
+        include: {
+          donor: { select: { fullName: true, donorNumber: true } },
+          hospital: { select: { hospitalName: true } },
+        },
+        orderBy: { donatedAt: 'desc' },
+        take: 10,
+      }),
       this.prisma.bloodRequest.count({ where }),
       this.prisma.bloodRequest.count({ where: { ...where, type: 'EMERGENCY' } }),
       this.prisma.bloodRequest.groupBy({
@@ -59,7 +68,7 @@ export class ReportsService {
 
     return {
       bloodStock,
-      donationActivity: { totalDonations: donations },
+      donationActivity: { totalDonations: donations, recentDonations },
       requestFulfillment: { totalRequests: requests },
       emergencyResponse: { totalEmergencyRequests: emergencies },
       predictiveAnalytics: {

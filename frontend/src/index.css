@@ -37,15 +37,36 @@ body {
 a,
 button,
 [role='button'],
-summary {
+summary,
+label[for],
+.btn-primary,
+.btn-secondary,
+.btn-ghost {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
 input,
-textarea,
-select {
+textarea {
   cursor: text;
+}
+
+select,
+input[type='checkbox'],
+input[type='radio'],
+input[type='date'],
+input[type='file'],
+input[type='color'],
+[tabindex]:not([tabindex='-1']) {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 a {

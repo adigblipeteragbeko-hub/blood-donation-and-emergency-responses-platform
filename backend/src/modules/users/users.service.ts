@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../../common/audit/audit.service';
@@ -8,6 +9,8 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -74,8 +77,36 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    await this.prisma.user.delete({ where: { id } });
-    await this.audit.log('USER_DELETED', 'USER', actorUserId, id, { email: user.email });
+    if (id === actorUserId) {
+      throw new ForbiddenException('You cannot delete the currently logged-in admin account.');
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.donorResponse.updateMany({
+          where: { userId: id },
+          data: { userId: null },
+        });
+
+        await tx.user.delete({ where: { id } });
+      });
+
+      await this.audit.log('USER_DELETED', 'USER', actorUserId, id, {
+        email: user.email,
+        role: user.role,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to delete user ${id} (${user.email}): ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new BadRequestException('Unable to delete user because related records exist.');
+      }
+
+      throw error;
+    }
 
     return { message: 'User deleted successfully' };
   }

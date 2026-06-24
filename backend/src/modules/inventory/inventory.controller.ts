@@ -15,22 +15,30 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
-@Permissions([PermissionCode.INVENTORY_MANAGE, PermissionCode.INVENTORY_REPORT_VIEW], 'any')
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Post()
+  @Permissions([PermissionCode.INVENTORY_MANAGE])
   upsert(@CurrentUser() user: { id: string }, @Body() dto: UpsertInventoryDto) {
     return this.inventoryService.upsert(user.id, dto);
   }
 
   @Get()
+  @Permissions([PermissionCode.INVENTORY_REPORT_VIEW])
   list(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
     return this.inventoryService.list(user.id, user.role, query);
   }
 
+  @Get('logs')
+  @Permissions([PermissionCode.INVENTORY_REPORT_VIEW])
+  listLogs(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
+    return this.inventoryService.listLogs(user.id, user.role, query);
+  }
+
   @Patch(':id')
+  @Permissions([PermissionCode.INVENTORY_MANAGE])
   updateItem(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: Role },
@@ -39,12 +47,8 @@ export class InventoryController {
     return this.inventoryService.updateItem(id, user.id, user.role, dto);
   }
 
-  @Get('logs')
-  listLogs(@CurrentUser() user: { id: string; role: Role }, @Query() query: PaginationQueryDto) {
-    return this.inventoryService.listLogs(user.id, user.role, query);
-  }
-
   @Post(':id/logs')
+  @Permissions([PermissionCode.INVENTORY_MANAGE])
   createLog(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: Role },

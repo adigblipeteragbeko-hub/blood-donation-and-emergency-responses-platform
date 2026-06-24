@@ -5,7 +5,7 @@ import { AppIcon } from '../components/ui/AppIcon';
 
 type DonorProfilePayload = {
   bloodGroup?: string;
-  donationHistory?: Array<{ donatedAt: string }>;
+  donationHistory?: Array<{ donationNumber?: string | null; donatedAt: string; notes?: string | null; unitsDonated?: number | null }>;
   availabilityStatus?: boolean;
 };
 
@@ -16,9 +16,15 @@ type NotificationPayload = {
 
 const bloodGroupLabel = Object.fromEntries(bloodGroups.map((item) => [item.value, item.label]));
 
+const detailFromNotes = (notes: string | null | undefined, label: string) => {
+  const match = notes?.match(new RegExp(`${label}:\\s*([^|]+)`, 'i'));
+  return match?.[1]?.trim() ?? '';
+};
+
 export default function DonorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [bloodGroup, setBloodGroup] = useState('Not set');
+  const [bloodGroupUnknown, setBloodGroupUnknown] = useState(false);
   const [donationCount, setDonationCount] = useState(0);
   const [availability, setAvailability] = useState('Not set');
   const [alerts, setAlerts] = useState<string[]>([]);
@@ -30,23 +36,28 @@ export default function DonorDashboardPage() {
         const [profileRes, notificationsRes] = await Promise.allSettled([api.get('/donors/profile'), api.get('/notifications')]);
 
         if (profileRes.status === 'fulfilled') {
-          const profile = (profileRes.value.data?.data ?? {}) as DonorProfilePayload;
+          const profile = (profileRes.value.data?.data ?? profileRes.value.data ?? {}) as DonorProfilePayload;
           if (profile.bloodGroup) {
             setBloodGroup(bloodGroupLabel[profile.bloodGroup] ?? profile.bloodGroup);
+            setBloodGroupUnknown(profile.bloodGroup === 'UNKNOWN');
           }
           setDonationCount(profile.donationHistory?.length ?? 0);
           if (typeof profile.availabilityStatus === 'boolean') {
             setAvailability(profile.availabilityStatus ? 'Available' : 'Not Available');
           }
           const donationEvents = (profile.donationHistory ?? [])
-            .slice(-3)
-            .reverse()
-            .map((entry) => `Donation completed on ${new Date(entry.donatedAt).toLocaleDateString()}`);
+            .slice(0, 3)
+            .map((entry) => {
+              const reference = detailFromNotes(entry.notes, 'Appointment');
+              const donationNumber = entry.donationNumber ? `${entry.donationNumber}: ` : '';
+              const units = entry.unitsDonated ?? 1;
+              return `${donationNumber}${reference ? `${reference}: ` : ''}${units} unit${units === 1 ? '' : 's'} donated on ${new Date(entry.donatedAt).toLocaleDateString()}`;
+            });
           setRecentActivity(donationEvents);
         }
 
         if (notificationsRes.status === 'fulfilled') {
-          const notifications = (notificationsRes.value.data?.data ?? []) as NotificationPayload[];
+          const notifications = (notificationsRes.value.data?.data ?? notificationsRes.value.data ?? []) as NotificationPayload[];
           const topAlerts = notifications.slice(0, 3).map((item) => item.title);
           setAlerts(topAlerts);
           if (topAlerts.length > 0) {
@@ -75,6 +86,7 @@ export default function DonorDashboardPage() {
         <div className="card">
           <p className="text-sm text-gray-500">Blood Group</p>
           <p className="text-2xl font-bold text-primary">{loading ? 'Loading...' : bloodGroup}</p>
+          {!loading && bloodGroupUnknown ? <p className="mt-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">Pending hospital confirmation</p> : null}
         </div>
         <div className="card">
           <p className="text-sm text-gray-500">Availability</p>

@@ -7,9 +7,11 @@ import { CreateDonorAdminDto } from './dto/admin/create-donor-admin.dto';
 import { UpdateDonorAdminDto } from './dto/admin/update-donor-admin.dto';
 import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto';
 import * as argon2 from 'argon2';
-import { Role } from '@prisma/client';
+import { DonorClinicalStatus, DonorProfileVisibility, Role } from '@prisma/client';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { ActivityService } from '../../common/activity/activity.service';
+import { generateDonorReference } from '../../common/utils/donor-reference';
+import { UpdateDonorSettingsDto } from './dto/update-donor-settings.dto';
 
 @Injectable()
 export class DonorsService {
@@ -19,42 +21,166 @@ export class DonorsService {
     private readonly activity: ActivityService,
   ) {}
 
-  private async buildDonorNumber() {
-    const latest = await this.prisma.donor.findFirst({
-      where: { donorNumber: { not: null } },
-      select: { donorNumber: true },
-      orderBy: { donorNumber: 'desc' },
-    });
-
-    const value = latest?.donorNumber ?? '000000';
-    const prefixedMatch = /^DON-(\d+)$/i.exec(value);
-    const plainMatch = /^(\d+)$/.exec(value);
-    const numeric = prefixedMatch
-      ? Number.parseInt(prefixedMatch[1], 10)
-      : plainMatch
-        ? Number.parseInt(plainMatch[1], 10)
-        : 0;
-
-    return String((Number.isNaN(numeric) ? 0 : numeric) + 1).padStart(6, '0');
-  }
-
   private normalizeDate(value?: string) {
     return value ? new Date(value) : undefined;
   }
 
+  private buildDonorDisplayName(profile: {
+    firstName?: string | null;
+    otherNames?: string | null;
+    surname?: string | null;
+    fullName?: string | null;
+  }) {
+    return [profile.surname, profile.firstName, profile.otherNames]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(' ') || profile.fullName?.trim() || 'Unnamed Donor';
+  }
+
+  private async getLatestClinicalRecord(donorId: string) {
+    return this.prisma.donorClinicalRecord.findFirst({
+      where: { donorId },
+      orderBy: { createdAt: 'desc' },
+      include: { clinicalReview: true },
+    });
+  }
+
+  private buildAvailabilityReadiness(donor: {
+    eligibilityStatus: boolean;
+    availabilityStatus: boolean;
+    bloodGroup: string;
+    lastDonationDate?: Date | null;
+    nextEligibilityDate?: Date | null;
+    user?: { isActive: boolean; emailVerified: boolean } | null;
+  }, latestClinical: Awaited<ReturnType<DonorsService['getLatestClinicalRecord']>>) {
+    const blockedStatuses = new Set<DonorClinicalStatus>([
+      DonorClinicalStatus.REJECTED,
+      DonorClinicalStatus.TEMPORARILY_DEFERRED,
+      DonorClinicalStatus.PERMANENTLY_DEFERRED,
+    ]);
+    const clinicalStatus = latestClinical?.status ?? null;
+    const healthFormSubmitted = Boolean(latestClinical && clinicalStatus !== DonorClinicalStatus.DRAFT);
+    const healthFormCompleted = clinicalStatus === DonorClinicalStatus.APPROVED;
+    const officeUseCompleted = Boolean(latestClinical?.officeCompletedAt || latestClinical?.clinicalReview);
+    const bloodGroupConfirmed = donor.bloodGroup !== 'UNKNOWN';
+    const accountActive = donor.user?.isActive ?? false;
+    const emailVerified = donor.user?.emailVerified ?? false;
+    const blockedByDecision = clinicalStatus ? blockedStatuses.has(clinicalStatus) : false;
+    const nextEligibilityDate = donor.nextEligibilityDate ?? null;
+    const blockedByRecentDonation = Boolean(nextEligibilityDate && nextEligibilityDate > new Date());
+
+    let reason = 'You can now set your donor availability.';
+    if (!accountActive) {
+      reason = 'Your account is inactive. Please contact support.';
+    } else if (!emailVerified) {
+      reason = 'Please verify your email before setting availability.';
+    } else if (!latestClinical) {
+      reason = 'Submit your Health & Eligibility Form before setting availability.';
+    } else if (!healthFormSubmitted) {
+      reason = 'Submit your Health & Eligibility Form before setting availability.';
+    } else if (blockedByDecision) {
+      reason = 'Your latest screening decision does not allow donation availability.';
+    } else if (!officeUseCompleted) {
+      reason = 'Your form is waiting for hospital office-use screening.';
+    } else if (!healthFormCompleted) {
+      reason = 'Your form is waiting for final hospital approval.';
+    } else if (!bloodGroupConfirmed) {
+      reason = 'Hospital blood group confirmation is required before setting availability.';
+    } else if (!donor.eligibilityStatus) {
+      reason = 'Final donor approval is required before setting availability.';
+    } else if (blockedByRecentDonation) {
+      reason = `You recently donated blood. You can become available again on ${nextEligibilityDate?.toLocaleDateString()}.`;
+    }
+
+    const canSetAvailable = accountActive
+      && emailVerified
+      && Boolean(latestClinical)
+      && healthFormCompleted
+      && officeUseCompleted
+      && bloodGroupConfirmed
+      && donor.eligibilityStatus
+      && !blockedByDecision
+      && !blockedByRecentDonation;
+
+    return {
+      canSetAvailable,
+      reason,
+      healthFormSubmitted,
+      healthFormCompleted,
+      clinicalStatus,
+      officeUseCompleted,
+      bloodGroupConfirmed,
+      adminApproved: donor.eligibilityStatus,
+      accountActive,
+      emailVerified,
+      nextEligibilityDate,
+      blockedByRecentDonation,
+    };
+  }
+
+  private async reconcileClinicalApprovalState(donor: {
+    id: string;
+    eligibilityStatus: boolean;
+    availabilityStatus: boolean;
+    bloodGroup: string;
+    nextEligibilityDate?: Date | null;
+    userId: string;
+  }, latestClinical: Awaited<ReturnType<DonorsService['getLatestClinicalRecord']>>) {
+    const invalidStatuses = new Set<DonorClinicalStatus>([
+      DonorClinicalStatus.REJECTED,
+      DonorClinicalStatus.TEMPORARILY_DEFERRED,
+      DonorClinicalStatus.PERMANENTLY_DEFERRED,
+    ]);
+    const updates: { eligibilityStatus?: boolean; availabilityStatus?: boolean } = {};
+
+    if (latestClinical?.status === DonorClinicalStatus.APPROVED && donor.bloodGroup !== 'UNKNOWN' && !donor.eligibilityStatus) {
+      updates.eligibilityStatus = true;
+    }
+
+    if (latestClinical?.status && invalidStatuses.has(latestClinical.status)) {
+      if (donor.eligibilityStatus) updates.eligibilityStatus = false;
+      if (donor.availabilityStatus) updates.availabilityStatus = false;
+    }
+
+    if (donor.bloodGroup === 'UNKNOWN' && donor.availabilityStatus) {
+      updates.availabilityStatus = false;
+    }
+
+    if (donor.nextEligibilityDate && donor.nextEligibilityDate > new Date() && donor.availabilityStatus) {
+      updates.availabilityStatus = false;
+    }
+
+    if (!Object.keys(updates).length) {
+      return null;
+    }
+
+    return this.prisma.donor.update({
+      where: { id: donor.id },
+      data: updates,
+      include: { user: { select: { isActive: true, emailVerified: true } } },
+    });
+  }
+
   async upsertProfile(userId: string, dto: UpsertDonorProfileDto) {
     const existingDonor = await this.prisma.donor.findUnique({ where: { userId } });
+    const fullName = this.buildDonorDisplayName(dto);
     const payload = {
-      fullName: dto.fullName,
+      fullName,
+      firstName: dto.firstName?.trim(),
+      otherNames: dto.otherNames?.trim() || null,
+      surname: dto.surname?.trim(),
       phone: dto.phone,
+      alternativePhoneNumber: dto.alternativePhoneNumber,
       dateOfBirth: this.normalizeDate(dto.dateOfBirth),
       bloodGroup: dto.bloodGroup,
       location: dto.location,
       postalAddress: dto.postalAddress,
+      preferredHospitalId: dto.preferredHospitalId || null,
       signature: dto.signature,
       passportPhotoUrl: dto.passportPhotoUrl,
       emergencyContactName: dto.emergencyContactName,
       emergencyContactPhone: dto.emergencyContactPhone,
+      emergencyContactRelationship: dto.emergencyContactRelationship,
       notificationEmailEnabled: dto.notificationEmailEnabled,
       notificationSmsEnabled: dto.notificationSmsEnabled,
     };
@@ -74,7 +200,7 @@ export class DonorsService {
       create: {
         ...payload,
         userId,
-        donorNumber: await this.buildDonorNumber(),
+        donorNumber: await generateDonorReference(this.prisma),
         dateIssued: user.createdAt,
         eligibilityStatus: false,
         availabilityStatus: false,
@@ -89,7 +215,12 @@ export class DonorsService {
   async getProfile(userId: string) {
     const donor = await this.prisma.donor.findUnique({
       where: { userId },
-      include: { donationHistory: true, appointments: true, user: { select: { createdAt: true, email: true } } },
+      include: {
+        donationHistory: { include: { hospital: { select: { hospitalName: true, location: true } } }, orderBy: { donatedAt: 'desc' } },
+        appointments: true,
+        preferredHospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true } },
+        user: { select: { createdAt: true, email: true } },
+      },
     });
 
     if (!donor) {
@@ -116,7 +247,11 @@ export class DonorsService {
     const updated = await this.prisma.donor.update({
       where: { userId },
       data: { passportPhotoUrl },
-      include: { donationHistory: true, appointments: true, user: { select: { createdAt: true, email: true } } },
+      include: {
+        donationHistory: { include: { hospital: { select: { hospitalName: true, location: true } } }, orderBy: { donatedAt: 'desc' } },
+        appointments: true,
+        user: { select: { createdAt: true, email: true } },
+      },
     });
 
     await this.audit.log('DONOR_PASSPORT_PHOTO_UPDATED', 'DONOR', userId, donor.id, { hasPhoto: Boolean(passportPhotoUrl) });
@@ -219,45 +354,58 @@ export class DonorsService {
   }
 
   async getEligibilityStatus(userId: string) {
-    const donor = await this.prisma.donor.findUnique({ where: { userId } });
+    let donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      include: { user: { select: { isActive: true, emailVerified: true } } },
+    });
     if (!donor) {
       throw new NotFoundException('Donor profile not found');
     }
 
-    const latestReview = await this.prisma.donorEligibilityReview.findFirst({
-      where: { donorId: donor.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const latestClinical = await this.getLatestClinicalRecord(donor.id);
+    const reconciled = await this.reconcileClinicalApprovalState(donor, latestClinical);
+    donor = reconciled ?? donor;
+    const readiness = this.buildAvailabilityReadiness(donor, latestClinical);
 
     return {
-      healthFormCompleted: Boolean(latestReview),
-      healthFormSubmittedAt: latestReview?.submittedAt ?? null,
-      reviewStatus: latestReview?.status ?? null,
-      reviewNotes: latestReview?.reviewNotes ?? null,
-      officeUseNotes: latestReview?.officeUseNotes ?? null,
-      adminApproved: donor.eligibilityStatus,
+      healthFormCompleted: readiness.healthFormCompleted,
+      healthFormSubmitted: readiness.healthFormSubmitted,
+      healthFormSubmittedAt: latestClinical?.submittedAt ?? null,
+      reviewStatus: readiness.clinicalStatus,
+      reviewNotes: latestClinical?.reviewNotes ?? null,
+      officeUseNotes: latestClinical?.clinicalReview?.comments ?? null,
+      adminApproved: readiness.adminApproved,
       availabilityStatus: donor.availabilityStatus,
-      canSetAvailable: Boolean(latestReview) && donor.eligibilityStatus,
+      canSetAvailable: readiness.canSetAvailable,
+      reason: readiness.reason,
+      officeUseCompleted: readiness.officeUseCompleted,
+      bloodGroupConfirmed: readiness.bloodGroupConfirmed,
+      bloodGroup: donor.bloodGroup,
+      lastDonationDate: donor.lastDonationDate,
+      nextEligibilityDate: donor.nextEligibilityDate,
+      accountActive: readiness.accountActive,
+      emailVerified: readiness.emailVerified,
+      blockedByRecentDonation: readiness.blockedByRecentDonation,
     };
   }
 
   async updateAvailability(userId: string, available: boolean) {
-    const donor = await this.prisma.donor.findUnique({ where: { userId } });
+    let donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      include: { user: { select: { isActive: true, emailVerified: true } } },
+    });
     if (!donor) {
       throw new NotFoundException('Donor profile not found');
     }
 
-    if (available) {
-      const submittedForm = await this.prisma.donorEligibilityReview.findFirst({
-        where: { donorId: donor.id },
-        orderBy: { createdAt: 'desc' },
-      });
+    const latestClinical = await this.getLatestClinicalRecord(donor.id);
+    const reconciled = await this.reconcileClinicalApprovalState(donor, latestClinical);
+    donor = reconciled ?? donor;
+    const readiness = this.buildAvailabilityReadiness(donor, latestClinical);
 
-      if (!submittedForm) {
-        throw new BadRequestException('Complete the health eligibility form before setting availability.');
-      }
-      if (!donor.eligibilityStatus) {
-        throw new BadRequestException('Admin approval is required before setting availability.');
+    if (available) {
+      if (!readiness.canSetAvailable) {
+        throw new BadRequestException(readiness.reason);
       }
     }
 
@@ -266,6 +414,34 @@ export class DonorsService {
       data: { availabilityStatus: available },
     });
     await this.audit.log('DONOR_AVAILABILITY_UPDATED', 'DONOR', userId, donor.id, { available });
+    return updated;
+  }
+
+  async updateSettings(userId: string, dto: UpdateDonorSettingsDto) {
+    const donor = await this.prisma.donor.findUnique({ where: { userId } });
+    if (!donor) {
+      throw new NotFoundException('Donor profile not found');
+    }
+
+    const updated = await this.prisma.donor.update({
+      where: { userId },
+      data: {
+        notificationEmailEnabled: dto.notificationEmailEnabled ?? donor.notificationEmailEnabled,
+        notificationSmsEnabled: dto.notificationSmsEnabled ?? donor.notificationSmsEnabled,
+        profileVisibility: dto.profileVisibility ?? donor.profileVisibility ?? DonorProfileVisibility.PRIVATE,
+      },
+      include: {
+        donationHistory: { include: { hospital: { select: { hospitalName: true, location: true } } }, orderBy: { donatedAt: 'desc' } },
+        appointments: true,
+        user: { select: { createdAt: true, email: true } },
+      },
+    });
+
+    await this.audit.log('DONOR_SETTINGS_UPDATED', 'DONOR', userId, donor.id, {
+      notificationEmailEnabled: updated.notificationEmailEnabled,
+      notificationSmsEnabled: updated.notificationSmsEnabled,
+      profileVisibility: updated.profileVisibility,
+    });
     return updated;
   }
 
@@ -298,12 +474,17 @@ export class DonorsService {
         },
       });
 
+      const fullName = this.buildDonorDisplayName(dto);
       const donor = await tx.donor.create({
         data: {
           userId: user.id,
-          donorNumber: await this.buildDonorNumber(),
-          fullName: dto.fullName,
+          donorNumber: await generateDonorReference(tx),
+          fullName,
+          firstName: dto.firstName?.trim(),
+          otherNames: dto.otherNames?.trim() || null,
+          surname: dto.surname?.trim(),
           phone: dto.phone,
+          alternativePhoneNumber: dto.alternativePhoneNumber,
           dateOfBirth: this.normalizeDate(dto.dateOfBirth),
           bloodGroup: dto.bloodGroup,
           location: dto.location,
@@ -315,6 +496,7 @@ export class DonorsService {
           availabilityStatus: false,
           emergencyContactName: dto.emergencyContactName,
           emergencyContactPhone: dto.emergencyContactPhone,
+          emergencyContactRelationship: dto.emergencyContactRelationship,
           notificationEmailEnabled: dto.notificationEmailEnabled ?? true,
           notificationSmsEnabled: dto.notificationSmsEnabled ?? false,
         },
@@ -336,25 +518,13 @@ export class DonorsService {
       throw new NotFoundException('Donor not found');
     }
 
-    const normalizedDonorNumber = dto.donorNumber?.trim().toUpperCase();
-    if (normalizedDonorNumber) {
-      const existingNumber = await this.prisma.donor.findFirst({
-        where: {
-          donorNumber: normalizedDonorNumber,
-          id: { not: donorId },
-        },
-        select: { id: true },
-      });
-      if (existingNumber) {
-        throw new BadRequestException('Donor serial number already exists. Use a unique value.');
-      }
-    }
-
     const updated = await this.prisma.donor.update({
       where: { id: donorId },
       data: {
         ...dto,
-        donorNumber: normalizedDonorNumber ?? donor.donorNumber ?? (await this.buildDonorNumber()),
+        fullName: this.buildDonorDisplayName({ ...donor, ...dto }),
+        otherNames: dto.otherNames?.trim() || dto.otherNames,
+        donorNumber: donor.donorNumber ?? (await generateDonorReference(this.prisma)),
         dateOfBirth: this.normalizeDate(dto.dateOfBirth),
         dateIssued: this.normalizeDate(dto.dateIssued),
       },
@@ -388,7 +558,7 @@ export class DonorsService {
       where: { id: donorId },
       data: {
         eligibilityStatus: approved,
-        availabilityStatus: approved ? donor.availabilityStatus : false,
+        availabilityStatus: approved && donor.bloodGroup !== 'UNKNOWN' ? donor.availabilityStatus : false,
       },
       include: { user: { select: { id: true, email: true, role: true, isActive: true } } },
     });
@@ -431,6 +601,9 @@ export class DonorsService {
         id: true,
         hospitalName: true,
         location: true,
+        address: true,
+        city: true,
+        region: true,
         registrationCode: true,
       },
       orderBy: { hospitalName: 'asc' },

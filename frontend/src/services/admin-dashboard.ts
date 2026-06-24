@@ -1,6 +1,7 @@
 import api from './api';
 
 export type BloodGroupCode =
+  | 'UNKNOWN'
   | 'O_POS'
   | 'O_NEG'
   | 'A_POS'
@@ -197,6 +198,8 @@ export type AdminDashboardSearchResults = {
   }>;
   requests: Array<{
     id: string;
+    requestReference: string;
+    hospitalPatientReference?: string | null;
     patientName?: string | null;
     patientCode?: string | null;
     bloodGroup: BloodGroupCode;
@@ -206,6 +209,7 @@ export type AdminDashboardSearchResults = {
   }>;
   appointments: Array<{
     id: string;
+    appointmentReference: string;
     scheduledAt: string;
     status: string;
     donor: { fullName: string };

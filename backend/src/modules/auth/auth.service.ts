@@ -10,6 +10,9 @@ import { AlertsService } from '../../common/alerts/alerts.service';
 import { MailService } from '../../common/mail/mail.service';
 import { ActivityService } from '../../common/activity/activity.service';
 import { SecurityEventsService } from '../../common/security/security-events.service';
+import { GeocodingService } from '../../common/maps/geocoding.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
+import { generateDonorReference } from '../../common/utils/donor-reference';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -46,12 +49,9 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly activityService: ActivityService,
     private readonly securityEvents: SecurityEventsService,
+    private readonly geocoding: GeocodingService,
+    private readonly realtime: RealtimeService,
   ) {}
-
-  private buildDonorNumber() {
-    const serial = Date.now().toString().slice(-8);
-    return `DON-${serial}`;
-  }
 
   private async buildHospitalRegistrationCode() {
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -68,6 +68,18 @@ export class AuthService {
     return `HOS-${randomBytes(4).toString('hex').toUpperCase()}`;
   }
 
+  private buildDonorDisplayName(profile: {
+    firstName?: string;
+    otherNames?: string;
+    surname?: string;
+    fullName?: string;
+  }) {
+    return [profile.surname, profile.firstName, profile.otherNames]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(' ') || profile.fullName?.trim() || 'Unnamed Donor';
+  }
+
   async register(payload: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: payload.email } });
     if (existing) {
@@ -81,6 +93,20 @@ export class AuthService {
       throw new BadRequestException('Hospital profile details are required');
     }
 
+    if (payload.role === 'DONOR' && payload.donorProfile?.preferredHospitalId) {
+      const preferredHospital = await this.prisma.hospital.findFirst({
+        where: {
+          id: payload.donorProfile.preferredHospitalId,
+          isApproved: true,
+          bloodBankAvailable: true,
+        },
+        select: { id: true },
+      });
+      if (!preferredHospital) {
+        throw new BadRequestException('Selected hospital/blood bank is not available for screening.');
+      }
+    }
+
     const user = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
@@ -92,15 +118,22 @@ export class AuthService {
       });
 
       if (payload.role === 'DONOR' && payload.donorProfile) {
+        const preferredHospitalId = payload.donorProfile.preferredHospitalId?.trim();
+        const fullName = this.buildDonorDisplayName(payload.donorProfile);
         await tx.donor.create({
           data: {
             userId: createdUser.id,
-            donorNumber: this.buildDonorNumber(),
-            fullName: payload.donorProfile.fullName,
+            donorNumber: await generateDonorReference(tx),
+            fullName,
+            firstName: payload.donorProfile.firstName?.trim(),
+            otherNames: payload.donorProfile.otherNames?.trim() || null,
+            surname: payload.donorProfile.surname?.trim(),
             phone: payload.donorProfile.phone,
+            alternativePhoneNumber: payload.donorProfile.alternativePhoneNumber,
             dateOfBirth: payload.donorProfile.dateOfBirth ? new Date(payload.donorProfile.dateOfBirth) : undefined,
             bloodGroup: payload.donorProfile.bloodGroup,
-            location: payload.donorProfile.location,
+            location: payload.donorProfile.location?.trim() || 'Pending clinical eligibility form',
+            preferredHospitalId: preferredHospitalId || undefined,
             postalAddress: payload.donorProfile.postalAddress,
             signature: payload.donorProfile.signature,
             passportPhotoUrl: payload.donorProfile.passportPhotoUrl,
@@ -109,12 +142,33 @@ export class AuthService {
             availabilityStatus: false,
             emergencyContactName: payload.donorProfile.emergencyContactName,
             emergencyContactPhone: payload.donorProfile.emergencyContactPhone,
+            emergencyContactRelationship: payload.donorProfile.emergencyContactRelationship,
           },
         });
       }
 
       if (payload.role === 'HOSPITAL_STAFF' && payload.hospitalProfile) {
+        if (!payload.hospitalProfile.city?.trim() || !payload.hospitalProfile.region?.trim()) {
+          throw new BadRequestException('City and region are required for hospital emergency map coordination.');
+        }
         const registrationCode = await this.buildHospitalRegistrationCode();
+        const geocoded =
+          typeof payload.hospitalProfile.latitude === 'number' && typeof payload.hospitalProfile.longitude === 'number'
+            ? null
+            : await this.geocoding.geocodeHospitalAddress({
+                hospitalName: payload.hospitalProfile.hospitalName,
+                address: payload.hospitalProfile.address,
+                city: payload.hospitalProfile.city,
+                region: payload.hospitalProfile.region,
+                location: payload.hospitalProfile.location,
+              });
+        const resolvedLatitude = payload.hospitalProfile.latitude ?? geocoded?.latitude ?? null;
+        const resolvedLongitude = payload.hospitalProfile.longitude ?? geocoded?.longitude ?? null;
+        if (resolvedLatitude === null || resolvedLongitude === null) {
+          throw new BadRequestException(
+            'Unable to locate this hospital automatically. Please enter latitude and longitude manually.',
+          );
+        }
         await tx.hospital.create({
           data: {
             userId: createdUser.id,
@@ -122,6 +176,11 @@ export class AuthService {
             registrationCode,
             address: payload.hospitalProfile.address,
             location: payload.hospitalProfile.location?.trim() || payload.hospitalProfile.address,
+            city: payload.hospitalProfile.city.trim(),
+            region: payload.hospitalProfile.region.trim(),
+            latitude: resolvedLatitude,
+            longitude: resolvedLongitude,
+            bloodBankAvailable: payload.hospitalProfile.bloodBankAvailable ?? true,
             contactName: payload.hospitalProfile.contactName,
             contactPhone: payload.hospitalProfile.contactPhone,
             isApproved: false,
@@ -139,16 +198,34 @@ export class AuthService {
       });
     });
     await this.auditService.log('REGISTER', 'USER', user.id, user.id);
-    await this.activityService.log({
-      actorUserId: user.id,
-      actorName: payload.donorProfile?.fullName ?? payload.email,
-      type: 'DONOR_REGISTERED',
-      module: 'AUTH',
-      title: 'New donor registered',
-      description: `${payload.email} created a donor account and is waiting for verification.`,
-      entityType: 'USER',
-      entityId: user.id,
-    });
+    if (payload.role === 'DONOR') {
+      await this.activityService.log({
+        actorUserId: user.id,
+        actorName: payload.donorProfile?.fullName ?? payload.email,
+        type: 'DONOR_REGISTERED',
+        module: 'AUTH',
+        title: 'New donor registered',
+        description: `${payload.email} created a donor account and is waiting for verification.`,
+        entityType: 'USER',
+        entityId: user.id,
+      });
+    } else {
+      await this.activityService.log({
+        actorUserId: user.id,
+        actorName: payload.hospitalProfile?.hospitalName ?? payload.email,
+        type: 'HOSPITAL_REGISTERED',
+        module: 'AUTH',
+        title: 'New hospital registered',
+        description: `${payload.email} registered a hospital/blood bank profile for onboarding.`,
+        entityType: 'USER',
+        entityId: user.id,
+      });
+      this.realtime.broadcastHospitalMapUpdate({
+        reason: 'hospital.registered',
+        email: payload.email,
+        hospitalName: payload.hospitalProfile?.hospitalName ?? null,
+      });
+    }
 
     return {
       message: 'Registration successful. A verification code has been sent to your email.',

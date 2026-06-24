@@ -48,6 +48,7 @@ export default function EmergencyRequestsPage() {
             item.trackingStatus.toLowerCase().includes(searchTerm) ||
             item.status.toLowerCase().includes(searchTerm) ||
             item.priority.toLowerCase().includes(searchTerm) ||
+            item.requestSource.toLowerCase().includes(searchTerm) ||
             item.location.toLowerCase().includes(searchTerm) ||
             (item.emergencyLocation ?? '').toLowerCase().includes(searchTerm) ||
             (item.city ?? '').toLowerCase().includes(searchTerm) ||
@@ -183,6 +184,9 @@ export default function EmergencyRequestsPage() {
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <p>
+                <span className="font-semibold">Request Reference:</span> {card.requestReference}
+              </p>
+              <p>
                 <span className="font-semibold">Blood Group:</span> {bloodGroupLabel[card.bloodGroup] ?? card.bloodGroup}
               </p>
               <p>
@@ -196,6 +200,9 @@ export default function EmergencyRequestsPage() {
               </p>
               <p>
                 <span className="font-semibold">Status:</span> {card.status} / {card.trackingStatus}
+              </p>
+              <p>
+                <span className="font-semibold">Request Source:</span> {card.requestSource}
               </p>
               <p>
                 <span className="font-semibold">Ward:</span> {card.ward ?? 'N/A'}
@@ -216,7 +223,7 @@ export default function EmergencyRequestsPage() {
                 <span className="font-semibold text-gray-800">Location Notes:</span> {card.locationNotes ?? 'N/A'}
               </p>
               <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">Comments / Reason:</span> {card.patientName ?? card.patientCode ?? 'Not provided'}
+                <span className="font-semibold text-gray-800">Comments / Reason:</span> {card.patientName ?? card.hospitalPatientReference ?? 'Not provided'}
               </p>
               <p className="text-sm text-gray-600 md:col-span-2">
                 <span className="font-semibold text-gray-800">Emergency Notes:</span> {card.notes ?? 'No emergency notes provided.'}

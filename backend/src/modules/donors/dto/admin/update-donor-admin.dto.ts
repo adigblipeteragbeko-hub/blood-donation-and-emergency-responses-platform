@@ -1,19 +1,47 @@
 import { BloodGroup } from '@prisma/client';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsOptional, IsString, Matches } from 'class-validator';
+
+const emergencyContactRelationships = [
+  'Father',
+  'Mother',
+  'Brother',
+  'Sister',
+  'Spouse',
+  'Guardian',
+  'Friend',
+  'Relative',
+  'Other',
+] as const;
 
 export class UpdateDonorAdminDto {
-  @IsOptional()
-  @IsString()
-  donorNumber?: string;
-
   @IsOptional()
   @IsString()
   fullName?: string;
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+\d{7,18}$/, { message: 'Phone must be digits with country code' })
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'First name should contain letters only' })
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Other names should contain letters only' })
+  otherNames?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Surname should contain letters only' })
+  surname?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Primary phone number must be digits with country code' })
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Alternative phone number must be digits with country code' })
+  alternativePhoneNumber?: string;
 
   @IsOptional()
   @IsDateString()
@@ -58,6 +86,11 @@ export class UpdateDonorAdminDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(emergencyContactRelationships)
+  emergencyContactRelationship?: string;
 
   @IsOptional()
   @IsBoolean()

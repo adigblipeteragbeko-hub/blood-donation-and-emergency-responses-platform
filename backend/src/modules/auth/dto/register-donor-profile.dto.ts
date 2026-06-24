@@ -1,15 +1,45 @@
 import { BloodGroup } from '@prisma/client';
-import { IsDateString, IsEnum, IsOptional, IsString, Matches } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsOptional, IsString, Matches } from 'class-validator';
+
+const emergencyContactRelationships = [
+  'Father',
+  'Mother',
+  'Brother',
+  'Sister',
+  'Spouse',
+  'Guardian',
+  'Friend',
+  'Relative',
+  'Other',
+] as const;
 
 export class RegisterDonorProfileDto {
+  @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z\s'-]+$/, { message: 'Full name should contain letters only' })
-  fullName!: string;
+  fullName?: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'First name should contain letters only' })
+  firstName!: string;
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+\d{7,18}$/, { message: 'Phone must be digits with country code' })
-  phone?: string;
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Other names should contain letters only' })
+  otherNames?: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z\s'-]+$/, { message: 'Surname should contain letters only' })
+  surname!: string;
+
+  @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Primary phone number must be digits with country code' })
+  phone!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+\d{7,18}$/, { message: 'Alternative phone number must be digits with country code' })
+  alternativePhoneNumber?: string;
 
   @IsOptional()
   @IsDateString()
@@ -18,8 +48,13 @@ export class RegisterDonorProfileDto {
   @IsEnum(BloodGroup)
   bloodGroup!: BloodGroup;
 
+  @IsOptional()
   @IsString()
-  location!: string;
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  preferredHospitalId?: string;
 
   @IsOptional()
   @IsString()
@@ -40,4 +75,8 @@ export class RegisterDonorProfileDto {
   @IsString()
   @Matches(/^\+\d{7,18}$/, { message: 'Emergency contact phone must be digits with country code' })
   emergencyContactPhone!: string;
+
+  @IsString()
+  @IsIn(emergencyContactRelationships)
+  emergencyContactRelationship!: string;
 }

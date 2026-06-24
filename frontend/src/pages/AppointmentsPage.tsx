@@ -10,8 +10,10 @@ type HospitalOption = {
 
 type Appointment = {
   id: string;
+  appointmentReference: string;
   scheduledAt: string;
   status: string;
+  appointmentType?: string;
   hospital?: { id: string; hospitalName: string; location: string };
 };
 
@@ -60,11 +62,11 @@ export default function AppointmentsPage() {
     }
 
     try {
-      await api.post('/appointments', {
+      const response = await api.post('/appointments', {
         hospitalId: selectedHospital.id,
         scheduledAt: new Date(scheduledAt).toISOString(),
       });
-      setMessage('Appointment booked successfully.');
+      setMessage(`Appointment booked successfully. Reference: ${response.data?.data?.appointmentReference ?? 'Pending'}.`);
       setHospitalInput('');
       setScheduledAt('');
       await loadData();
@@ -122,7 +124,9 @@ export default function AppointmentsPage() {
           appointments.map((item) => (
             <article key={item.id} className="rounded border border-gray-200 p-3">
               <p className="font-semibold">{item.hospital?.hospitalName ?? 'Hospital'}</p>
+              <p className="text-sm text-gray-600">Reference: {item.appointmentReference}</p>
               <p className="text-sm text-gray-600">Location: {item.hospital?.location ?? '-'}</p>
+              <p className="text-sm text-gray-600">Type: {item.appointmentType ?? 'BLOOD_DONATION'}</p>
               <p className="text-sm text-gray-600">Date: {new Date(item.scheduledAt).toLocaleString()}</p>
               <p className="text-sm text-gray-600">Status: {item.status}</p>
             </article>

@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BloodGroup, Role } from '@prisma/client';
+import { BloodGroup, DonorClinicalStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AuditService } from '../../common/audit/audit.service';
+import { GeocodingService } from '../../common/maps/geocoding.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
 import { PrismaService } from '../../prisma.service';
 import { CreateHospitalAdminDto } from './dto/admin/create-hospital-admin.dto';
 import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
@@ -11,8 +13,13 @@ import { ApproveDonorEligibilityDto } from './dto/approve-donor-eligibility.dto'
 import { DonorSearchDto } from './dto/donor-search.dto';
 import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
 import { UpsertHospitalProfileDto } from './dto/upsert-hospital-profile.dto';
+import { getCompatibleDonorGroups } from '../../common/utils/blood-compatibility';
 
 const BLOOD_GROUP_CODES = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'] as const;
+const DEFERRED_STATUSES: DonorClinicalStatus[] = [
+  DonorClinicalStatus.REJECTED,
+  DonorClinicalStatus.PERMANENTLY_DEFERRED,
+];
 
 @Injectable()
 export class HospitalsService {
@@ -20,16 +27,77 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly hospitalAccess: HospitalAccessService,
+    private readonly geocoding: GeocodingService,
+    private readonly realtime: RealtimeService,
   ) {}
 
+  private validateCompleteMapLocation(input: {
+    city?: string | null;
+    region?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }) {
+    if (!input.city?.trim() || !input.region?.trim()) {
+      throw new BadRequestException('City and region are required for hospital emergency map coordination.');
+    }
+    if (typeof input.latitude !== 'number' || typeof input.longitude !== 'number') {
+      throw new BadRequestException('Latitude and longitude are required for hospital emergency map coordination.');
+    }
+  }
+
   async upsertProfile(userId: string, dto: UpsertHospitalProfileDto) {
+    const geocoded =
+      typeof dto.latitude === 'number' && typeof dto.longitude === 'number'
+        ? null
+        : await this.geocoding.geocodeHospitalAddress({
+            hospitalName: dto.hospitalName,
+            address: dto.address,
+            city: dto.city,
+            region: dto.region,
+            location: dto.location,
+          });
+
+    const resolvedLatitude = dto.latitude ?? geocoded?.latitude ?? null;
+    const resolvedLongitude = dto.longitude ?? geocoded?.longitude ?? null;
+    this.validateCompleteMapLocation({
+      city: dto.city,
+      region: dto.region,
+      latitude: resolvedLatitude,
+      longitude: resolvedLongitude,
+    });
+    if (resolvedLatitude === null || resolvedLongitude === null) {
+      throw new BadRequestException(
+        'Unable to locate this hospital automatically. Please enter latitude and longitude manually.',
+      );
+    }
+
     const hospital = await this.prisma.hospital.upsert({
       where: { userId },
-      update: dto,
-      create: { ...dto, userId },
+      update: {
+        ...dto,
+        city: dto.city.trim(),
+        region: dto.region.trim(),
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
+      },
+      create: {
+        ...dto,
+        userId,
+        city: dto.city.trim(),
+        region: dto.region.trim(),
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
+      },
     });
 
     await this.audit.log('HOSPITAL_PROFILE_UPSERTED', 'HOSPITAL', userId, hospital.id, dto);
+    this.realtime.broadcastHospitalMapUpdate({
+      reason: 'hospital.profile.updated',
+      hospitalId: hospital.id,
+      hospitalName: hospital.hospitalName,
+      latitude: hospital.latitude,
+      longitude: hospital.longitude,
+    });
     return hospital;
   }
 
@@ -47,34 +115,230 @@ export class HospitalsService {
     return hospital;
   }
 
+  private toRad(value: number) {
+    return (value * Math.PI) / 180;
+  }
+
+  private distanceKm(fromLat: number, fromLng: number, toLat: number, toLng: number) {
+    const earthRadiusKm = 6371;
+    const dLat = this.toRad(toLat - fromLat);
+    const dLng = this.toRad(toLng - fromLng);
+    const lat1 = this.toRad(fromLat);
+    const lat2 = this.toRad(toLat);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  private approximateCoordinate(value: number | null) {
+    return typeof value === 'number' ? Number(value.toFixed(3)) : null;
+  }
+
   async searchDonors(userId: string, query: DonorSearchDto) {
     const hospital = await this.hospitalAccess.getHospitalForUser(userId);
-    const locationFilter = query.location?.trim() || hospital.location;
+    const locationFilter = query.location?.trim();
+    const now = new Date();
+    const requestedGroup = query.bloodGroup && query.bloodGroup !== BloodGroup.UNKNOWN ? query.bloodGroup : undefined;
+    const bloodGroups = requestedGroup
+      ? query.matchMode === 'COMPATIBLE'
+        ? getCompatibleDonorGroups(requestedGroup)
+        : [requestedGroup]
+      : BLOOD_GROUP_CODES as unknown as BloodGroup[];
+    const originLatitude = typeof query.latitude === 'number' ? query.latitude : hospital.latitude ?? undefined;
+    const originLongitude = typeof query.longitude === 'number' ? query.longitude : hospital.longitude ?? undefined;
+    const hasOrigin = typeof originLatitude === 'number' && typeof originLongitude === 'number';
+    const radiusKm = query.radiusKm ?? 25;
+    const availabilityFilter = query.availabilityFilter ?? 'AVAILABLE_ONLY';
+    const includeDeferred = availabilityFilter === 'INCLUDE_DEFERRED';
 
-    return this.prisma.donor.findMany({
+    const donors = await this.prisma.donor.findMany({
       where: {
-        bloodGroup: query.bloodGroup,
-        availabilityStatus: true,
-        eligibilityStatus: true,
-        location: locationFilter
-          ? {
-              contains: locationFilter,
-              mode: 'insensitive',
-            }
+        bloodGroup: { in: bloodGroups },
+        NOT: { bloodGroup: 'UNKNOWN' },
+        user: {
+          isActive: true,
+          emailVerified: true,
+        },
+        clinicalRecords: {
+          some: {
+            status: includeDeferred
+              ? { in: [DonorClinicalStatus.APPROVED, DonorClinicalStatus.TEMPORARILY_DEFERRED] }
+              : DonorClinicalStatus.APPROVED,
+          },
+          none: {
+            status: { in: DEFERRED_STATUSES },
+          },
+        },
+        OR: locationFilter
+          ? [
+              { location: { contains: locationFilter, mode: 'insensitive' } },
+              { areaCommunity: { contains: locationFilter, mode: 'insensitive' } },
+              { city: { contains: locationFilter, mode: 'insensitive' } },
+              { region: { contains: locationFilter, mode: 'insensitive' } },
+            ]
           : undefined,
       },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 250,
       select: {
         id: true,
+        donorNumber: true,
         fullName: true,
+        firstName: true,
+        otherNames: true,
+        surname: true,
+        phone: true,
+        alternativePhoneNumber: true,
         bloodGroup: true,
         location: true,
         emergencyContactPhone: true,
+        emergencyContactRelationship: true,
         availabilityStatus: true,
         eligibilityStatus: true,
+        lastDonationDate: true,
+        nextEligibilityDate: true,
+        latitude: true,
+        longitude: true,
+        areaCommunity: true,
+        city: true,
+        region: true,
+        locationSharingEnabled: true,
+        lastLocationUpdateAt: true,
+        preferredHospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true } },
+        donationHistory: {
+          select: { donatedAt: true },
+          orderBy: { donatedAt: 'desc' },
+        },
+        donorResponses: { select: { responseStatus: true } },
+        clinicalRecords: {
+          select: {
+            status: true,
+            finalDecisionAt: true,
+            officeCompletedAt: true,
+            clinicalReview: { select: { temporaryDeferralDuration: true, comments: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
+    }) as any[];
+
+    const decorated = donors.map((donor) => {
+      const latestClinical = donor.clinicalRecords[0] ?? null;
+      const deferred = latestClinical?.status === DonorClinicalStatus.TEMPORARILY_DEFERRED;
+      const nextEligible = donor.nextEligibilityDate ?? null;
+      const cooldown = Boolean(nextEligible && nextEligible > now);
+      const cooldownDaysRemaining = cooldown
+        ? Math.max(1, Math.ceil((nextEligible!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+        : 0;
+      const cooldownEndingSoon = cooldownDaysRemaining > 0 && cooldownDaysRemaining <= 14;
+      const mapEligible = donor.locationSharingEnabled && typeof donor.latitude === 'number' && typeof donor.longitude === 'number';
+      const distanceKm = hasOrigin && mapEligible
+        ? Number(this.distanceKm(originLatitude!, originLongitude!, donor.latitude!, donor.longitude!).toFixed(2))
+        : null;
+      const totalResponses = donor.donorResponses.length;
+      const positiveResponses = donor.donorResponses.filter((response: { responseStatus: string }) => ['ACCEPTED', 'DONATED'].includes(response.responseStatus)).length;
+      const responseRate = totalResponses > 0 ? Math.round((positiveResponses / totalResponses) * 100) : null;
+      const available = donor.availabilityStatus && donor.eligibilityStatus && !cooldown && !deferred;
+      const status = deferred
+        ? 'DEFERRED'
+        : cooldownEndingSoon
+          ? 'COOLDOWN_ENDING_SOON'
+          : cooldown
+            ? 'COOLDOWN'
+            : available
+              ? 'AVAILABLE'
+              : 'UNAVAILABLE';
+
+      return {
+        id: donor.id,
+        donorNumber: donor.donorNumber,
+        fullName: donor.fullName,
+        firstName: donor.firstName,
+        otherNames: donor.otherNames,
+        surname: donor.surname,
+        phone: available ? donor.phone : null,
+        alternativePhoneNumber: available ? donor.alternativePhoneNumber : null,
+        bloodGroup: donor.bloodGroup,
+        matchType: requestedGroup && donor.bloodGroup === requestedGroup ? 'EXACT' : 'COMPATIBLE',
+        location: donor.location,
+        areaCommunity: donor.areaCommunity,
+        city: donor.city,
+        region: donor.region,
+        emergencyContactPhone: available ? donor.emergencyContactPhone : '',
+        emergencyContactRelationship: available ? donor.emergencyContactRelationship : null,
+        availabilityStatus: donor.availabilityStatus,
+        eligibilityStatus: donor.eligibilityStatus,
+        operationalStatus: status,
+        contactAllowed: available,
+        scheduleAllowed: available,
+        lastDonationDate: donor.lastDonationDate,
+        nextEligibilityDate: donor.nextEligibilityDate,
+        cooldownDaysRemaining,
+        previousDonationCount: donor.donationHistory.length,
+        responseRate,
+        responseRateLabel: responseRate === null ? 'Not enough data' : `${responseRate}%`,
+        preferredHospital: donor.preferredHospital,
+        distanceKm,
+        withinRadius: distanceKm !== null ? distanceKm <= radiusKm : null,
+        locationSharingEnabled: donor.locationSharingEnabled,
+        mapLocationAvailable: mapEligible,
+        latitude: mapEligible ? this.approximateCoordinate(donor.latitude) : null,
+        longitude: mapEligible ? this.approximateCoordinate(donor.longitude) : null,
+        lastLocationUpdateAt: donor.lastLocationUpdateAt,
+        clinicalStatus: latestClinical?.status ?? null,
+        temporaryDeferralDuration: latestClinical?.clinicalReview?.temporaryDeferralDuration ?? null,
+      };
     });
+
+    const visible = decorated.filter((donor) => {
+      if (donor.operationalStatus === 'DEFERRED') return includeDeferred;
+      if (availabilityFilter === 'AVAILABLE_ONLY') return donor.operationalStatus === 'AVAILABLE';
+      if (availabilityFilter === 'INCLUDE_COOLDOWN') return ['AVAILABLE', 'COOLDOWN', 'COOLDOWN_ENDING_SOON'].includes(donor.operationalStatus);
+      if (availabilityFilter === 'ALL_APPROVED') return donor.clinicalStatus === DonorClinicalStatus.APPROVED;
+      return donor.operationalStatus !== 'UNAVAILABLE';
+    });
+
+    const sorted = [...visible].sort((a, b) => {
+      if (query.emergencyMode) {
+        const statusRank = { AVAILABLE: 0, COOLDOWN_ENDING_SOON: 1, COOLDOWN: 2, DEFERRED: 3, UNAVAILABLE: 4 } as Record<string, number>;
+        const statusDelta = (statusRank[a.operationalStatus] ?? 9) - (statusRank[b.operationalStatus] ?? 9);
+        if (statusDelta !== 0) return statusDelta;
+        if (a.matchType !== b.matchType) return a.matchType === 'EXACT' ? -1 : 1;
+      }
+      return (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY);
+    });
+
+    const withinRadius = hasOrigin && radiusKm
+      ? sorted.filter((donor) => donor.distanceKm !== null && donor.distanceKm <= radiusKm)
+      : sorted;
+    const radiusFallbackApplied = Boolean(hasOrigin && radiusKm && sorted.length > 0 && withinRadius.length === 0);
+    const finalResults = radiusFallbackApplied ? sorted.slice(0, 10) : withinRadius;
+
+    return {
+      donors: finalResults,
+      summary: {
+        totalMatches: finalResults.length,
+        totalBeforeRadius: sorted.length,
+        availableCount: finalResults.filter((donor) => donor.operationalStatus === 'AVAILABLE').length,
+        cooldownCount: finalResults.filter((donor) => donor.operationalStatus === 'COOLDOWN' || donor.operationalStatus === 'COOLDOWN_ENDING_SOON').length,
+        deferredCount: finalResults.filter((donor) => donor.operationalStatus === 'DEFERRED').length,
+        mapReadyCount: finalResults.filter((donor) => donor.mapLocationAvailable).length,
+        origin: hasOrigin
+          ? {
+              latitude: originLatitude,
+              longitude: originLongitude,
+              source: typeof query.latitude === 'number' && typeof query.longitude === 'number' ? 'query' : 'hospital',
+              hospitalName: hospital.hospitalName,
+            }
+          : null,
+        radiusFallback: {
+          applied: radiusFallbackApplied,
+          requestedRadiusKm: radiusKm,
+        },
+      },
+    };
   }
 
   async getTypeaheadSuggestions(userId: string, rawQuery: string) {
@@ -112,6 +376,7 @@ export class HospitalsService {
       }),
       this.prisma.donor.findMany({
         where: {
+          NOT: { bloodGroup: 'UNKNOWN' },
           OR: [
             { fullName: { contains: query, mode: 'insensitive' } },
             { location: { contains: query, mode: 'insensitive' } },
@@ -127,6 +392,8 @@ export class HospitalsService {
         where: {
           OR: [
             { patientName: { contains: query, mode: 'insensitive' } },
+            { requestReference: { contains: query, mode: 'insensitive' } },
+            { hospitalPatientReference: { contains: query, mode: 'insensitive' } },
             { patientCode: { contains: query, mode: 'insensitive' } },
             { hospitalCenterName: { contains: query, mode: 'insensitive' } },
             { emergencyLocation: { contains: query, mode: 'insensitive' } },
@@ -202,7 +469,8 @@ export class HospitalsService {
 
     const hospitals = await this.prisma.hospital.findMany({
       where: {
-        OR: [{ latitude: { not: null } }, { longitude: { not: null } }, { location: { not: '' } }],
+        isApproved: true,
+        bloodBankAvailable: true,
       },
       orderBy: [{ hospitalName: 'asc' }],
       skip,
@@ -213,8 +481,16 @@ export class HospitalsService {
         location: true,
         address: true,
         contactPhone: true,
+        city: true,
+        region: true,
+        isApproved: true,
+        bloodBankAvailable: true,
         latitude: true,
         longitude: true,
+        inventoryItems: {
+          where: { availableUnits: { gt: 0 } },
+          select: { bloodGroup: true, availableUnits: true },
+        },
       },
     });
 
@@ -224,6 +500,11 @@ export class HospitalsService {
       location: hospital.location,
       address: hospital.address,
       contactPhone: hospital.contactPhone,
+      city: hospital.city,
+      region: hospital.region,
+      bloodBankAvailable: hospital.bloodBankAvailable,
+      emergencyReady: hospital.bloodBankAvailable && hospital.isApproved,
+      availableBloodGroups: hospital.inventoryItems.map((item) => item.bloodGroup),
       latitude: hospital.latitude,
       longitude: hospital.longitude,
       mapsUrl:
@@ -254,6 +535,31 @@ export class HospitalsService {
       throw new BadRequestException('Email already exists');
     }
 
+    const geocoded =
+      typeof dto.latitude === 'number' && typeof dto.longitude === 'number'
+        ? null
+        : await this.geocoding.geocodeHospitalAddress({
+            hospitalName: dto.hospitalName,
+            address: dto.address,
+            city: dto.city,
+            region: dto.region,
+            location: dto.location,
+          });
+
+    const resolvedLatitude = dto.latitude ?? geocoded?.latitude ?? null;
+    const resolvedLongitude = dto.longitude ?? geocoded?.longitude ?? null;
+    this.validateCompleteMapLocation({
+      city: dto.city,
+      region: dto.region,
+      latitude: resolvedLatitude,
+      longitude: resolvedLongitude,
+    });
+    if (resolvedLatitude === null || resolvedLongitude === null) {
+      throw new BadRequestException(
+        'Unable to locate this hospital automatically. Please enter latitude and longitude manually.',
+      );
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -271,6 +577,11 @@ export class HospitalsService {
           registrationCode: dto.registrationCode,
           address: dto.address,
           location: dto.location,
+          city: dto.city.trim(),
+          region: dto.region.trim(),
+          latitude: resolvedLatitude,
+          longitude: resolvedLongitude,
+          bloodBankAvailable: dto.bloodBankAvailable ?? true,
           contactName: dto.contactName,
           contactPhone: dto.contactPhone,
         },
@@ -283,6 +594,13 @@ export class HospitalsService {
     });
 
     await this.audit.log('HOSPITAL_CREATED_BY_ADMIN', 'HOSPITAL', actorUserId, created.id, { email: dto.email });
+    this.realtime.broadcastHospitalMapUpdate({
+      reason: 'hospital.created',
+      hospitalId: created.id,
+      hospitalName: created.hospitalName,
+      latitude: created.latitude,
+      longitude: created.longitude,
+    });
     return created;
   }
 
@@ -292,15 +610,56 @@ export class HospitalsService {
       throw new NotFoundException('Hospital not found');
     }
 
+    const geocoded =
+      typeof dto.latitude === 'number' && typeof dto.longitude === 'number'
+        ? null
+        : await this.geocoding.geocodeHospitalAddress({
+            hospitalName: dto.hospitalName ?? hospital.hospitalName,
+            address: dto.address ?? hospital.address,
+            city: dto.city ?? hospital.city,
+            region: dto.region ?? hospital.region,
+            location: dto.location ?? hospital.location,
+          });
+
+    const resolvedLatitude = dto.latitude ?? geocoded?.latitude ?? hospital.latitude;
+    const resolvedLongitude = dto.longitude ?? geocoded?.longitude ?? hospital.longitude;
+    const resolvedCity = typeof dto.city === 'string' ? dto.city.trim() : hospital.city;
+    const resolvedRegion = typeof dto.region === 'string' ? dto.region.trim() : hospital.region;
+    this.validateCompleteMapLocation({
+      city: resolvedCity,
+      region: resolvedRegion,
+      latitude: resolvedLatitude,
+      longitude: resolvedLongitude,
+    });
+    if (resolvedLatitude === null || resolvedLongitude === null) {
+      throw new BadRequestException(
+        'Unable to locate this hospital automatically. Please enter latitude and longitude manually.',
+      );
+    }
+
     const updated = await this.prisma.hospital.update({
       where: { id: hospitalId },
-      data: dto,
+      data: {
+        ...dto,
+        city: resolvedCity,
+        region: resolvedRegion,
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
+      },
       include: {
         user: { select: { id: true, email: true, role: true, isActive: true } },
       },
     });
 
     await this.audit.log('HOSPITAL_UPDATED_BY_ADMIN', 'HOSPITAL', actorUserId, hospitalId, dto);
+    this.realtime.broadcastHospitalMapUpdate({
+      reason: updated.isApproved && !hospital.isApproved ? 'hospital.approved' : 'hospital.updated',
+      hospitalId: updated.id,
+      hospitalName: updated.hospitalName,
+      latitude: updated.latitude,
+      longitude: updated.longitude,
+      isApproved: updated.isApproved,
+    });
     return updated;
   }
 

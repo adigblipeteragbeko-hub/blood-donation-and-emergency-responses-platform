@@ -22,10 +22,16 @@ export class AppointmentsController {
     return this.appointmentsService.create(user.id, dto);
   }
 
-  @Roles(Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
   @Post('hospital')
   createByHospital(@CurrentUser() user: { id: string }, @Body() dto: CreateHospitalAppointmentDto) {
     return this.appointmentsService.createByHospital(user.id, dto);
+  }
+
+  @Roles(Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Get('eligible-donors')
+  eligibleDonors(@CurrentUser() user: { id: string }, @Query() query: PaginationQueryDto & { search?: string }) {
+    return this.appointmentsService.listEligibleDonors(user.id, query);
   }
 
   @Roles(
@@ -45,7 +51,16 @@ export class AppointmentsController {
     return this.appointmentsService.listForUser(user.id, user.role, query);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Get(':id/donation-number-preview')
+  previewDonationNumber(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: Role },
+  ) {
+    return this.appointmentsService.previewDonationNumber(id, user.id, user.role);
+  }
+
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

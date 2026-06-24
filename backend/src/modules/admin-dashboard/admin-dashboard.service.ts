@@ -90,10 +90,13 @@ export class AdminDashboardService {
       activeEmergencyRequests,
       pendingDonorApprovals,
       partnerHospitals,
+      confirmedBloodGroupDonors,
+      unknownBloodGroupDonors,
       inventorySummary,
       completedRequests,
       emergencyResponses,
       lowStockInventory,
+      hospitalsMissingCoordinates,
     ] = await Promise.all([
       this.prisma.donor.count(),
       this.prisma.bloodRequest.count({
@@ -114,6 +117,8 @@ export class AdminDashboardService {
         },
       }),
       this.prisma.partnerHospital.count(),
+      this.prisma.donor.count({ where: { bloodGroup: { not: BloodGroup.UNKNOWN } } }),
+      this.prisma.donor.count({ where: { bloodGroup: BloodGroup.UNKNOWN } }),
       this.prisma.inventoryItem.aggregate({ _sum: { availableUnits: true } }),
       this.prisma.bloodRequest.count({
         where: {
@@ -133,6 +138,13 @@ export class AdminDashboardService {
       this.prisma.inventoryItem.findMany({
         select: { availableUnits: true, lowThreshold: true, criticalThreshold: true, bloodGroup: true },
       }),
+      this.prisma.hospital.count({
+        where: {
+          isApproved: true,
+          bloodBankAvailable: true,
+          OR: [{ city: '' }, { region: '' }],
+        },
+      }),
     ]);
 
     const responseMinutes = emergencyResponses
@@ -149,9 +161,17 @@ export class AdminDashboardService {
     return {
       summaryCards: [
         { key: 'total-donors', label: 'Total registered donors', value: totalDonors, tone: 'primary' },
+        { key: 'confirmed-blood-group-donors', label: 'Confirmed blood group donors', value: confirmedBloodGroupDonors, tone: 'success' },
+        { key: 'unknown-blood-group-donors', label: 'Unknown blood group donors', value: unknownBloodGroupDonors, tone: unknownBloodGroupDonors > 0 ? 'warning' : 'success' },
         { key: 'active-emergency-requests', label: 'Active emergency requests', value: activeEmergencyRequests, tone: 'warning' },
         { key: 'pending-donor-approvals', label: 'Pending donor approvals', value: pendingDonorApprovals, tone: 'warning' },
         { key: 'partner-hospitals', label: 'Partner hospitals', value: partnerHospitals, tone: 'neutral' },
+        {
+          key: 'hospitals-missing-coordinates',
+          label: 'Hospitals missing coordinates',
+          value: hospitalsMissingCoordinates,
+          tone: hospitalsMissingCoordinates > 0 ? 'warning' : 'success',
+        },
         { key: 'blood-units-available', label: 'Blood units available', value: inventorySummary._sum.availableUnits ?? 0, tone: 'success' },
         { key: 'low-stock-blood-types', label: 'Low stock blood types', value: lowStockBloodTypes, tone: 'danger' },
         { key: 'requests-completed', label: 'Requests completed', value: completedRequests, tone: 'success' },
@@ -216,6 +236,8 @@ export class AdminDashboardService {
           ? {
               OR: [
                 { patientName: { contains: query.search, mode: 'insensitive' } },
+                { requestReference: { contains: query.search, mode: 'insensitive' } },
+                { hospitalPatientReference: { contains: query.search, mode: 'insensitive' } },
                 { patientCode: { contains: query.search, mode: 'insensitive' } },
                 { hospital: { hospitalName: { contains: query.search, mode: 'insensitive' } } },
                 { location: { contains: query.search, mode: 'insensitive' } },
@@ -710,6 +732,8 @@ export class AdminDashboardService {
         where: {
           OR: [
             { patientName: { contains: term, mode: 'insensitive' } },
+            { requestReference: { contains: term, mode: 'insensitive' } },
+            { hospitalPatientReference: { contains: term, mode: 'insensitive' } },
             { patientCode: { contains: term, mode: 'insensitive' } },
             { location: { contains: term, mode: 'insensitive' } },
           ],
@@ -720,6 +744,7 @@ export class AdminDashboardService {
       this.prisma.appointment.findMany({
         where: {
           OR: [
+            { appointmentReference: { contains: term, mode: 'insensitive' } },
             { notes: { contains: term, mode: 'insensitive' } },
             { donor: { fullName: { contains: term, mode: 'insensitive' } } },
             { hospital: { hospitalName: { contains: term, mode: 'insensitive' } } },

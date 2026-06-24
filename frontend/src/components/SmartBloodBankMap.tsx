@@ -11,6 +11,7 @@ import {
   SmartEmergencyRequest,
 } from '../services/smart-blood-banks';
 import { ENGLISH_FRIENDLY_TILE_ATTRIBUTION, ENGLISH_FRIENDLY_TILE_URL } from '../constants/map-tiles';
+import { getHospitalProfile } from '../services/hospital-portal';
 
 const GHANA_CENTER: [number, number] = [7.9465, -1.0232];
 const BLOOD_GROUPS: { value: BloodGroup | ''; label: string }[] = [
@@ -39,18 +40,48 @@ const markerIcon = (label: string, tone: 'navy' | 'red' | 'amber' | 'blue') =>
 const centerIcon = (center: SmartBloodBankCenter) => {
   if (center.emergencyLevel === 'critical') return markerIcon('!', 'red');
   if (center.emergencyLevel === 'urgent' || center.criticalStockCount > 0) return markerIcon('B', 'amber');
-  return markerIcon(center.centerType === 'blood_bank' ? 'B' : 'H', 'navy');
+  if (center.centerType === 'blood_bank') return markerIcon('B', 'navy');
+  if (center.centerType === 'donation_center') return markerIcon('+', 'navy');
+  return markerIcon('H', 'navy');
 };
 
 const requestIcon = markerIcon('ER', 'red');
 const userIcon = markerIcon('YOU', 'blue');
+const yourHospitalIcon = markerIcon('ME', 'blue');
+const nearestCenterIcon = markerIcon('NEAR', 'amber');
 
-function RecenterMap({ center, zoom }: { center: [number, number]; zoom: number }) {
+function FitMapToResults({
+  centers,
+  selectedCenter,
+  userLocation,
+}: {
+  centers: SmartBloodBankCenter[];
+  selectedCenter: SmartBloodBankCenter | null;
+  userLocation: { latitude: number; longitude: number } | null;
+}) {
   const map = useMap();
 
   useEffect(() => {
-    map.flyTo(center, zoom, { duration: 0.7 });
-  }, [center, map, zoom]);
+    if (selectedCenter) {
+      map.flyTo([selectedCenter.latitude, selectedCenter.longitude], 12, { duration: 0.7 });
+      return;
+    }
+
+    if (userLocation) {
+      const points: [number, number][] = [
+        [userLocation.latitude, userLocation.longitude],
+        ...centers.map((center) => [center.latitude, center.longitude] as [number, number]),
+      ];
+      if (points.length > 1) {
+        map.fitBounds(L.latLngBounds(points), { animate: true, maxZoom: 10, padding: [44, 44] });
+      } else {
+        map.flyTo([userLocation.latitude, userLocation.longitude], 8, { duration: 0.7 });
+      }
+      return;
+    }
+
+    map.setView(GHANA_CENTER, 7, { animate: true });
+  }, [centers, map, selectedCenter, userLocation]);
 
   return null;
 }
@@ -111,6 +142,9 @@ function CenterPopup({ center }: { center: SmartBloodBankCenter }) {
   );
 }
 
+const selectedBloodAvailability = (center: SmartBloodBankCenter | null, bloodGroup: BloodGroup | '') =>
+  center && bloodGroup ? center.bloodAvailability.find((item) => item.bloodGroup === bloodGroup) ?? null : null;
+
 function RequestPopup({ request }: { request: SmartEmergencyRequest }) {
   return (
     <div className="w-72 space-y-2 text-sm text-slate-700">
@@ -152,36 +186,62 @@ function RequestPopup({ request }: { request: SmartEmergencyRequest }) {
 export function SmartBloodBankMap() {
   const [data, setData] = useState<SmartBloodBankMapResponse | null>(null);
   const [search, setSearch] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const [regionFilter, setRegionFilter] = useState('');
   const [bloodGroup, setBloodGroup] = useState<BloodGroup | ''>('');
   const [radiusKm, setRadiusKm] = useState(20);
   const [emergencyMode, setEmergencyMode] = useState(false);
+  const [emergencyReadyOnly, setEmergencyReadyOnly] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedCenterId, setSelectedCenterId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const [locationMessage, setLocationMessage] = useState('');
+  const [currentHospitalId, setCurrentHospitalId] = useState<string | null>(null);
+  const [currentHospitalName, setCurrentHospitalName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void getHospitalProfile()
+      .then((profile) => {
+        if (!mounted) return;
+        setCurrentHospitalId(profile.id ?? null);
+        setCurrentHospitalName(profile.hospitalName ?? null);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCurrentHospitalId(null);
+        setCurrentHospitalName(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const loadCenters = useCallback(async () => {
     setLoading(true);
     try {
       const payload = await getSmartBloodBanks({
         search,
+        city: cityFilter,
+        region: regionFilter,
         bloodGroup,
         radiusKm,
         emergencyMode,
+        emergencyReadyOnly,
         latitude: userLocation?.latitude,
         longitude: userLocation?.longitude,
       });
       setData(payload);
-      setSelectedCenterId((current) => current ?? payload.summary.nearestMatchingSource?.id ?? payload.centers[0]?.id ?? null);
+      setSelectedCenterId((current) => current ?? null);
       setError('');
     } catch {
       setError('We could not load the smart blood bank map right now. Please check the backend and try again.');
     } finally {
       setLoading(false);
     }
-  }, [bloodGroup, emergencyMode, radiusKm, search, userLocation?.latitude, userLocation?.longitude]);
+  }, [bloodGroup, cityFilter, emergencyMode, emergencyReadyOnly, radiusKm, regionFilter, search, userLocation?.latitude, userLocation?.longitude]);
 
   useEffect(() => {
     void loadCenters();
@@ -200,6 +260,7 @@ export function SmartBloodBankMap() {
     socket.on('inventory.updated', refreshMapData);
     socket.on('emergency.request.updated', refreshMapData);
     socket.on('emergency.request.public.updated', refreshMapData);
+    socket.on('hospital.map.updated', refreshMapData);
 
     const interval = window.setInterval(refreshMapData, 45000);
 
@@ -208,20 +269,24 @@ export function SmartBloodBankMap() {
       socket.off('inventory.updated', refreshMapData);
       socket.off('emergency.request.updated', refreshMapData);
       socket.off('emergency.request.public.updated', refreshMapData);
+      socket.off('hospital.map.updated', refreshMapData);
       socket.disconnect();
     };
   }, [loadCenters]);
 
   const selectedCenter = useMemo(
-    () => data?.centers.find((center) => center.id === selectedCenterId) ?? data?.summary.nearestMatchingSource ?? data?.centers[0] ?? null,
-    [data?.centers, data?.summary.nearestMatchingSource, selectedCenterId],
+    () =>
+      data?.centers.find((center) => center.id === selectedCenterId) ??
+      (userLocation ? data?.summary.nearestCenter ?? data?.centers[0] ?? null : null),
+    [data?.centers, data?.summary.nearestCenter, selectedCenterId, userLocation],
   );
-
-  const mapCenter: [number, number] = selectedCenter
-    ? [selectedCenter.latitude, selectedCenter.longitude]
-    : userLocation
-      ? [userLocation.latitude, userLocation.longitude]
-      : GHANA_CENTER;
+  const nearestCenter = data?.summary.nearestCenter ?? null;
+  const nearestSource = data?.summary.nearestMatchingSource ?? nearestCenter;
+  const fallbackCenter = data?.summary.radiusFallback.nearestOutsideRadius ?? null;
+  const nearestSelectedAvailability = selectedBloodAvailability(nearestSource, bloodGroup);
+  const radiusFallbackMessage = data?.summary.radiusFallback.applied && fallbackCenter
+    ? `No center found within ${data.summary.radiusFallback.requestedRadiusKm ?? radiusKm}km. Showing nearest available center instead.`
+    : '';
 
   const requestLocation = () => {
     if (!navigator.geolocation) {
@@ -233,7 +298,7 @@ export function SmartBloodBankMap() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        setLocationMessage('Location detected. Results now show distance from you.');
+        setLocationMessage('Location detected. Centers are sorted by distance from you.');
         setLocating(false);
       },
       () => {
@@ -262,15 +327,22 @@ export function SmartBloodBankMap() {
           </button>
         </div>
 
-        {locationMessage ? <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">{locationMessage}</p> : null}
+        {locationMessage || radiusFallbackMessage ? (
+          <div className="mt-4 space-y-2">
+            {locationMessage ? <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">{locationMessage}</p> : null}
+            {radiusFallbackMessage ? <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{radiusFallbackMessage}</p> : null}
+          </div>
+        ) : null}
 
-        <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
+        <div className="mt-6 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[1.3fr_0.8fr_0.8fr_0.8fr_0.8fr_auto]">
           <input
             className="legacy-input"
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search hospital, blood bank, city, region, or contact"
             value={search}
           />
+          <input className="legacy-input" placeholder="Filter city" value={cityFilter} onChange={(event) => setCityFilter(event.target.value)} />
+          <input className="legacy-input" placeholder="Filter region" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} />
           <select className="legacy-input" onChange={(event) => setBloodGroup(event.target.value as BloodGroup | '')} value={bloodGroup}>
             {BLOOD_GROUPS.map((group) => (
               <option key={group.label} value={group.value}>{group.label}</option>
@@ -289,6 +361,15 @@ export function SmartBloodBankMap() {
             type="button"
           >
             Emergency mode
+          </button>
+          <button
+            className={`rounded-2xl border px-4 py-3 text-sm font-black transition ${
+              emergencyReadyOnly ? 'border-slate-900 bg-slate-900 text-white' : 'border-red-100 bg-white text-primary hover:bg-red-50'
+            }`}
+            onClick={() => setEmergencyReadyOnly((current) => !current)}
+            type="button"
+          >
+            Ready centers
           </button>
         </div>
       </div>
@@ -318,8 +399,8 @@ export function SmartBloodBankMap() {
           {loading ? (
             <div className="flex h-[420px] items-center justify-center text-sm font-bold text-slate-500 sm:h-[500px] xl:h-[560px]">Loading smart blood bank map...</div>
           ) : data?.centers.length ? (
-            <MapContainer center={mapCenter} className="h-[420px] w-full sm:h-[500px] xl:h-[560px]" scrollWheelZoom zoom={selectedCenter ? 13 : 7}>
-              <RecenterMap center={mapCenter} zoom={selectedCenter ? 13 : 7} />
+            <MapContainer center={GHANA_CENTER} className="h-[420px] w-full sm:h-[500px] xl:h-[560px]" scrollWheelZoom zoom={7}>
+              <FitMapToResults centers={data.centers} selectedCenter={selectedCenterId ? selectedCenter : null} userLocation={userLocation} />
               <TileLayer
                 attribution={ENGLISH_FRIENDLY_TILE_ATTRIBUTION}
                 url={ENGLISH_FRIENDLY_TILE_URL}
@@ -332,11 +413,19 @@ export function SmartBloodBankMap() {
               {data.centers.map((center) => (
                 <Marker
                   eventHandlers={{ click: () => setSelectedCenterId(center.id) }}
-                  icon={centerIcon(center)}
+                  icon={center.id === currentHospitalId ? yourHospitalIcon : center.id === nearestCenter?.id && userLocation ? nearestCenterIcon : centerIcon(center)}
                   key={center.id}
                   position={[center.latitude, center.longitude]}
                 >
-                  <Popup><CenterPopup center={center} /></Popup>
+                  <Popup>
+                    {center.id === currentHospitalId ? (
+                      <div className="mb-2 rounded-lg bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">Your Hospital</div>
+                    ) : null}
+                    {center.id === nearestCenter?.id && userLocation ? (
+                      <div className="mb-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">Nearest center</div>
+                    ) : null}
+                    <CenterPopup center={center} />
+                  </Popup>
                 </Marker>
               ))}
               {data.emergencyRequests.map((request) => (
@@ -349,7 +438,9 @@ export function SmartBloodBankMap() {
             <div className="flex h-[420px] items-center justify-center p-6 text-center sm:h-[500px] xl:h-[560px]">
               <div>
                 <h2 className="text-2xl font-black text-slate-900">No centers match your filters</h2>
-                <p className="mt-2 text-sm leading-7 text-slate-600">Try increasing the radius, clearing the blood group filter, or searching another city.</p>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  No map-ready centers match the selected search, stock, city, region, and readiness filters. Try clearing one filter or checking approved hospital coordinates.
+                </p>
               </div>
             </div>
           )}
@@ -357,14 +448,52 @@ export function SmartBloodBankMap() {
 
         <aside className="space-y-4">
           <article className="rounded-[2rem] border border-red-100 bg-red-50 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-red-700">Nearest source</p>
-            <h2 className="mt-2 text-xl font-black text-slate-950">{data?.summary.nearestMatchingSource?.name ?? 'No matching source yet'}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {data?.summary.nearestMatchingSource?.distanceKm !== null && data?.summary.nearestMatchingSource?.distanceKm !== undefined
-                ? `${data.summary.nearestMatchingSource.distanceKm} km from your location.`
-                : 'Enable location and choose a blood group to calculate the nearest available source.'}
-            </p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-red-700">Nearest donation center</p>
+            <h2 className="mt-2 text-xl font-black text-slate-950">{nearestSource?.name ?? 'No matching source yet'}</h2>
+            {nearestSource ? (
+              <div className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                <p>{nearestSource.city} / {nearestSource.region}</p>
+                <p>
+                  {nearestSource.distanceKm !== null && nearestSource.distanceKm !== undefined
+                    ? `${nearestSource.distanceKm} km away`
+                    : 'Enable location to calculate distance.'}
+                </p>
+                <p>
+                  Stock status:{' '}
+                  <span className="font-bold text-slate-800">
+                    {nearestSource.criticalStockCount > 0 ? 'Critical' : nearestSource.lowStockCount > 0 ? 'Low' : nearestSource.totalUnits > 0 ? 'Stable' : 'Inventory pending'}
+                  </span>
+                </p>
+                {bloodGroup && nearestSelectedAvailability ? (
+                  <p>
+                    {nearestSelectedAvailability.availableUnits > 0
+                      ? `${nearestSelectedAvailability.label}: ${nearestSelectedAvailability.availableUnits} unit(s) available.`
+                      : 'Nearest center found, but selected blood group is not currently available.'}
+                  </p>
+                ) : (
+                  <p>
+                    Available blood groups: {nearestSource.availableBloodGroups.length ? nearestSource.availableBloodGroups.join(', ') : 'Inventory not published yet.'}
+                  </p>
+                )}
+                {data?.summary.radiusFallback.applied ? (
+                  <p className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">
+                    No center found within selected radius. Showing nearest available center instead.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Enable location or loosen filters to calculate the nearest available source.
+              </p>
+            )}
           </article>
+          {currentHospitalName ? (
+            <article className="rounded-[2rem] border border-blue-100 bg-blue-50 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-700">Current Hospital</p>
+              <h2 className="mt-2 text-xl font-black text-slate-950">{currentHospitalName}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Highlighted on map as “Your Hospital”.</p>
+            </article>
+          ) : null}
 
           <div className="rounded-[2rem] border border-red-100 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -389,7 +518,7 @@ export function SmartBloodBankMap() {
                       <p className="mt-1 text-xs text-slate-500">{center.city} • {center.region}</p>
                     </div>
                     <span className={`rounded-full px-2 py-1 text-[11px] font-black uppercase ${levelStyles[center.emergencyLevel]}`}>
-                      {center.emergencyLevel}
+                      {center.id === nearestCenter?.id && userLocation ? 'Nearest' : center.emergencyLevel}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -443,6 +572,7 @@ export function SmartBloodBankMap() {
           <h2 className="text-xl font-black text-slate-950">Legend</h2>
           <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600">
             <p><span className="mr-2 inline-block h-3 w-3 rounded-full bg-slate-900" /> Hospital / blood center</p>
+            <p><span className="mr-2 inline-block h-3 w-3 rounded-full bg-blue-600" /> Your Hospital</p>
             <p><span className="mr-2 inline-block h-3 w-3 rounded-full bg-red-600" /> Critical emergency</p>
             <p><span className="mr-2 inline-block h-3 w-3 rounded-full bg-amber-500" /> Low stock / urgent watch</p>
             <p><span className="mr-2 inline-block h-3 w-3 rounded-full bg-blue-600" /> Your location</p>

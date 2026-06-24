@@ -13,6 +13,7 @@ import { CreateDonorAdminDto } from './dto/admin/create-donor-admin.dto';
 import { UpdateDonorAdminDto } from './dto/admin/update-donor-admin.dto';
 import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
+import { UpdateDonorSettingsDto } from './dto/update-donor-settings.dto';
 import { UpdateDonorEligibilityApprovalDto } from './dto/admin/update-donor-eligibility-approval.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
@@ -55,6 +56,11 @@ export class DonorsController {
   @Patch('availability')
   updateAvailability(@CurrentUser() user: { id: string }, @Body() dto: UpdateAvailabilityDto) {
     return this.donorsService.updateAvailability(user.id, dto.available);
+  }
+
+  @Patch('settings')
+  updateSettings(@CurrentUser() user: { id: string }, @Body() dto: UpdateDonorSettingsDto) {
+    return this.donorsService.updateSettings(user.id, dto);
   }
 
   @Get('hospital-options')

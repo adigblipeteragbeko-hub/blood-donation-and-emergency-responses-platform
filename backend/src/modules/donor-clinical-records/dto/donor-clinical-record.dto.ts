@@ -1,9 +1,11 @@
-import { Type } from 'class-transformer';
+import { BloodGroup } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
   IsDateString,
   IsEmail,
+  IsEnum,
   IsIn,
   IsInt,
   IsNumber,
@@ -13,6 +15,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+const EmptyStringToNull = () => Transform(({ value }) => (value === '' ? null : value));
 
 export class HealthAnswerDto {
   @IsString()
@@ -35,8 +39,9 @@ export class UpsertDonorClinicalDraftDto {
   selectedHospitalId?: string;
 
   @IsOptional()
+  @EmptyStringToNull()
   @IsDateString()
-  formDate?: string;
+  formDate?: string | null;
 
   @IsOptional()
   @IsString()
@@ -52,11 +57,11 @@ export class UpsertDonorClinicalDraftDto {
 
   @IsOptional()
   @IsString()
-  lastName?: string;
+  otherNames?: string;
 
   @IsOptional()
   @IsString()
-  callingName?: string;
+  lastName?: string;
 
   @IsOptional()
   @IsDateString()
@@ -111,8 +116,9 @@ export class UpsertDonorClinicalDraftDto {
   hasDonatedBefore?: boolean;
 
   @IsOptional()
+  @EmptyStringToNull()
   @IsDateString()
-  lastDonationDate?: string;
+  lastDonationDate?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -135,6 +141,10 @@ export class UpsertDonorClinicalDraftDto {
   @IsOptional()
   @IsString()
   patientHospital?: string;
+
+  @IsOptional()
+  @IsString()
+  requestReference?: string;
 
   @IsOptional()
   @IsString()
@@ -178,20 +188,10 @@ export class UpsertDonorClinicalDraftDto {
   dataUseConsent?: boolean;
 
   @IsOptional()
-  @IsString()
-  donorSignature?: string;
-
-  @IsOptional()
+  @EmptyStringToNull()
   @IsDateString()
-  declarationDate?: string;
+  declarationDate?: string | null;
 
-  @IsOptional()
-  @IsString()
-  counsellorName?: string;
-
-  @IsOptional()
-  @IsString()
-  counsellorSignature?: string;
 }
 
 export class ReviewQueueQueryDto {
@@ -228,6 +228,10 @@ export class UpdateClinicalReviewDto {
 }
 
 export class OfficeUseDto {
+  @IsOptional()
+  @IsEnum(BloodGroup)
+  confirmedBloodGroup?: BloodGroup;
+
   @IsOptional()
   @IsIn(['PASSED', 'FAILED'])
   appearancePassed?: 'PASSED' | 'FAILED';
@@ -299,76 +303,5 @@ export class OfficeUseDto {
   @IsOptional()
   @IsString()
   nurseName?: string;
-
-  @IsOptional()
-  @IsString()
-  nurseSignature?: string;
 }
 
-export class DonationOutcomeDto {
-  @IsOptional()
-  @IsString()
-  donationNumber?: string;
-
-  @IsOptional()
-  @IsIn(['SINGLE', 'DOUBLE', 'TRIPLE', 'QUAD'])
-  packType?: string;
-
-  @IsOptional()
-  @IsDateString()
-  bleedStartTime?: string;
-
-  @IsOptional()
-  @IsDateString()
-  bleedEndTime?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  dryPack?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  apheresis?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  testOnly?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  didNotBleed?: boolean;
-
-  @IsOptional()
-  @IsIn(['SUCCESSFUL', 'UNSUCCESSFUL'])
-  outcomeOfPhlebotomy?: string;
-
-  @IsOptional()
-  @IsString()
-  unsuccessfulReason?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  venousAccessIssue?: boolean;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  underbledMl?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  donorReaction?: boolean;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  adverseEvents?: string[];
-
-  @IsOptional()
-  @IsString()
-  nurseName?: string;
-
-  @IsOptional()
-  @IsString()
-  nurseSignature?: string;
-}

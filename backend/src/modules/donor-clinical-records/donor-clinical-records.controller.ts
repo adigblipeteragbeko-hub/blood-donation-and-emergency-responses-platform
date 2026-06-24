@@ -8,7 +8,6 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { DonorClinicalRecordsService } from './donor-clinical-records.service';
 import {
-  DonationOutcomeDto,
   OfficeUseDto,
   ReviewQueueQueryDto,
   UpdateClinicalReviewDto,
@@ -66,12 +65,6 @@ export class DonorClinicalRecordsController {
   @Patch(':id/office-use')
   officeUse(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string, @Body() dto: OfficeUseDto) {
     return this.service.officeUse(id, dto, user);
-  }
-
-  @Roles(Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
-  @Patch(':id/donation-outcome')
-  donationOutcome(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string, @Body() dto: DonationOutcomeDto) {
-    return this.service.donationOutcome(id, dto, user);
   }
 
   @Roles(Role.DONOR, Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)

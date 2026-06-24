@@ -1,6 +1,15 @@
 ﻿import api from './api';
 
-export type BloodGroup = 'O_POS' | 'O_NEG' | 'A_POS' | 'A_NEG' | 'B_POS' | 'B_NEG' | 'AB_POS' | 'AB_NEG';
+export type BloodGroup =
+  | 'UNKNOWN'
+  | 'O_POS'
+  | 'O_NEG'
+  | 'A_POS'
+  | 'A_NEG'
+  | 'B_POS'
+  | 'B_NEG'
+  | 'AB_POS'
+  | 'AB_NEG';
 export type BloodStockStatus = 'stable' | 'low' | 'critical' | 'unpublished';
 export type CenterType = 'hospital' | 'blood_bank' | 'donation_center';
 export type EmergencyLevel = 'normal' | 'watch' | 'urgent' | 'critical';
@@ -73,6 +82,8 @@ export type SmartBloodBankMapResponse = {
   emergencyRequests: SmartEmergencyRequest[];
   summary: {
     totalCenters: number;
+    totalMatchingCenters: number;
+    withinRadiusCenters: number;
     centersWithPublishedInventory: number;
     totalUnitsAvailable: number;
     lowStockCenters: number;
@@ -80,6 +91,11 @@ export type SmartBloodBankMapResponse = {
     activeEmergencyRequests: number;
     nearestCenter: SmartBloodBankCenter | null;
     nearestMatchingSource: SmartBloodBankCenter | null;
+    radiusFallback: {
+      applied: boolean;
+      requestedRadiusKm: number | null;
+      nearestOutsideRadius: SmartBloodBankCenter | null;
+    };
   };
   filters: {
     search: string | null;
@@ -88,16 +104,22 @@ export type SmartBloodBankMapResponse = {
     latitude: number | null;
     longitude: number | null;
     emergencyMode: boolean;
+    city: string | null;
+    region: string | null;
+    emergencyReadyOnly: boolean;
   };
 };
 
 export type BloodBankFilters = {
   search?: string;
   bloodGroup?: BloodGroup | '';
+  city?: string;
+  region?: string;
   latitude?: number;
   longitude?: number;
   radiusKm?: number;
   emergencyMode?: boolean;
+  emergencyReadyOnly?: boolean;
 };
 
 const unwrap = <T>(payload: T | { data: T }): T => {
@@ -111,10 +133,13 @@ export async function getSmartBloodBanks(filters: BloodBankFilters = {}) {
   const params = new URLSearchParams();
   if (filters.search?.trim()) params.set('search', filters.search.trim());
   if (filters.bloodGroup) params.set('bloodGroup', filters.bloodGroup);
+  if (filters.city?.trim()) params.set('city', filters.city.trim());
+  if (filters.region?.trim()) params.set('region', filters.region.trim());
   if (typeof filters.latitude === 'number') params.set('latitude', String(filters.latitude));
   if (typeof filters.longitude === 'number') params.set('longitude', String(filters.longitude));
   if (typeof filters.radiusKm === 'number') params.set('radiusKm', String(filters.radiusKm));
   if (filters.emergencyMode) params.set('emergencyMode', 'true');
+  if (filters.emergencyReadyOnly) params.set('emergencyReadyOnly', 'true');
 
   const response = await api.get<SmartBloodBankMapResponse | { data: SmartBloodBankMapResponse }>(
     `/public/maps/blood-banks${params.toString() ? `?${params.toString()}` : ''}`,
