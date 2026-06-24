@@ -68,11 +68,22 @@ export type DonorResponseItem = {
   createdAt: string;
   donor: {
     id: string;
+    donorNumber?: string | null;
     fullName: string;
     bloodGroup: BloodGroup;
     location: string;
     user: { email: string };
   };
+};
+
+export type DonorMatchContext = {
+  bloodGroup: BloodGroup;
+  compatible: boolean;
+  eligible: boolean;
+  available: boolean;
+  inCooldown: boolean;
+  locationSharingEnabled: boolean;
+  distanceKm?: number | null;
 };
 
 export type BloodRequestItem = {
@@ -104,6 +115,7 @@ export type BloodRequestItem = {
   hospitalTransfers?: HospitalBloodTransferItem[];
   currentHospitalResponse?: HospitalRequestResponseItem | null;
   currentHospitalStock?: HospitalRequestStockSnapshot | null;
+  donorMatchContext?: DonorMatchContext;
   isOwnRequest?: boolean;
   hospital?: { id?: string; hospitalName: string; location: string; city?: string | null; region?: string | null; contactPhone?: string | null };
 };
@@ -474,6 +486,16 @@ export async function getAllBloodRequests(params?: PaginationParams) {
 
 export async function getBloodRequestById(id: string) {
   const response = await api.get<ApiEnvelope<BloodRequestItem>>(`/blood-requests/${id}`);
+  return unwrap(response.data);
+}
+
+export async function getDonorEmergencyRequests(params?: PaginationParams) {
+  const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests/donor-emergency', { params });
+  return unwrap(response.data);
+}
+
+export async function getDonorEmergencyRequestById(id: string) {
+  const response = await api.get<ApiEnvelope<BloodRequestItem>>(`/blood-requests/donor-emergency/${id}`);
   return unwrap(response.data);
 }
 

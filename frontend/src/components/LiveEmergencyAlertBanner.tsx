@@ -50,7 +50,10 @@ export function LiveEmergencyAlertBanner() {
 
     const loadAlerts = async () => {
       try {
-        const response = await api.get('/public/emergency-requests?take=10');
+        const endpoint = location.pathname.startsWith('/donor')
+          ? '/blood-requests/donor-emergency?take=10'
+          : '/public/emergency-requests?take=10';
+        const response = await api.get(endpoint);
         if (mounted) {
           setAlerts(normalizeList(response.data));
         }
@@ -73,7 +76,7 @@ export function LiveEmergencyAlertBanner() {
       socket.off('emergency.request.public.updated', loadAlerts);
       socket.disconnect();
     };
-  }, []);
+  }, [location.pathname]);
 
   const activeAlert = useMemo(
     () =>
@@ -105,31 +108,40 @@ export function LiveEmergencyAlertBanner() {
 
   return (
     <Link
-      className="group flex flex-col gap-3 rounded-2xl border border-red-200 bg-gradient-to-r from-red-700 to-primary px-5 py-4 text-white shadow-lg shadow-red-900/10 transition hover:-translate-y-0.5 hover:shadow-xl md:flex-row md:items-center md:justify-between"
+      className="group flex flex-col gap-4 rounded-3xl border border-red-200 bg-gradient-to-r from-red-800 via-red-700 to-primary px-5 py-4 text-white shadow-xl shadow-red-900/10 transition hover:-translate-y-0.5 hover:shadow-2xl md:flex-row md:items-center md:justify-between"
       to={targetHref}
     >
-      <div>
-        <p className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.22em] text-red-100">
-          <AppIcon name="alert" className="h-3.5 w-3.5" />
-          Live emergency
-        </p>
-        <p className="mt-1 text-base font-extrabold md:text-lg">
-          {bloodType} needed at {hospital}
-        </p>
-        <p className="text-sm text-red-50">
-          {units > 0 ? `${units} unit${units === 1 ? '' : 's'} requested` : 'Urgent blood coordination needed'}.
-        </p>
-        {activeAlert.requiredBy ? (
-          <p className="text-xs text-red-100">Required by: {new Date(activeAlert.requiredBy).toLocaleString()}</p>
-        ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide">
-          <span className="rounded-full border border-white/30 bg-white/15 px-2 py-1">{urgency}</span>
-          <span className="rounded-full border border-white/30 bg-white/15 px-2 py-1">{status}</span>
+      <div className="flex items-start gap-4">
+        <span className="mt-1 rounded-2xl bg-white/15 p-3 ring-1 ring-white/20">
+          <AppIcon name="alert" className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-red-100">Live Emergency</p>
+          <p className="mt-1 text-xl font-black leading-tight md:text-2xl">{bloodType} Blood Needed</p>
+          <p className="mt-1 text-sm font-semibold text-red-50">{hospital}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+            <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">
+              {units > 0 ? `${units} unit${units === 1 ? '' : 's'} requested` : 'Urgent coordination'}
+            </span>
+            <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">{urgency}</span>
+            <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">{status}</span>
+            {activeAlert.requiredBy ? (
+              <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">
+                Required by: {new Date(activeAlert.requiredBy).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
-      <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 px-4 py-2 text-sm font-bold transition group-hover:bg-white group-hover:text-primary animate-pulse">
+      <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 bg-white px-5 py-2.5 text-sm font-black text-primary shadow-sm transition group-hover:scale-105 group-hover:bg-red-50">
         <AppIcon name="notification" className="h-4 w-4" />
-        View details
+        View Details
       </span>
     </Link>
   );

@@ -609,7 +609,13 @@ export default function HospitalActiveRequestsPage() {
                     <div key={response.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
                       <div>
                         <p className="text-sm font-bold">{response.donor.fullName}</p>
-                        <p className="text-xs text-muted">{formatBloodGroup(response.donor.bloodGroup)} - {response.responseStatus}</p>
+                        <p className="text-xs text-muted">
+                          {response.donor.donorNumber ?? 'Donor reference pending'} - {formatBloodGroup(response.donor.bloodGroup)} - {response.responseStatus}
+                        </p>
+                        <p className="text-xs text-muted">
+                          Responded: {response.responseTime ? new Date(response.responseTime).toLocaleString() : 'Awaiting response'}
+                        </p>
+                        {response.notes ? <p className="mt-1 text-xs text-slate-600">Note: {response.notes}</p> : null}
                       </div>
                       <Link
                         className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"

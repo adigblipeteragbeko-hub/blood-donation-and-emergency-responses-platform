@@ -36,6 +36,12 @@ export function LoginForm({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter your email and password.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -59,7 +65,7 @@ export function LoginForm({
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Login failed. Check credentials and try again.');
+      setError(extracted ?? 'Invalid email or password. Please check your details and try again.');
     } finally {
       setSubmitting(false);
     }

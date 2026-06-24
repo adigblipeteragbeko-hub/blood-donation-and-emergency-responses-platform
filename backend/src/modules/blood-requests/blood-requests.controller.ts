@@ -74,6 +74,18 @@ export class BloodRequestsController {
     return this.bloodRequestsService.getHospitalActiveById(id, user.id, user.role);
   }
 
+  @Roles(Role.DONOR)
+  @Get('donor-emergency')
+  listDonorEmergencyRequests(@CurrentUser() user: { id: string }, @Query() query: PaginationQueryDto) {
+    return this.bloodRequestsService.listDonorEmergencyRequests(user.id, query);
+  }
+
+  @Roles(Role.DONOR)
+  @Get('donor-emergency/:id')
+  getDonorEmergencyRequestById(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.bloodRequestsService.getDonorEmergencyRequestById(id, user.id);
+  }
+
   @Roles(Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch('hospital-active/:id/status')
   updateHospitalActiveStatus(

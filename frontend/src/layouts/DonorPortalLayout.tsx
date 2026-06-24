@@ -22,19 +22,19 @@ const donorLinks = [
 
 export function DonorPortalLayout() {
   return (
-    <section className="grid gap-5 overflow-x-hidden pt-6 md:grid-cols-[280px_minmax(0,1fr)] md:pt-8">
-      <aside className="card h-fit space-y-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-primary">
+    <section className="grid gap-4 overflow-x-hidden pt-4 md:grid-cols-[250px_minmax(0,1fr)] md:pt-6 xl:grid-cols-[238px_minmax(0,1fr)]">
+      <aside className="card h-fit space-y-2 p-4">
+        <h2 className="flex items-center gap-2 text-base font-bold text-primary">
           <AppIcon name="heart" className="h-5 w-5" />
           Donor Menu
         </h2>
-        <nav className="max-h-[75vh] space-y-1 overflow-y-auto pr-1">
+        <nav className="max-h-[78vh] space-y-1 overflow-y-auto pr-1">
           {donorLinks.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `${isActive ? 'bg-primary text-white' : 'bg-red-50 text-primary'} flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold`
+                `${isActive ? 'bg-primary text-white shadow-sm' : 'bg-red-50 text-primary hover:bg-red-100'} flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition`
               }
             >
               <AppIcon name={item.icon} className="h-4 w-4 shrink-0" />

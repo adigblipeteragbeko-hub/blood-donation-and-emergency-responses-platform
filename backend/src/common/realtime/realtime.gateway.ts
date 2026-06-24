@@ -58,18 +58,22 @@ export class RealtimeGateway implements OnGatewayInit {
   }
 
   emitEvent(channel: string, payload: unknown) {
+    if (!this.server) return;
     this.server.to('authenticated').emit(channel, payload);
   }
 
   emitToPublic(channel: string, payload: unknown) {
+    if (!this.server) return;
     this.server.to('public').emit(channel, payload);
   }
 
   emitToUser(userId: string, channel: string, payload: unknown) {
+    if (!this.server) return;
     this.server.to(`user:${userId}`).emit(channel, payload);
   }
 
   emitToRoles(roles: string[], channel: string, payload: unknown) {
+    if (!this.server) return;
     roles.forEach((role) => this.server.to(`role:${role}`).emit(channel, payload));
   }
 }

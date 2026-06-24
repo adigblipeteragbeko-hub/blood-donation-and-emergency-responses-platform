@@ -9,10 +9,22 @@ const api = axios.create({
 
 let refreshPromise: Promise<string | null> | null = null;
 
-const friendlyMessage = (message?: string, status?: number) => {
+const friendlyMessage = (message?: string, status?: number, url?: string) => {
   const raw = String(message ?? '').trim();
   const lower = raw.toLowerCase();
+  const requestUrl = String(url ?? '');
 
+  if (requestUrl.includes('/auth/login')) {
+    if (lower.includes('not verified') || lower.includes('verify')) {
+      return 'Please verify your email address before signing in.';
+    }
+    if (lower.includes('inactive') || lower.includes('disabled')) {
+      return 'Your account is currently inactive. Please contact support.';
+    }
+    if (status === 401 || lower.includes('invalid credential') || lower.includes('invalid email') || lower.includes('password')) {
+      return 'Invalid email or password. Please check your details and try again.';
+    }
+  }
   if (status === 401 || lower.includes('unauthorized') || lower.includes('invalid token')) {
     return 'Your session has expired. Please sign in again.';
   }
@@ -86,7 +98,7 @@ api.interceptors.response.use(
         error.response.data?.error?.message ??
         error.response.data?.message ??
         error.message;
-      const message = friendlyMessage(currentMessage, status);
+      const message = friendlyMessage(currentMessage, status, originalRequest.url);
       error.response.data = {
         ...error.response.data,
         message,

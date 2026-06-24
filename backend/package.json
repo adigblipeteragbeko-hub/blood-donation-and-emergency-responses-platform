@@ -11,7 +11,8 @@
     "test": "jest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:demo-donors": "ts-node prisma/seed-demo-donors.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

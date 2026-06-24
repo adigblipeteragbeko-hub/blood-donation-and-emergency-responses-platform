@@ -706,6 +706,120 @@ export class BloodRequestsService {
     });
   }
 
+  private async getDonorForEmergencyAccess(userId: string) {
+    const donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      include: {
+        clinicalRecords: {
+          select: { status: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!donor) {
+      throw new NotFoundException('Donor profile not found');
+    }
+
+    return donor;
+  }
+
+  private donorEmergencyInclude(donorId: string) {
+    return {
+      hospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true, contactPhone: true } },
+      updates: { orderBy: { createdAt: 'desc' as const }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
+      donorResponses: {
+        where: { donorId },
+        include: {
+          donor: {
+            select: {
+              id: true,
+              donorNumber: true,
+              fullName: true,
+              bloodGroup: true,
+              location: true,
+              availabilityStatus: true,
+              eligibilityStatus: true,
+              locationSharingEnabled: true,
+              lastDonationDate: true,
+              nextEligibilityDate: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private sanitizeDonorEmergencyRequest<T extends Record<string, any>>(request: T, donor: { latitude?: number | null; longitude?: number | null; bloodGroup: BloodGroup; eligibilityStatus: boolean; availabilityStatus: boolean; locationSharingEnabled: boolean; nextEligibilityDate?: Date | null }) {
+    const distanceKm =
+      typeof donor.latitude === 'number' &&
+      typeof donor.longitude === 'number' &&
+      typeof request.latitude === 'number' &&
+      typeof request.longitude === 'number'
+        ? Number(this.distanceKm(donor.latitude, donor.longitude, request.latitude, request.longitude).toFixed(2))
+        : null;
+    const nextEligibilityDate = donor.nextEligibilityDate ?? null;
+    const inCooldown = Boolean(nextEligibilityDate && nextEligibilityDate > new Date());
+
+    return {
+      ...request,
+      patientName: null,
+      hospitalPatientReference: null,
+      patientCode: null,
+      donorMatchContext: {
+        bloodGroup: donor.bloodGroup,
+        compatible: getCompatibleDonorGroups(request.bloodGroup).includes(donor.bloodGroup),
+        eligible: donor.eligibilityStatus,
+        available: donor.availabilityStatus,
+        inCooldown,
+        locationSharingEnabled: donor.locationSharingEnabled,
+        distanceKm,
+      },
+    };
+  }
+
+  async listDonorEmergencyRequests(userId: string, query: PaginationQueryDto) {
+    const skip = query.skip ?? 0;
+    const take = Math.min(query.take ?? 25, 100);
+    const donor = await this.getDonorForEmergencyAccess(userId);
+
+    const requests = await this.prisma.bloodRequest.findMany({
+      where: {
+        matchedDonors: { some: { id: donor.id } },
+        type: 'EMERGENCY',
+        status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+        requestSource: { in: [RequestSource.DONORS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
+      },
+      include: this.donorEmergencyInclude(donor.id),
+      orderBy: [{ priority: 'desc' }, { requiredBy: 'asc' }, { createdAt: 'desc' }],
+      skip,
+      take,
+    });
+
+    return requests.map((request) => this.sanitizeDonorEmergencyRequest(request, donor));
+  }
+
+  async getDonorEmergencyRequestById(id: string, userId: string) {
+    const donor = await this.getDonorForEmergencyAccess(userId);
+
+    const request = await this.prisma.bloodRequest.findFirst({
+      where: {
+        id,
+        matchedDonors: { some: { id: donor.id } },
+        requestSource: { in: [RequestSource.DONORS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
+      },
+      include: this.donorEmergencyInclude(donor.id),
+    });
+
+    if (!request) {
+      throw new NotFoundException('This emergency request is no longer available to your account.');
+    }
+
+    return this.sanitizeDonorEmergencyRequest(request, donor);
+  }
+
   async listMine(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
@@ -761,7 +875,7 @@ export class BloodRequestsService {
         updates: { orderBy: { createdAt: 'desc' }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
         donorResponses: {
           include: {
-            donor: { select: { id: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
+            donor: { select: { id: true, donorNumber: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
           },
         },
         hospitalResponses: {
@@ -829,7 +943,7 @@ export class BloodRequestsService {
         },
         donorResponses: {
           include: {
-            donor: { select: { id: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
+            donor: { select: { id: true, donorNumber: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
           },
         },
         hospitalResponses: {
@@ -881,7 +995,7 @@ export class BloodRequestsService {
         donorResponses: {
           orderBy: { createdAt: 'desc' },
           include: {
-            donor: { select: { id: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
+            donor: { select: { id: true, donorNumber: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
           },
         },
         hospitalResponses: {
@@ -1510,7 +1624,7 @@ export class BloodRequestsService {
         },
         donorResponses: {
           orderBy: { createdAt: 'desc' },
-          include: { donor: { select: { id: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } } },
+          include: { donor: { select: { id: true, donorNumber: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } } },
         },
       },
     });
@@ -1839,7 +1953,16 @@ export class BloodRequestsService {
         throw new BadRequestException('Invalid response status for donor');
     }
 
-    const donor = await this.prisma.donor.findUnique({ where: { userId } });
+    const donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      include: {
+        clinicalRecords: {
+          select: { status: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
     if (!donor) {
       throw new NotFoundException('Donor profile not found');
     }
@@ -1852,9 +1975,38 @@ export class BloodRequestsService {
       throw new NotFoundException('Blood request not found');
     }
 
+    if (!this.isActiveRequestStatus(request.status)) {
+      throw new BadRequestException('This request is no longer active.');
+    }
+
+    if (request.requestSource === RequestSource.HOSPITALS_ONLY) {
+      throw new BadRequestException('This request is not accepting donor responses.');
+    }
+
     const donorMatched = request.matchedDonors.some((item) => item.id === donor.id);
     if (!donorMatched) {
       throw new BadRequestException('You are not matched to this request');
+    }
+
+    const latestClinicalStatus = donor.clinicalRecords[0]?.status ?? null;
+    const donorBlockingClinicalStatuses: DonorClinicalStatus[] = [
+        DonorClinicalStatus.REJECTED,
+        DonorClinicalStatus.TEMPORARILY_DEFERRED,
+        DonorClinicalStatus.PERMANENTLY_DEFERRED,
+    ];
+    const hasDeferredRecord = donor.clinicalRecords.some((record) => donorBlockingClinicalStatuses.includes(record.status));
+    if (
+      donor.bloodGroup === BloodGroup.UNKNOWN ||
+      !donor.eligibilityStatus ||
+      !donor.availabilityStatus ||
+      hasDeferredRecord ||
+      latestClinicalStatus !== DonorClinicalStatus.APPROVED
+    ) {
+      throw new BadRequestException('You are not currently eligible to respond to this emergency request.');
+    }
+
+    if (donor.nextEligibilityDate && donor.nextEligibilityDate > new Date()) {
+      throw new BadRequestException('You are still in donation cooldown and cannot respond to this request.');
     }
 
     const response = await this.prisma.donorResponse.upsert({

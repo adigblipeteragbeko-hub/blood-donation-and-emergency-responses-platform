@@ -1,24 +1,103 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { getHospitalNotifications, markNotificationDelivered, NotificationItem } from '../services/hospital-portal';
+import { AppIcon } from '../components/ui/AppIcon';
 
-type Notice = { id: number; type: string; message: string };
+function extractRequestId(item: NotificationItem) {
+  const match = item.body?.match(/requestId=([A-Za-z0-9_-]+)/);
+  return match?.[1] ?? null;
+}
+
+function actionHref(item: NotificationItem) {
+  const requestId = extractRequestId(item);
+  if (!requestId) return null;
+  return `/donor/emergency-requests?requestId=${requestId}`;
+}
 
 export default function NotificationsPage() {
-  const [notifications] = useState<Notice[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+
+  const unreadCount = useMemo(() => notifications.filter((item) => !item.delivered).length, [notifications]);
+
+  const loadNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await getHospitalNotifications({ take: 100 });
+      setNotifications(data);
+      setMessage('');
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to load notifications right now.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadNotifications();
+  }, []);
+
+  const markDelivered = async (notificationId: string) => {
+    try {
+      await markNotificationDelivered(notificationId, true);
+      await loadNotifications();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to update notification.');
+    }
+  };
 
   return (
-    <section className="card space-y-3">
-      <h1 className="text-2xl font-bold text-primary">Notifications</h1>
-      <p className="text-sm text-gray-600">Alerts for emergencies, reminders, and messages.</p>
-      {notifications.length === 0 ? (
-        <p className="rounded border border-gray-200 p-3 text-sm text-gray-600">No notifications yet.</p>
+    <section className="mx-auto max-w-4xl space-y-4 px-4 sm:px-6">
+      <div className="rounded-3xl border border-red-100 bg-white p-6 shadow-sm">
+        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-600">
+          <AppIcon name="notification" className="h-4 w-4" />
+          Donor alerts
+        </p>
+        <h1 className="mt-2 text-3xl font-black text-slate-950">Notifications</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Emergency alerts, appointment reminders, and system messages linked to your donor account.
+        </p>
+        <p className="mt-3 text-sm font-semibold text-slate-700">{unreadCount} unread notification(s)</p>
+      </div>
+
+      {message ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">{message}</p> : null}
+
+      {loading ? <p className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading notifications...</p> : null}
+
+      {!loading && notifications.length === 0 ? (
+        <p className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">No notifications yet.</p>
       ) : (
-        <ul className="space-y-2">
-          {notifications.map((item) => (
-            <li key={item.id} className="rounded border border-gray-200 p-3 text-sm">
-              <span className="mr-2 rounded bg-red-100 px-2 py-1 text-xs font-semibold text-primary">{item.type}</span>
-              {item.message}
-            </li>
-          ))}
+        <ul className="space-y-3">
+          {notifications.map((item) => {
+            const href = actionHref(item);
+            return (
+              <li key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-950">{item.title}</p>
+                    <p className="mt-1 text-sm text-slate-600">{item.body}</p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${item.delivered ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-700'}`}>
+                    {item.delivered ? 'Read' : 'Unread'}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {href ? (
+                    <Link className="btn-primary" to={href}>
+                      View Alert
+                    </Link>
+                  ) : null}
+                  {!item.delivered ? (
+                    <button className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700" onClick={() => void markDelivered(item.id)} type="button">
+                      Mark as read
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

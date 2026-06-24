@@ -1,32 +1,89 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   BloodRequestItem,
   DonorResponseStatus,
-  getAllBloodRequests,
-  getTypeaheadSuggestions,
+  getDonorEmergencyRequestById,
+  getDonorEmergencyRequests,
   respondToBloodRequest,
   updateDonorAvailability,
 } from '../services/hospital-portal';
 import { FilterBox, Pager } from '../components/TableControls';
-import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
 import { AppIcon } from '../components/ui/AppIcon';
 
 const bloodGroupLabel: Record<string, string> = {
-  O_POS: 'O_POS (O+)',
-  O_NEG: 'O_NEG (O-)',
-  A_POS: 'A_POS (A+)',
-  A_NEG: 'A_NEG (A-)',
-  B_POS: 'B_POS (B+)',
-  B_NEG: 'B_NEG (B-)',
-  AB_POS: 'AB_POS (AB+)',
-  AB_NEG: 'AB_NEG (AB-)',
+  O_POS: 'O+',
+  O_NEG: 'O-',
+  A_POS: 'A+',
+  A_NEG: 'A-',
+  B_POS: 'B+',
+  B_NEG: 'B-',
+  AB_POS: 'AB+',
+  AB_NEG: 'AB-',
 };
+
+const closedStatuses = ['FULFILLED', 'COMPLETED', 'CANCELLED', 'CANCELED'];
+
+function formatDate(value?: string | null) {
+  return value
+    ? new Date(value).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'Date not recorded';
+}
+
+function priorityBadge(priority?: string) {
+  const value = String(priority ?? '').toUpperCase();
+  if (value === 'HIGH' || value === 'CRITICAL') return 'bg-red-50 text-red-700 border-red-100';
+  if (value === 'MEDIUM') return 'bg-orange-50 text-orange-700 border-orange-100';
+  return 'bg-blue-50 text-blue-700 border-blue-100';
+}
+
+function statusBadge(status?: string) {
+  const value = String(status ?? '').toUpperCase();
+  if (value === 'FULFILLED' || value === 'COMPLETED') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (value === 'MATCHING' || value === 'MATCHED') return 'bg-amber-50 text-amber-700 border-amber-100';
+  if (value === 'CANCELLED' || value === 'DECLINED' || value === 'EXPIRED') return 'bg-slate-100 text-slate-700 border-slate-200';
+  return 'bg-blue-50 text-blue-700 border-blue-100';
+}
+
+function responseLabel(status?: DonorResponseStatus) {
+  if (status === 'ACCEPTED') return 'I am available';
+  if (status === 'DECLINED') return 'I am unavailable';
+  if (status === 'DONATED') return 'Donation completed';
+  return 'Awaiting your response';
+}
+
+function hasSubmittedResponse(request?: BloodRequestItem | null) {
+  return request?.donorResponses?.some((response) => response.responseStatus !== 'PENDING') ?? false;
+}
+
+function canRespond(request: BloodRequestItem) {
+  const context = request.donorMatchContext;
+  const active = !closedStatuses.includes(String(request.status).toUpperCase());
+  return Boolean(active && !hasSubmittedResponse(request) && context?.eligible && context.available && !context.inCooldown);
+}
+
+function unavailableReason(request: BloodRequestItem) {
+  if (hasSubmittedResponse(request)) return null;
+  if (closedStatuses.includes(String(request.status).toUpperCase())) return 'This request is no longer active.';
+  if (!request.donorMatchContext?.eligible) return 'You cannot respond because you are no longer eligible.';
+  if (!request.donorMatchContext?.available) return 'You cannot respond because your donor profile is not currently marked available.';
+  if (request.donorMatchContext?.inCooldown) return 'You cannot respond because your donation cooldown is still active.';
+  if (!request.donorMatchContext?.compatible) return 'You are no longer matched to this request.';
+  return 'This request is no longer available for a new response from your account.';
+}
 
 export default function EmergencyRequestsPage() {
   const [searchParams] = useSearchParams();
   const focusRequestId = searchParams.get('requestId') ?? '';
+  const detailsRef = useRef<HTMLDivElement | null>(null);
   const [requests, setRequests] = useState<BloodRequestItem[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<BloodRequestItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -35,36 +92,41 @@ export default function EmergencyRequestsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const pageSize = 25;
-  const [typeaheadQuery, setTypeaheadQuery] = useState('');
 
-  const emergencyRequests = useMemo(
+  const filteredRequests = useMemo(
     () =>
       requests.filter(
         (item) =>
-          (item.type === 'EMERGENCY' || item.priority === 'CRITICAL') &&
-          (!searchTerm ||
-            item.bloodGroup.toLowerCase().includes(searchTerm) ||
-            (item.hospital?.hospitalName ?? '').toLowerCase().includes(searchTerm) ||
-            item.trackingStatus.toLowerCase().includes(searchTerm) ||
-            item.status.toLowerCase().includes(searchTerm) ||
-            item.priority.toLowerCase().includes(searchTerm) ||
-            item.requestSource.toLowerCase().includes(searchTerm) ||
-            item.location.toLowerCase().includes(searchTerm) ||
-            (item.emergencyLocation ?? '').toLowerCase().includes(searchTerm) ||
-            (item.city ?? '').toLowerCase().includes(searchTerm) ||
-            (item.region ?? '').toLowerCase().includes(searchTerm) ||
-            (item.ward ?? '').toLowerCase().includes(searchTerm)),
+          !searchTerm ||
+          item.requestReference.toLowerCase().includes(searchTerm) ||
+          item.bloodGroup.toLowerCase().includes(searchTerm) ||
+          (item.hospital?.hospitalName ?? '').toLowerCase().includes(searchTerm) ||
+          item.trackingStatus.toLowerCase().includes(searchTerm) ||
+          item.status.toLowerCase().includes(searchTerm) ||
+          item.priority.toLowerCase().includes(searchTerm) ||
+          item.requestSource.toLowerCase().includes(searchTerm) ||
+          item.location.toLowerCase().includes(searchTerm) ||
+          (item.emergencyLocation ?? '').toLowerCase().includes(searchTerm) ||
+          (item.city ?? '').toLowerCase().includes(searchTerm) ||
+          (item.region ?? '').toLowerCase().includes(searchTerm) ||
+          (item.ward ?? '').toLowerCase().includes(searchTerm),
       ),
     [requests, searchTerm],
   );
 
   const loadRequests = async (nextPage = page) => {
     try {
-      const data = await getAllBloodRequests({ skip: nextPage * pageSize, take: pageSize });
+      setLoading(true);
+      setMessage('');
+      const data = await getDonorEmergencyRequests({ skip: nextPage * pageSize, take: pageSize });
       setRequests(data);
       setHasMore(data.length === pageSize);
-    } catch {
-      setMessage('Unable to load emergency requests right now.');
+      if (!focusRequestId && !selectedRequest && data.length > 0) {
+        setSelectedRequest(data[0]);
+      }
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to load emergency requests right now.');
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -81,209 +143,235 @@ export default function EmergencyRequestsPage() {
 
   useEffect(() => {
     if (!focusRequestId) return;
-    const timer = window.setTimeout(() => {
-      document.getElementById(`request-${focusRequestId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 120);
-    return () => window.clearTimeout(timer);
-  }, [focusRequestId, emergencyRequests.length]);
 
-  const respond = async (id: string, responseStatus: DonorResponseStatus) => {
+    const loadFocusedRequest = async () => {
+      try {
+        const request = await getDonorEmergencyRequestById(focusRequestId);
+        setSelectedRequest(request);
+        setRequests((current) => (current.some((item) => item.id === request.id) ? current : [request, ...current]));
+        window.setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+      } catch {
+        setMessage('This emergency request is no longer available to your account.');
+      }
+    };
+
+    void loadFocusedRequest();
+  }, [focusRequestId]);
+
+  const respond = async (request: BloodRequestItem, responseStatus: DonorResponseStatus) => {
+    if (hasSubmittedResponse(request)) {
+      setMessage('Your response has already been submitted.');
+      return;
+    }
+    if (!canRespond(request)) {
+      setMessage(unavailableReason(request) ?? 'This request is no longer available for a new response from your account.');
+      return;
+    }
+
     try {
-      await respondToBloodRequest(id, { responseStatus, notes: notes[id] || undefined });
-      setMessage(`Response recorded as ${responseStatus}.`);
+      await respondToBloodRequest(request.id, { responseStatus, notes: notes[request.id] || undefined });
+      setMessage('Your response has been submitted. Hospital staff can now see your response.');
       await loadRequests();
+      const refreshed = await getDonorEmergencyRequestById(request.id);
+      setSelectedRequest(refreshed);
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit response.');
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit your response. Please try again.');
     }
   };
 
-  const markUnavailable = async (id: string) => {
+  const markUnavailable = async (request: BloodRequestItem) => {
     try {
+      await respond(request, 'DECLINED');
       await updateDonorAvailability(false);
-      await respondToBloodRequest(id, {
-        responseStatus: 'DECLINED',
-        notes: notes[id] ? `${notes[id]} | Marked unavailable by donor.` : 'Marked unavailable by donor.',
-      });
-      setMessage('Availability set to unavailable and response recorded as declined.');
-      await loadRequests();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to mark unavailable.');
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to update your availability.');
     }
   };
+
+  const selectedResponse = selectedRequest?.donorResponses?.[0] ?? null;
+  const selectedAlreadyResponded = hasSubmittedResponse(selectedRequest);
+  const selectedCanRespond = selectedRequest ? canRespond(selectedRequest) : false;
+  const selectedContext = selectedRequest?.donorMatchContext;
+  const selectedUnavailableReason = selectedRequest ? unavailableReason(selectedRequest) : null;
 
   return (
-    <section className="mx-auto max-w-5xl space-y-4 px-4 pt-1 sm:px-6">
-      <h1 className="flex items-center gap-2 text-2xl font-bold text-primary">
-        <AppIcon name="alert" className="h-5 w-5 text-red-600" />
-        Emergency Requests
-      </h1>
-      <p className="text-sm text-gray-600">Respond quickly: accept, decline, or mark unavailable.</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <FilterBox
-          label="Filter emergency requests (debounced)"
-          placeholder="Filter by hospital, blood group, status, urgency, or location..."
-          value={searchInput}
-          onChange={setSearchInput}
-        />
-        <AsyncTypeahead
-          label="Search emergency records"
-          value={typeaheadQuery}
-          onChange={setTypeaheadQuery}
-          placeholder="Type hospital, blood group, location..."
-          loadSuggestions={async (query): Promise<TypeaheadSuggestion[]> => {
-            const payload = await getTypeaheadSuggestions(query);
-            return [
-              ...payload.hospitals.map((item) => ({
-                id: `hospital-${item.id}`,
-                label: item.hospitalName,
-                description: item.location,
-                category: 'Hospital',
-                value: item.hospitalName,
-              })),
-              ...payload.emergencyRequests.map((item) => ({
-                id: `request-${item.id}`,
-                label: `${item.bloodGroup} - ${item.unitsNeeded} units`,
-                description: item.location,
-                category: 'Emergency',
-                value: item.bloodGroup,
-              })),
-              ...payload.locations.map((location, index) => ({
-                id: `location-${index}`,
-                label: location,
-                category: 'Location',
-                value: location,
-              })),
-            ];
-          }}
-          onSelect={(suggestion) => setSearchInput(suggestion.value ?? suggestion.label)}
-        />
+    <section className="mx-auto max-w-7xl space-y-6 px-4 pt-1 sm:px-6">
+      <div className="rounded-3xl border border-red-100 bg-white p-6 shadow-sm">
+        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-600">
+          <AppIcon name="alert" className="h-4 w-4" />
+          Emergency donor response
+        </p>
+        <h1 className="mt-2 text-3xl font-black text-slate-950">Matched Emergency Requests</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
+          These requests are matched to your donor profile. Respond only if you can safely attend.
+        </p>
       </div>
+
+      <FilterBox
+        label="Filter matched requests"
+        placeholder="Filter by hospital, reference, blood group, status, urgency, or location..."
+        value={searchInput}
+        onChange={setSearchInput}
+      />
+
+      {message ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm font-semibold text-red-700">{message}</p> : null}
+
       {loading ? (
         <div className="card">
-          <p className="text-sm text-gray-600">Loading requests...</p>
+          <p className="text-sm text-gray-600">Loading matched emergency requests...</p>
         </div>
       ) : null}
-      {!loading && emergencyRequests.length === 0 ? (
+
+      {!loading && filteredRequests.length === 0 ? (
         <div className="card">
-          <p className="text-sm text-gray-600">No emergency requests yet.</p>
+          <p className="text-sm font-semibold text-slate-800">No active emergency requests matched to you right now.</p>
+          {focusRequestId ? (
+            <p className="mt-1 text-sm text-slate-600">If you opened this from an alert, the request may have been fulfilled, cancelled, or assigned to another donor group.</p>
+          ) : null}
         </div>
       ) : (
-        emergencyRequests.map((card) => (
-          <article
-            id={`request-${card.id}`}
-            key={card.id}
-            className={`card border-red-300 ${focusRequestId === card.id ? 'ring-2 ring-red-400' : ''}`}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-semibold text-red-700">{card.priority} Priority Alert</p>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${card.priority === 'CRITICAL' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}
-              >
-                {card.priority}
-              </span>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <p>
-                <span className="font-semibold">Request Reference:</span> {card.requestReference}
-              </p>
-              <p>
-                <span className="font-semibold">Blood Group:</span> {bloodGroupLabel[card.bloodGroup] ?? card.bloodGroup}
-              </p>
-              <p>
-                <span className="font-semibold">Units Required:</span> {card.unitsNeeded}
-              </p>
-              <p>
-                <span className="font-semibold">Hospital:</span> {card.hospital?.hospitalName ?? 'Hospital'}
-              </p>
-              <p>
-                <span className="font-semibold">Center:</span> {card.hospitalCenterName ?? card.hospital?.hospitalName ?? 'N/A'}
-              </p>
-              <p>
-                <span className="font-semibold">Status:</span> {card.status} / {card.trackingStatus}
-              </p>
-              <p>
-                <span className="font-semibold">Request Source:</span> {card.requestSource}
-              </p>
-              <p>
-                <span className="font-semibold">Ward:</span> {card.ward ?? 'N/A'}
-              </p>
-              <p className="text-sm text-gray-600">
-                <span className="font-semibold text-gray-800">Created:</span> {new Date(card.createdAt).toLocaleString()}
-              </p>
-              <p className="text-sm text-gray-600">
-                <span className="font-semibold text-gray-800">Need By:</span> {new Date(card.requiredBy).toLocaleString()}
-              </p>
-              <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">Location:</span> {card.emergencyLocation ?? card.location}
-              </p>
-              <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">City/Region:</span> {[card.city, card.region].filter(Boolean).join(', ') || 'N/A'}
-              </p>
-              <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">Location Notes:</span> {card.locationNotes ?? 'N/A'}
-              </p>
-              <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">Comments / Reason:</span> {card.patientName ?? card.hospitalPatientReference ?? 'Not provided'}
-              </p>
-              <p className="text-sm text-gray-600 md:col-span-2">
-                <span className="font-semibold text-gray-800">Emergency Notes:</span> {card.notes ?? 'No emergency notes provided.'}
-              </p>
-            </div>
-            <p className="mt-2 text-sm text-gray-600">Your response: {card.donorResponses?.[0]?.responseStatus ?? 'PENDING'}</p>
-            {card.donorResponses?.length ? (
-              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
-                <p className="font-semibold text-gray-800">Donor responses</p>
-                <div className="mt-2 space-y-1">
-                  {card.donorResponses.slice(0, 3).map((response) => (
-                    <p key={response.id}>
-                      {response.donor?.fullName ?? 'Donor'}: {response.responseStatus}
-                    </p>
-                  ))}
+        <div className="grid gap-5 xl:grid-cols-[minmax(420px,0.9fr)_minmax(540px,1.1fr)]">
+          <div className="space-y-4">
+            {filteredRequests.map((card) => {
+              const response = card.donorResponses?.[0] ?? null;
+              const distance = card.donorMatchContext?.distanceKm;
+              return (
+                <button
+                  id={`request-${card.id}`}
+                  key={card.id}
+                  className={`w-full cursor-pointer rounded-3xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    selectedRequest?.id === card.id ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-200'
+                  }`}
+                  onClick={() => setSelectedRequest(card)}
+                  type="button"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-red-600">{card.requestReference}</p>
+                      <h2 className="mt-1 text-lg font-black text-slate-950">{card.hospital?.hospitalName ?? 'Hospital'}</h2>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {bloodGroupLabel[card.bloodGroup] ?? card.bloodGroup} blood | {card.unitsNeeded} unit(s) | {card.ward ?? 'Ward not specified'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${priorityBadge(card.priority)}`}>{card.priority}</span>
+                      <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusBadge(card.status)}`}>{card.status}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 sm:grid-cols-2">
+                    <p><span className="font-semibold text-slate-900">Required by:</span> {formatDate(card.requiredBy)}</p>
+                    <p><span className="font-semibold text-slate-900">Distance:</span> {typeof distance === 'number' ? `${distance.toFixed(1)} km away` : 'Not available'}</p>
+                    <p><span className="font-semibold text-slate-900">Status:</span> {card.trackingStatus}</p>
+                    <p><span className="font-semibold text-slate-900">Your response:</span> {responseLabel(response?.responseStatus)}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedRequest ? (
+            <div ref={detailsRef} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-red-600">{selectedRequest.requestReference}</p>
+                  <h2 className="mt-1 text-2xl font-black text-slate-950">Emergency Response Details</h2>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${priorityBadge(selectedRequest.priority)}`}>{selectedRequest.priority}</span>
+                  <span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusBadge(selectedRequest.status)}`}>{selectedRequest.status}</span>
                 </div>
               </div>
-            ) : null}
-            <textarea
-              className="legacy-input mt-3 min-h-20"
-              placeholder="Optional note for hospital"
-              value={notes[card.id] ?? ''}
-              onChange={(e) => setNotes((prev) => ({ ...prev, [card.id]: e.target.value }))}
-            />
-            <div className="mt-3 flex gap-2">
-              <button className="btn-primary" onClick={() => void respond(card.id, 'ACCEPTED')} type="button">
-                Accept
-              </button>
-              <button
-                className="rounded-lg border border-red-300 px-4 py-2 font-semibold text-red-700"
-                onClick={() => void respond(card.id, 'DECLINED')}
-                type="button"
-              >
-                Decline
-              </button>
-              <button
-                className="rounded-lg border border-emerald-300 px-4 py-2 font-semibold text-emerald-700"
-                onClick={() => void respond(card.id, 'DONATED')}
-                type="button"
-              >
-                Mark Donated
-              </button>
-              <button
-                className="rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700"
-                onClick={() => void markUnavailable(card.id)}
-                type="button"
-              >
-                Mark Unavailable
-              </button>
+
+              <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Request Summary</p>
+                <div className="mt-3 grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Hospital</span>{selectedRequest.hospital?.hospitalName ?? 'Hospital'}</p>
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Blood Group</span>{bloodGroupLabel[selectedRequest.bloodGroup] ?? selectedRequest.bloodGroup}</p>
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Units Requested</span>{selectedRequest.unitsNeeded}</p>
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Status</span>{selectedRequest.status} / {selectedRequest.trackingStatus}</p>
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Required By</span>{formatDate(selectedRequest.requiredBy)}</p>
+                  <p><span className="block text-xs font-bold uppercase text-slate-500">Ward / Unit</span>{selectedRequest.ward ?? 'Not specified'}</p>
+                  <p className="sm:col-span-2"><span className="block text-xs font-bold uppercase text-slate-500">Location</span>{selectedRequest.emergencyLocation ?? selectedRequest.location}</p>
+                  <p className="sm:col-span-2"><span className="block text-xs font-bold uppercase text-slate-500">Emergency Notes</span>{selectedRequest.notes ?? selectedRequest.locationNotes ?? 'No additional notes provided.'}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Compatibility</p>
+                <p className="mt-2">
+                  Your blood group {selectedContext?.bloodGroup ? bloodGroupLabel[selectedContext.bloodGroup] ?? selectedContext.bloodGroup : 'on file'} is
+                  {selectedContext?.compatible ? ' compatible with this request.' : ' not currently compatible with this request.'}
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p><span className="font-bold">Eligible:</span> {selectedContext?.eligible ? 'Yes' : 'No'}</p>
+                  <p><span className="font-bold">Available:</span> {selectedContext?.available ? 'Yes' : 'No'}</p>
+                  <p><span className="font-bold">Cooldown:</span> {selectedContext?.inCooldown ? 'Active' : 'No active cooldown'}</p>
+                  <p><span className="font-bold">Location sharing:</span> {selectedContext?.locationSharingEnabled ? 'Enabled' : 'Disabled'}</p>
+                </div>
+              </div>
+
+              {selectedAlreadyResponded && selectedResponse ? (
+                <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Your Response</p>
+                  <p className="mt-2 font-semibold">Your response has been submitted: {responseLabel(selectedResponse.responseStatus)}.</p>
+                  <p className="mt-1">Hospital staff can now see your response.</p>
+                  {selectedResponse.notes ? <p className="mt-2 text-blue-700">Note: {selectedResponse.notes}</p> : null}
+                </div>
+              ) : null}
+
+              {!selectedCanRespond && selectedUnavailableReason ? (
+                <p className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                  {selectedUnavailableReason}
+                </p>
+              ) : null}
+
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Notes</p>
+                <textarea
+                  className="legacy-input mt-3 min-h-24"
+                  disabled={!selectedCanRespond}
+                  placeholder={selectedCanRespond ? 'Optional note for the hospital' : 'Response notes are locked after submission'}
+                  value={notes[selectedRequest.id] ?? ''}
+                  onChange={(event) => setNotes((prev) => ({ ...prev, [selectedRequest.id]: event.target.value }))}
+                />
+              </div>
+
+              {selectedCanRespond ? (
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button className="btn-primary min-w-40" onClick={() => void respond(selectedRequest, 'ACCEPTED')} type="button">
+                    I am available
+                  </button>
+                  <button
+                    className="min-w-40 rounded-lg border border-red-300 px-4 py-2 font-semibold text-red-700"
+                    onClick={() => void respond(selectedRequest, 'DECLINED')}
+                    type="button"
+                  >
+                    I am unavailable
+                  </button>
+                  <button
+                    className="min-w-40 rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700"
+                    onClick={() => void markUnavailable(selectedRequest)}
+                    type="button"
+                  >
+                    Mark unavailable
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+                  {selectedAlreadyResponded ? 'Response submitted' : 'Response actions unavailable'}
+                </div>
+              )}
             </div>
-          </article>
-        ))
+          ) : null}
+        </div>
       )}
+
       <Pager
         page={page}
         hasMore={hasMore}
         onPrev={() => setPage((value) => Math.max(0, value - 1))}
         onNext={() => setPage((value) => value + 1)}
       />
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
     </section>
   );
 }
