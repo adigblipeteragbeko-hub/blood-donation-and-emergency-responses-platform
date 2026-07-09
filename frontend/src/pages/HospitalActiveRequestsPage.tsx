@@ -25,6 +25,55 @@ const formatSource = (source: string) =>
 
 const isHospitalSource = (source: string) => source === 'HOSPITALS_ONLY' || source === 'DONORS_AND_HOSPITALS';
 
+function getFulfillmentProgress(request: BloodRequestItem) {
+  const transferMap = new Map<string, NonNullable<HospitalRequestResponseItem['transfer']>>();
+  request.hospitalTransfers?.forEach((transfer) => {
+    transferMap.set(transfer.id, transfer);
+  });
+  request.hospitalResponses?.forEach((response) => {
+    if (response.transfer) {
+      transferMap.set(response.transfer.id, response.transfer);
+    }
+  });
+
+  const receivedUnits = Array.from(transferMap.values()).reduce((sum, transfer) => sum + Number(transfer.receivedUnits ?? 0), 0);
+  const requestedUnits = Number(request.unitsNeeded ?? 0);
+  const remainingUnits = Math.max(requestedUnits - receivedUnits, 0);
+
+  return {
+    requestedUnits,
+    receivedUnits,
+    remainingUnits,
+    isFulfilled: requestedUnits > 0 && receivedUnits >= requestedUnits,
+    isPartial: receivedUnits > 0 && receivedUnits < requestedUnits,
+  };
+}
+
+function TransferFulfillmentSummary({ request }: { request: BloodRequestItem }) {
+  const progress = getFulfillmentProgress(request);
+  return (
+    <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/60 p-3 text-sm">
+      <p className="font-bold text-slate-900">
+        {progress.isFulfilled ? 'Request fulfilled' : progress.isPartial ? 'Partial fulfillment' : 'Awaiting fulfillment'}
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <p>
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">Requested</span>
+          {progress.requestedUnits} unit(s)
+        </p>
+        <p>
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">Received</span>
+          {progress.receivedUnits} unit(s)
+        </p>
+        <p>
+          <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">Remaining</span>
+          {progress.remainingUnits} unit(s)
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ children, tone = 'slate' }: { children: string; tone?: 'red' | 'amber' | 'green' | 'slate' }) {
   const classes = {
     red: 'border-red-200 bg-red-50 text-red-700',
@@ -339,6 +388,7 @@ export default function HospitalActiveRequestsPage() {
                     </button>
                   </div>
                 </div>
+                <TransferFulfillmentSummary request={selectedRequest} />
                 <div className="mt-4 space-y-3">
                   {selectedRequest.hospitalResponses?.length ? (
                     selectedRequest.hospitalResponses.map((response) => (
@@ -360,7 +410,7 @@ export default function HospitalActiveRequestsPage() {
                                 : response.transfer.status === 'DISPATCHED'
                                   ? 'Dispatched - Awaiting Receipt Confirmation'
                                   : response.transfer.status === 'RECEIVED'
-                                    ? 'Transfer Completed'
+                                    ? `${getFulfillmentProgress(selectedRequest).receivedUnits} of ${getFulfillmentProgress(selectedRequest).requestedUnits} units fulfilled`
                                     : response.transfer.status}
                             </p>
                             <p>Accepted units: {response.transfer.units}</p>
@@ -460,6 +510,7 @@ export default function HospitalActiveRequestsPage() {
                     <p>Status: {selectedRequest.currentHospitalResponse.status}</p>
                     <p>Units: {selectedRequest.currentHospitalResponse.unitsOffered ?? 'N/A'}</p>
                     {selectedRequest.currentHospitalResponse.note ? <p>Note: {selectedRequest.currentHospitalResponse.note}</p> : null}
+                    <TransferFulfillmentSummary request={selectedRequest} />
                     {selectedRequest.currentHospitalResponse.transfer ? (
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
                         <p className="font-bold">
@@ -469,7 +520,7 @@ export default function HospitalActiveRequestsPage() {
                             : selectedRequest.currentHospitalResponse.transfer.status === 'DISPATCHED'
                               ? 'Dispatched - Awaiting Receiving Confirmation'
                               : selectedRequest.currentHospitalResponse.transfer.status === 'RECEIVED'
-                                ? 'Transfer Completed'
+                                ? `${getFulfillmentProgress(selectedRequest).receivedUnits} of ${getFulfillmentProgress(selectedRequest).requestedUnits} units fulfilled`
                                 : selectedRequest.currentHospitalResponse.transfer.status}
                         </p>
                         <p>Accepted units: {selectedRequest.currentHospitalResponse.transfer.units}</p>

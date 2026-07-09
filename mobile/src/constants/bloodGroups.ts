@@ -1,4 +1,5 @@
 export const BLOOD_GROUPS = [
+  { value: 'UNKNOWN', label: 'Unknown / Not Tested Yet' },
   { value: 'O_POS', label: 'O+' },
   { value: 'O_NEG', label: 'O-' },
   { value: 'A_POS', label: 'A+' },
@@ -11,3 +12,7 @@ export const BLOOD_GROUPS = [
 
 export type BloodGroup = (typeof BLOOD_GROUPS)[number]['value'];
 
+export function formatBloodGroup(value?: string | null) {
+  if (!value) return 'Not recorded';
+  return BLOOD_GROUPS.find((group) => group.value === value)?.label ?? value;
+}

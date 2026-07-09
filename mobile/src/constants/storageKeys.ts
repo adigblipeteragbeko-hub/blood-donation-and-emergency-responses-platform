@@ -1,5 +1,5 @@
 export const authStorageKeys = {
-  ACCESS_KEY: 'mobile_access_token',
-  REFRESH_KEY: 'mobile_refresh_token',
-  USER_KEY: 'mobile_user',
-} as const;
+  ACCESS_KEY: 'blood-platform-mobile.accessToken',
+  REFRESH_KEY: 'blood-platform-mobile.refreshToken',
+  USER_KEY: 'blood-platform-mobile.user',
+};

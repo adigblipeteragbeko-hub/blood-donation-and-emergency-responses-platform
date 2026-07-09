@@ -1,304 +1,82 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { colors } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { DonationHistoryScreen } from '../screens/DonationHistoryScreen';
-import { DonorLoginScreen } from '../screens/DonorLoginScreen';
-import { DonorRegisterScreen } from '../screens/DonorRegisterScreen';
-import { EmergencyAlertsScreen } from '../screens/EmergencyAlertsScreen';
+import { AvailabilityScreen } from '../screens/AvailabilityScreen';
+import { CentersScreen } from '../screens/CentersScreen';
+import { DonorCardScreen } from '../screens/DonorCardScreen';
+import { DonorDashboardScreen } from '../screens/DonorDashboardScreen';
+import { EligibilityScreen } from '../screens/EligibilityScreen';
+import { EmergencyRequestsScreen } from '../screens/EmergencyRequestsScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
+import { LocationSettingsScreen } from '../screens/LocationSettingsScreen';
+import { LoginScreen } from '../screens/LoginScreen';
+import { MoreScreen } from '../screens/MoreScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
+import { RewardsScreen } from '../screens/RewardsScreen';
+import { HealthFormScreen, SettingsScreen, SupportScreen } from '../screens/UtilityScreens';
+import { AuthStackParamList, DonorTabsParamList, MoreStackParamList, RootStackParamList } from '../types/navigation';
 
-type PublicRoute = 'DonorLogin' | 'DonorRegister' | 'VerifyEmail';
-type PrivateRoute = 'Dashboard' | 'EmergencyAlerts' | 'Appointments' | 'DonationHistory' | 'Profile';
-const SIDEBAR_WIDTH = 250;
-const MOBILE_TOP_INSET = Platform.OS === 'ios' ? 52 : 14;
-const MOBILE_BAR_HEIGHT = MOBILE_TOP_INSET + 42;
-const NAV_ITEMS: Array<{ key: PrivateRoute; label: string }> = [
-  { key: 'Dashboard', label: 'Dashboard' },
-  { key: 'EmergencyAlerts', label: 'Emergency Alerts' },
-  { key: 'Appointments', label: 'Appointments' },
-  { key: 'DonationHistory', label: 'Donation History' },
-  { key: 'Profile', label: 'Profile' },
-];
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const DonorTabs = createBottomTabNavigator<DonorTabsParamList>();
+const MoreStack = createNativeStackNavigator<MoreStackParamList>();
+
+function AuthNavigator() {
+  return <AuthStack.Navigator screenOptions={{ headerShown: false }}><AuthStack.Screen name="Login" component={LoginScreen} /></AuthStack.Navigator>;
+}
+
+function MoreNavigator() {
+  return (
+    <MoreStack.Navigator screenOptions={{ headerTitleStyle: { color: colors.primaryDark, fontWeight: '900' }, headerTintColor: colors.primary }}>
+      <MoreStack.Screen name="MoreHome" component={MoreScreen} options={{ title: 'More' }} />
+      <MoreStack.Screen name="Profile" component={ProfileScreen} />
+      <MoreStack.Screen name="Eligibility" component={EligibilityScreen} />
+      <MoreStack.Screen name="History" component={HistoryScreen} />
+      <MoreStack.Screen name="Appointments" component={AppointmentsScreen} />
+      <MoreStack.Screen name="Availability" component={AvailabilityScreen} />
+      <MoreStack.Screen name="Location" component={LocationSettingsScreen} options={{ title: 'Live Location' }} />
+      <MoreStack.Screen name="Centers" component={CentersScreen} />
+      <MoreStack.Screen name="Rewards" component={RewardsScreen} />
+      <MoreStack.Screen name="HealthForm" component={HealthFormScreen} options={{ title: 'Health Form' }} />
+      <MoreStack.Screen name="Settings" component={SettingsScreen} />
+      <MoreStack.Screen name="Support" component={SupportScreen} />
+    </MoreStack.Navigator>
+  );
+}
+
+function tabIcon(routeName: keyof DonorTabsParamList) {
+  switch (routeName) {
+    case 'Dashboard': return 'grid-outline';
+    case 'Emergency': return 'warning-outline';
+    case 'Notifications': return 'notifications-outline';
+    case 'DonorCard': return 'card-outline';
+    case 'More': return 'menu-outline';
+    default: return 'ellipse-outline';
+  }
+}
+
+function DonorNavigator() {
+  return (
+    <DonorTabs.Navigator screenOptions={({ route }) => ({ headerTitleStyle: { color: colors.primaryDark, fontWeight: '900' }, headerTintColor: colors.primary, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.muted, tabBarStyle: styles.tabBar, tabBarLabelStyle: styles.tabLabel, tabBarIcon: ({ color, size }) => <Ionicons name={tabIcon(route.name)} color={color} size={size} /> })}>
+      <DonorTabs.Screen name="Dashboard" component={DonorDashboardScreen} options={{ title: 'Dashboard' }} />
+      <DonorTabs.Screen name="Emergency" component={EmergencyRequestsScreen} options={{ title: 'Emergency' }} />
+      <DonorTabs.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+      <DonorTabs.Screen name="DonorCard" component={DonorCardScreen} options={{ title: 'Donor Card', tabBarLabel: 'Card' }} />
+      <DonorTabs.Screen name="More" component={MoreNavigator} options={{ headerShown: false, title: 'More' }} />
+    </DonorTabs.Navigator>
+  );
+}
 
 export function AppNavigator() {
   const { user, loading } = useAuth();
-  const { width } = useWindowDimensions();
-  const [publicRoute, setPublicRoute] = useState<PublicRoute>('DonorLogin');
-  const [privateRoute, setPrivateRoute] = useState<PrivateRoute>('Dashboard');
-  const [verifyEmail, setVerifyEmail] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const isDesktop = width >= 900;
-  const mobileSidebarX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-
-  useEffect(() => {
-    setPublicRoute('DonorLogin');
-    setPrivateRoute('Dashboard');
-    setMenuOpen(false);
-  }, [user?.id]);
-
-  const openMenu = useCallback(() => {
-    setMenuOpen(true);
-    Animated.timing(mobileSidebarX, {
-      toValue: 0,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [mobileSidebarX]);
-
-  const closeMenu = useCallback(() => {
-    Animated.timing(mobileSidebarX, {
-      toValue: -SIDEBAR_WIDTH,
-      duration: 170,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        setMenuOpen(false);
-      }
-    });
-  }, [mobileSidebarX]);
-
-  useEffect(() => {
-    if (isDesktop) {
-      setMenuOpen(false);
-      mobileSidebarX.setValue(-SIDEBAR_WIDTH);
-    }
-  }, [isDesktop, mobileSidebarX]);
-
-  const edgePan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.x0 <= 24 && gestureState.dx > 12,
-        onPanResponderRelease: (_evt, gestureState) => {
-          if (gestureState.dx > 48 && !isDesktop && !menuOpen) {
-            openMenu();
-          }
-        },
-      }),
-    [isDesktop, menuOpen, openMenu],
-  );
-
-  const closePan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_evt, gestureState) => gestureState.dx < -12,
-        onPanResponderRelease: (_evt, gestureState) => {
-          if (gestureState.dx < -48) {
-            closeMenu();
-          }
-        },
-      }),
-    [closeMenu],
-  );
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#c8102e" />
-      </View>
-    );
-  }
-
-  if (!user) {
-    if (publicRoute === 'DonorRegister') {
-      return (
-        <DonorRegisterScreen
-          onBackToLogin={() => setPublicRoute('DonorLogin')}
-          onRegistered={(email) => {
-            setVerifyEmail(email);
-            setPublicRoute('VerifyEmail');
-          }}
-        />
-      );
-    }
-
-    if (publicRoute === 'VerifyEmail') {
-      return (
-        <VerifyEmailScreen
-          email={verifyEmail}
-          onBackToLogin={() => setPublicRoute('DonorLogin')}
-        />
-      );
-    }
-
-    return <DonorLoginScreen onGoRegister={() => setPublicRoute('DonorRegister')} />;
-  }
-
-  let authedScreen: ReactElement;
-  switch (privateRoute) {
-    case 'EmergencyAlerts':
-      authedScreen = <EmergencyAlertsScreen />;
-      break;
-    case 'Appointments':
-      authedScreen = <AppointmentsScreen />;
-      break;
-    case 'DonationHistory':
-      authedScreen = <DonationHistoryScreen />;
-      break;
-    case 'Profile':
-      authedScreen = <ProfileScreen />;
-      break;
-    case 'Dashboard':
-    default:
-      authedScreen = <DashboardScreen onNavigate={setPrivateRoute} />;
-      break;
-  }
-
-  return (
-    <View style={styles.root}>
-      {!isDesktop && !menuOpen ? <View style={styles.edgeSwipeArea} {...edgePan.panHandlers} /> : null}
-      {!isDesktop ? (
-        <View style={[styles.mobileBar, { paddingTop: MOBILE_TOP_INSET, minHeight: MOBILE_BAR_HEIGHT }]}>
-          <Pressable style={styles.menuButton} onPress={openMenu}>
-            <Text style={styles.menuButtonText}>Menu</Text>
-          </Pressable>
-          <Text style={styles.mobileTitle}>Donor App</Text>
-        </View>
-      ) : null}
-
-        <View style={styles.layout}>
-        {isDesktop ? (
-          <Sidebar items={NAV_ITEMS} active={privateRoute} onSelect={(route) => setPrivateRoute(route)} />
-        ) : null}
-        <View style={styles.content}>{authedScreen}</View>
-      </View>
-
-      {!isDesktop && menuOpen ? (
-        <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={closeMenu} />
-          <Animated.View style={[styles.mobileSidebarWrap, { transform: [{ translateX: mobileSidebarX }] }]} {...closePan.panHandlers}>
-            <Sidebar
-              items={NAV_ITEMS}
-              active={privateRoute}
-              onSelect={(route) => {
-                setPrivateRoute(route);
-                closeMenu();
-              }}
-            />
-          </Animated.View>
-        </View>
-      ) : null}
-    </View>
-  );
+  if (loading) return <View style={styles.loading}><ActivityIndicator color={colors.primary} size="large" /></View>;
+  return <NavigationContainer><RootStack.Navigator screenOptions={{ headerShown: false }}>{user ? <RootStack.Screen name="Donor" component={DonorNavigator} /> : <RootStack.Screen name="Auth" component={AuthNavigator} />}</RootStack.Navigator></NavigationContainer>;
 }
 
-function Sidebar({
-  items,
-  active,
-  onSelect,
-}: {
-  items: Array<{ key: PrivateRoute; label: string }>;
-  active: PrivateRoute;
-  onSelect: (route: PrivateRoute) => void;
-}) {
-  return (
-    <View style={styles.sidebar}>
-      <Text style={styles.sidebarTitle}>Navigation</Text>
-      {items.map((item) => (
-        <Pressable
-          key={item.key}
-          onPress={() => onSelect(item.key)}
-          style={[styles.navItem, active === item.key && styles.navItemActive]}
-        >
-          <Ionicons
-            name={iconFor(item.key)}
-            size={18}
-            color={active === item.key ? '#fff' : '#991b1b'}
-            style={styles.navIcon}
-          />
-          <Text style={[styles.navText, active === item.key && styles.navTextActive]}>{item.label}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function iconFor(route: PrivateRoute): keyof typeof Ionicons.glyphMap {
-  switch (route) {
-    case 'Dashboard':
-      return 'grid-outline';
-    case 'EmergencyAlerts':
-      return 'warning-outline';
-    case 'Appointments':
-      return 'calendar-outline';
-    case 'DonationHistory':
-      return 'time-outline';
-    case 'Profile':
-      return 'person-outline';
-    default:
-      return 'ellipse-outline';
-  }
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
-  layout: { flex: 1, flexDirection: 'row' },
-  content: { flex: 1 },
-  mobileBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingTop: 14,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#fff',
-  },
-  mobileTitle: { fontSize: 18, fontWeight: '700', color: '#991b1b' },
-  menuButton: {
-    backgroundColor: '#c8102e',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  menuButtonText: { color: '#fff', fontWeight: '700' },
-  sidebar: {
-    width: 235,
-    paddingTop: 16,
-    paddingHorizontal: 12,
-    borderRightWidth: 1,
-    borderRightColor: '#e5e7eb',
-    backgroundColor: '#fff',
-    gap: 10,
-  },
-  sidebarTitle: { fontSize: 18, fontWeight: '700', color: '#991b1b', marginBottom: 4 },
-  navItem: {
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  navItemActive: { backgroundColor: '#c8102e', borderColor: '#c8102e' },
-  navText: { color: '#991b1b', fontWeight: '600' },
-  navTextActive: { color: '#fff' },
-  navIcon: { width: 18, textAlign: 'center' },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 40,
-  },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
-  mobileSidebarWrap: {
-    marginTop: MOBILE_BAR_HEIGHT,
-    width: SIDEBAR_WIDTH,
-    height: '100%',
-    backgroundColor: '#fff',
-  },
-  edgeSwipeArea: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 18,
-    zIndex: 30,
-  },
-});
+const styles = StyleSheet.create({ loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }, tabBar: { borderTopColor: colors.border, minHeight: 62, paddingBottom: 8, paddingTop: 6 }, tabLabel: { fontSize: 11, fontWeight: '800' } });

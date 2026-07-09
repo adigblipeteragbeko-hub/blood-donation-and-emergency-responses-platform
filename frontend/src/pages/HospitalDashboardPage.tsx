@@ -65,6 +65,31 @@ const formatDateTime = (value?: string | null) => {
       });
 };
 
+function getReceivedUnits(request: BloodRequestItem) {
+  const transferMap = new Map<string, NonNullable<NonNullable<BloodRequestItem['hospitalResponses']>[number]['transfer']>>();
+  request.hospitalTransfers?.forEach((transfer) => {
+    transferMap.set(transfer.id, transfer);
+  });
+  request.hospitalResponses?.forEach((response) => {
+    if (response.transfer) {
+      transferMap.set(response.transfer.id, response.transfer);
+    }
+  });
+
+  return Array.from(transferMap.values()).reduce((sum, transfer) => sum + Number(transfer.receivedUnits ?? 0), 0);
+}
+
+function isActiveByFulfillment(request: BloodRequestItem) {
+  if (request.status === 'CANCELLED' || request.status === 'FULFILLED') {
+    return false;
+  }
+  const unitsNeeded = Number(request.unitsNeeded ?? 0);
+  if (unitsNeeded <= 0) {
+    return request.status === 'OPEN' || request.status === 'MATCHING';
+  }
+  return getReceivedUnits(request) < unitsNeeded;
+}
+
 export default function HospitalDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
@@ -114,7 +139,7 @@ export default function HospitalDashboardPage() {
 
         const stockItems = inventory.length > 0 ? inventory : (loadedProfile?.inventoryItems ?? []);
         setStockUnits(stockItems.reduce((sum, item) => sum + Number(item.availableUnits ?? 0), 0));
-        setActiveRequests(requests.filter((item) => item.status === 'OPEN' || item.status === 'MATCHING').length);
+        setActiveRequests(requests.filter(isActiveByFulfillment).length);
 
         setTodayAppointments(
           appointments.filter((item) => isToday(item.scheduledAt) || isToday(item.completedAt)).length,

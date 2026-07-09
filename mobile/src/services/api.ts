@@ -1,201 +1,113 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { NativeModules } from 'react-native';
-import { BloodGroup } from '../constants/bloodGroups';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import * as SecureStore from 'expo-secure-store';
+import { getApiBaseUrl } from '../constants/config';
 import { authStorageKeys } from '../constants/storageKeys';
 
-type ApiEnvelope<T> = { success: boolean; data: T };
-const unwrap = <T>(payload: ApiEnvelope<T>): T => payload.data;
+export type ApiEnvelope<T> = { success?: boolean; data: T; message?: string };
 
-const localhostHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
-
-function getScriptHost() {
-  const scriptURL: string = NativeModules?.SourceCode?.scriptURL ?? '';
-  const match = scriptURL.match(/https?:\/\/([^/:]+)/);
-  const hostFromScript = match?.[1]?.trim() ?? '';
-  const hostFromEnv = process.env.REACT_NATIVE_PACKAGER_HOSTNAME?.trim() ?? '';
-  return hostFromScript || hostFromEnv;
+export function unwrap<T>(payload: ApiEnvelope<T> | T): T {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    return (payload as ApiEnvelope<T>).data;
+  }
+  return payload as T;
 }
 
-function resolveBaseUrl() {
-  const scriptHost = getScriptHost();
-  const explicitBaseUrl =
-    process.env.EXPO_PUBLIC_MOBILE_API_BASE_URL?.trim() ??
-    process.env.MOBILE_API_BASE_URL?.trim() ??
-    '';
+let refreshPromise: Promise<string | null> | null = null;
 
-  if (explicitBaseUrl) {
-    try {
-      const explicit = new URL(explicitBaseUrl);
-      if (localhostHosts.has(explicit.hostname) && scriptHost && !localhostHosts.has(scriptHost)) {
-        return `${explicit.protocol}//${scriptHost}:${explicit.port || '4000'}`;
-      }
-      return explicitBaseUrl;
-    } catch {
-      // ignore invalid env URL and fall back to script host auto-detection
-    }
+function friendlyMessage(error: AxiosError) {
+  const status = error.response?.status;
+  const body = error.response?.data as { error?: { message?: string }; message?: string } | undefined;
+  const raw = String(body?.error?.message ?? body?.message ?? error.message ?? '').trim();
+  const lower = raw.toLowerCase();
+  const url = String(error.config?.url ?? '');
+  const isTimeout = error.code === 'ECONNABORTED' || lower.includes('timeout') || lower.includes('exceeded');
+  const isNetworkError = error.code === 'ERR_NETWORK' || lower.includes('network error') || lower.includes('network request failed');
+
+  if (url.includes('/auth/login')) {
+    if (lower.includes('verify')) return 'Please verify your email address before signing in.';
+    if (lower.includes('inactive') || lower.includes('disabled')) return 'Your account is currently inactive. Please contact support.';
+    if (status === 401 || lower.includes('invalid')) return 'Invalid email or password. Please check your details and try again.';
+    if (isTimeout) return 'The server took too long to respond. Please check your API address and try again.';
+    if (isNetworkError || !error.response) return 'Unable to reach the server. Check your connection and API address.';
   }
 
-  const host = scriptHost;
-  if (!host) {
-    return 'http://localhost:4000';
-  }
-  return `http://${host}:4000`;
+  if (status === 401) return 'Your session has expired. Please sign in again.';
+  if (status === 403) return 'You are not allowed to perform this action.';
+  if (isTimeout) return 'The server took too long to respond. Please check your API address and try again.';
+  if (isNetworkError || !error.response) return 'Unable to reach the server. Check your connection and API address.';
+  return raw || 'Something went wrong. Please try again.';
 }
 
-const api = axios.create({
-  timeout: 4000,
+export const api = axios.create({
+  timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
 
-const healthApi = axios.create({
-  timeout: 1500,
-  headers: { 'Content-Type': 'application/json' },
-});
+async function refreshAccessToken() {
+  const refreshToken = await SecureStore.getItemAsync(authStorageKeys.REFRESH_KEY);
+  if (!refreshToken) return null;
+
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${getApiBaseUrl()}/auth/refresh`, { refreshToken }, { headers: { 'Content-Type': 'application/json' } })
+      .then(async (response) => {
+        const payload = unwrap<{ accessToken: string; refreshToken: string }>(response.data);
+        if (!payload?.accessToken || !payload?.refreshToken) return null;
+        await SecureStore.setItemAsync(authStorageKeys.ACCESS_KEY, payload.accessToken);
+        await SecureStore.setItemAsync(authStorageKeys.REFRESH_KEY, payload.refreshToken);
+        return payload.accessToken;
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
 
 api.interceptors.request.use(async (config) => {
-  config.baseURL = resolveBaseUrl();
-  const token = await AsyncStorage.getItem(authStorageKeys.ACCESS_KEY);
+  config.baseURL = getApiBaseUrl();
+  const token = await SecureStore.getItemAsync(authStorageKeys.ACCESS_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-healthApi.interceptors.request.use((config) => {
-  config.baseURL = resolveBaseUrl();
-  return config;
-});
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { __retriedWithRefresh?: boolean }) | undefined;
 
-export function getMobileApiBaseUrl() {
-  return resolveBaseUrl();
+    if (error.response?.status === 401 && originalRequest && !originalRequest.__retriedWithRefresh && !String(originalRequest.url ?? '').includes('/auth/login')) {
+      originalRequest.__retriedWithRefresh = true;
+      const nextToken = await refreshAccessToken();
+      if (nextToken) {
+        originalRequest.headers.Authorization = `Bearer ${nextToken}`;
+        return api(originalRequest);
+      }
+    }
+
+    return Promise.reject(new Error(friendlyMessage(error)));
+  },
+);
+
+export async function clearStoredSession() {
+  await Promise.all([
+    SecureStore.deleteItemAsync(authStorageKeys.ACCESS_KEY),
+    SecureStore.deleteItemAsync(authStorageKeys.REFRESH_KEY),
+    SecureStore.deleteItemAsync(authStorageKeys.USER_KEY),
+  ]);
 }
 
-export type AuthSession = {
-  user: { id: string; email: string; role: 'ADMIN' | 'DONOR' | 'HOSPITAL_STAFF' };
-  accessToken: string;
-  refreshToken: string;
-};
+export async function saveStoredSession(payload: { accessToken: string; refreshToken: string; user: unknown }) {
+  await SecureStore.setItemAsync(authStorageKeys.ACCESS_KEY, payload.accessToken);
+  await SecureStore.setItemAsync(authStorageKeys.REFRESH_KEY, payload.refreshToken);
+  await SecureStore.setItemAsync(authStorageKeys.USER_KEY, JSON.stringify(payload.user));
+}
 
-export type DonorRegisterPayload = {
-  email: string;
-  password: string;
-  fullName: string;
-  bloodGroup: BloodGroup;
-  location: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-};
-
-export const authApi = {
-  async login(email: string, password: string) {
-    const res = await api.post<ApiEnvelope<AuthSession>>('/auth/login', { email, password });
-    return unwrap(res.data);
-  },
-  async registerDonor(payload: DonorRegisterPayload) {
-    const res = await api.post<ApiEnvelope<{ email: string }>>('/auth/register', {
-      email: payload.email,
-      password: payload.password,
-      role: 'DONOR',
-      donorProfile: {
-        fullName: payload.fullName,
-        bloodGroup: payload.bloodGroup,
-        location: payload.location,
-        emergencyContactName: payload.emergencyContactName,
-        emergencyContactPhone: payload.emergencyContactPhone,
-      },
-    });
-    return unwrap(res.data);
-  },
-  async verifyEmail(email: string, code: string) {
-    await api.post('/auth/verify-email', { email, code });
-  },
-  async resendVerification(email: string) {
-    await api.post('/auth/resend-verification', { email });
-  },
-  async logout(refreshToken: string) {
-    await api.post('/auth/logout', { refreshToken });
-  },
-};
-
-export const connectivityApi = {
-  async pingBackend() {
-    await healthApi.get('/health');
-    return true;
-  },
-};
-
-export type DonorProfile = {
-  id: string;
-  fullName: string;
-  bloodGroup: BloodGroup;
-  location: string;
-  eligibilityStatus: boolean;
-  availabilityStatus: boolean;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  notificationEmailEnabled?: boolean;
-  notificationSmsEnabled?: boolean;
-  donationHistory: DonationEntry[];
-};
-
-export type DonationEntry = {
-  id: string;
-  donatedAt: string;
-  unitsDonated: number;
-  location: string;
-  notes?: string | null;
-};
-
-export type BloodRequest = {
-  id: string;
-  bloodGroup: BloodGroup;
-  unitsNeeded: number;
-  type: 'STANDARD' | 'EMERGENCY';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  status: 'OPEN' | 'MATCHING' | 'FULFILLED' | 'CANCELLED';
-  location: string;
-  requiredBy: string;
-  notes?: string | null;
-  createdAt: string;
-  hospital?: { hospitalName?: string; location?: string };
-};
-
-export type Appointment = {
-  id: string;
-  scheduledAt: string;
-  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
-  notes?: string | null;
-  hospital?: { hospitalName?: string; location?: string };
-};
-
-export type Notification = {
-  id: string;
-  title: string;
-  body: string;
-  delivered: boolean;
-  createdAt: string;
-};
-
-export const donorApi = {
-  async profile() {
-    const res = await api.get<ApiEnvelope<DonorProfile>>('/donors/profile');
-    return unwrap(res.data);
-  },
-  async updateProfile(payload: Omit<DonorProfile, 'id' | 'donationHistory'>) {
-    const res = await api.post<ApiEnvelope<DonorProfile>>('/donors/profile', payload);
-    return unwrap(res.data);
-  },
-  async emergencyRequests() {
-    const res = await api.get<ApiEnvelope<BloodRequest[]>>('/blood-requests');
-    return unwrap(res.data).filter((item) => item.type === 'EMERGENCY');
-  },
-  async appointments() {
-    const res = await api.get<ApiEnvelope<Appointment[]>>('/appointments');
-    return unwrap(res.data);
-  },
-  async notifications() {
-    const res = await api.get<ApiEnvelope<Notification[]>>('/notifications');
-    return unwrap(res.data);
-  },
-};
+export async function readStoredUser<T>() {
+  const raw = await SecureStore.getItemAsync(authStorageKeys.USER_KEY);
+  return raw ? (JSON.parse(raw) as T) : null;
+}
