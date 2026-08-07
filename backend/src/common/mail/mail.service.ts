@@ -27,12 +27,20 @@ export class MailService {
       auth: { user, pass },
     });
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from,
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
     });
+
+    return {
+      provider: host,
+      messageId: info.messageId,
+      accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [],
+      rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
+      response: typeof info.response === 'string' ? info.response.slice(0, 300) : undefined,
+    };
   }
 }

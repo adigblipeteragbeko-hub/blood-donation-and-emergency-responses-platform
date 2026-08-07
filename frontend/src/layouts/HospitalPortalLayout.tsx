@@ -1,7 +1,13 @@
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner';
 import { AppIcon } from '../components/ui/AppIcon';
+import { AccountIdentityMenu } from '../components/AccountIdentityMenu';
+import { FloatingAssistantLauncher } from '../components/FloatingAssistantLauncher';
+import { getHospitalProfile, type HospitalProfile } from '../services/hospital-portal';
+import { buildAccountIdentity } from '../utils/account-identity';
+import { rememberAccount } from '../utils/remembered-accounts';
 
 type PortalLink = {
   to: string;
@@ -11,24 +17,27 @@ type PortalLink = {
 };
 
 const coreLinks: PortalLink[] = [
-  { to: '/hospital/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/request-history', label: 'Request History', icon: 'reports', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/appointments', label: 'Appointments', icon: 'clock', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/notifications', label: 'Notifications', icon: 'notification', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
-  { to: '/hospital/reports', label: 'Reports', icon: 'reports', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/inventory', label: 'Inventory', icon: 'inventory', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/stock-intelligence', label: 'Stock Intelligence', icon: 'reports', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/assistant', label: 'Assistant', icon: 'notification', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/request-blood', label: 'Request Blood', icon: 'alert', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/active-requests', label: 'Active Requests', icon: 'clock', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/request-history', label: 'Request History', icon: 'reports', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/donor-search', label: 'Donor Search', icon: 'users', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/donor-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/live-map', label: 'Live Map', icon: 'map', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/appointments', label: 'Appointments', icon: 'clock', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/notifications', label: 'Notifications', icon: 'notification', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/reports', label: 'Reports', icon: 'reports', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/ai-intelligence', label: 'AI Intelligence', icon: 'reports', roles: ['HOSPITAL_ADMIN'] },
 ];
 
 const moreLinks: PortalLink[] = [
-  { to: '/hospital/emergency-requests', label: 'Emergency', icon: 'alert', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/profile', label: 'Profile', icon: 'hospital', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/settings', label: 'Settings', icon: 'settings', roles: ['HOSPITAL_STAFF'] },
-  { to: '/hospital/support', label: 'Support', icon: 'notification', roles: ['HOSPITAL_STAFF', 'BLOOD_BANK_OFFICER'] },
+  { to: '/hospital/emergency-requests', label: 'Emergency', icon: 'alert', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/profile', label: 'Profile', icon: 'hospital', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/settings', label: 'Settings', icon: 'settings', roles: ['HOSPITAL_ADMIN'] },
+  { to: '/hospital/support', label: 'Support', icon: 'notification', roles: ['HOSPITAL_ADMIN'] },
 ];
 
 function linkClass(isActive: boolean) {
@@ -36,13 +45,40 @@ function linkClass(isActive: boolean) {
 }
 
 export function HospitalPortalLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [profile, setProfile] = useState<HospitalProfile | null>(null);
   const coreRoleLinks = coreLinks.filter((item) => user?.role && item.roles.includes(user.role));
   const secondaryRoleLinks = moreLinks.filter((item) => user?.role && item.roles.includes(user.role));
+  const identity = useMemo(() => buildAccountIdentity({ user, hospitalProfile: profile }), [profile, user]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadProfile = () => getHospitalProfile()
+      .then((nextProfile) => {
+        if (mounted) setProfile(nextProfile);
+      })
+      .catch(() => {
+        if (mounted) setProfile(null);
+      });
+    void loadProfile();
+    const refresh = () => {
+      void loadProfile();
+    };
+    window.addEventListener('hospital-logo-updated', refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('hospital-logo-updated', refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (identity) rememberAccount(identity);
+  }, [identity]);
 
   return (
     <section className="grid gap-5 overflow-x-hidden pt-6 md:grid-cols-[300px_minmax(0,1fr)] md:pt-8">
       <aside className="card h-fit space-y-4">
+        <AccountIdentityMenu identity={identity} onLogout={logout} />
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-primary">
             <AppIcon name="hospital" className="h-5 w-5" />
@@ -76,10 +112,11 @@ export function HospitalPortalLayout() {
         </div>
       </aside>
 
-      <div className="min-w-0 space-y-5 pt-2 md:pt-3">
+      <div className="page-content-safe-bottom min-w-0 space-y-5 pt-2 md:pt-3">
         <LiveEmergencyAlertBanner />
         <Outlet />
       </div>
+      <FloatingAssistantLauncher />
     </section>
   );
 }

@@ -9,6 +9,7 @@
     "dev:donor": "vite --port 5175",
     "dev:hospital": "vite --port 5176",
     "build": "tsc -b && vite build",
+    "test": "node --test src/pages/HospitalDonorSearchPage.static.test.mjs src/pages/HospitalDashboardEarlyWarning.static.test.mjs src/pages/HospitalAppointmentsToday.static.test.mjs src/pages/HospitalDashboardSummaryCards.static.test.mjs src/pages/DonorMobilizationNotifications.static.test.mjs src/pages/AdminDashboardRuntimeSafety.static.test.mjs src/pages/VerificationDeliveryFlow.static.test.mjs src/pages/DonorClinicalFormWording.static.test.mjs src/pages/FinalUxPolish.static.test.mjs src/pages/ManualTestingStabilization.static.test.mjs src/components/admin/AdminAuditLogTable.static.test.mjs src/components/admin/DonorCommunicationsSection.static.test.mjs src/components/AiIntelligencePanel.static.test.mjs src/components/BloodSosAssistant.static.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.27.0",
+    "recharts": "^3.10.0",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {

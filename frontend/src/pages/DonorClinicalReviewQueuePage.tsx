@@ -60,6 +60,13 @@ const questionGroups = [
   { title: 'Other Safety Questions', keys: ['q15', 'q20', 'q21'] },
 ];
 
+function maskDocumentNumber(value?: string | null) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (text.length <= 4) return '****';
+  return `${text.slice(0, 3)}****${text.slice(-2)}`;
+}
+
 export default function DonorClinicalReviewQueuePage() {
   const { user } = useAuth();
   const [items, setItems] = useState<DonorClinicalRecord[]>([]);
@@ -73,7 +80,7 @@ export default function DonorClinicalReviewQueuePage() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [office, setOffice] = useState<Record<string, any>>({ outcomeOfScreening: 'QUALIFIED', qualifiesToDonate: 'YES' });
 
-  const isAdminOverride = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const isAdminOverride = user?.role === 'ADMIN';
 
   const loadQueue = async () => {
     setLoading(true);
@@ -223,10 +230,10 @@ export default function DonorClinicalReviewQueuePage() {
               {officeLocked ? <p className="mt-4 rounded-xl bg-teal-50 p-3 text-sm font-semibold text-teal-700">Office Use completed. Screening details are locked for audit integrity.</p> : null}
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <Info label="Donor reference" value={selected.donor?.donorNumber ?? selected.donorCardNumber ?? 'Not assigned'} />
-                <Info label="Blood group" value={selected.donor?.bloodGroup === 'UNKNOWN' ? 'Pending Hospital Blood Group Confirmation' : selected.donor?.bloodGroup ?? 'Not set'} />
+                <Info label="Blood Group" value={selected.donor?.bloodGroup === 'UNKNOWN' ? 'Pending Hospital Blood Group Confirmation' : selected.donor?.bloodGroup ?? 'Not set'} />
                 <Info label="Area / Community" value={selected.areaOfResidence ?? selected.donor?.location ?? 'Not set'} />
                 <Info label="Digital address" value={selected.addressOrWorkplace ?? 'Not provided'} />
-                <Info label="Document" value={[selected.idType, selected.idNumber].filter(Boolean).join(' - ') || 'Not provided'} />
+                <Info label="Document" value={[selected.idType, maskDocumentNumber(selected.idNumber)].filter(Boolean).join(' - ') || 'Not provided'} />
                 <Info label="Review hospital" value={selected.selectedHospital?.hospitalName ?? 'Not selected'} />
                 <Info label="Venue" value={selected.venue ?? selected.selectedHospital?.location ?? 'Not set'} />
                 <Info label="Date created" value={formatDate(selected.createdAt)} />

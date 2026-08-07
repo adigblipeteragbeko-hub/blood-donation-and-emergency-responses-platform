@@ -43,31 +43,31 @@ export class DonorClinicalRecordsController {
     return this.service.getMine(user.id);
   }
 
-  @Roles(Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN)
   @Get('review-queue')
   reviewQueue(@CurrentUser() user: { id: string; role: Role }, @Query() query: ReviewQueueQueryDto) {
     return this.service.reviewQueue(query, user);
   }
 
-  @Roles(Role.DONOR, Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.DONOR, Role.HOSPITAL_ADMIN, Role.ADMIN)
   @Get(':id')
   getOne(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string) {
     return this.service.getById(id, user);
   }
 
-  @Roles(Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN)
   @Patch(':id/review')
   review(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string, @Body() dto: UpdateClinicalReviewDto) {
     return this.service.startReview(id, dto, user);
   }
 
-  @Roles(Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN)
   @Patch(':id/office-use')
   officeUse(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string, @Body() dto: OfficeUseDto) {
     return this.service.officeUse(id, dto, user);
   }
 
-  @Roles(Role.DONOR, Role.BLOOD_BANK_OFFICER, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.DONOR, Role.HOSPITAL_ADMIN, Role.ADMIN)
   @Get(':id/pdf')
   @Header('Content-Type', 'text/plain; charset=utf-8')
   async pdf(@CurrentUser() user: { id: string; role: Role }, @Param('id') id: string, @Res() res: Response) {

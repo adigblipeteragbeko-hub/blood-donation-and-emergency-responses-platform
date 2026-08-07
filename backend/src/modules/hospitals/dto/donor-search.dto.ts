@@ -9,6 +9,10 @@ export class DonorSearchDto {
 
   @IsOptional()
   @IsString()
+  requestId?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   location?: string;
 

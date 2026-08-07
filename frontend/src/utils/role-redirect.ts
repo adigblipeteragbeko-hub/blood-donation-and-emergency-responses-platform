@@ -13,7 +13,7 @@ export function getRoleLandingPath(role?: Role | null) {
     return '/donor/dashboard';
   }
 
-  if (role === 'BLOOD_BANK_OFFICER') {
+  if (role === 'HOSPITAL_ADMIN') {
     return '/hospital/inventory';
   }
 

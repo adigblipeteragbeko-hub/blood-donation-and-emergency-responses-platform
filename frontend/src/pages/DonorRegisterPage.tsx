@@ -23,6 +23,7 @@ export default function DonorRegisterPage() {
     emergencyContactPhone: '',
     emergencyContactRelationship: '',
     password: '',
+    verificationMethod: 'EMAIL' as 'EMAIL' | 'SMS',
   };
   const [form, setForm] = useState({
     ...emptyForm,
@@ -38,10 +39,14 @@ export default function DonorRegisterPage() {
     setSubmitting(true);
 
     try {
-      await api.post('/auth/register', {
+      if (form.verificationMethod === 'SMS' && !/^\+?2330?[235]\d{8}$|^0?[235]\d{8}$/.test(`${form.countryCode}${form.phoneNumber}`.replace(/\s/g, ''))) {
+        throw new Error('Enter a valid Ghana phone number before choosing SMS verification.');
+      }
+      const response = await api.post('/auth/register', {
         email: form.email,
         password: form.password,
         role: 'DONOR',
+        verificationMethod: form.verificationMethod,
         donorProfile: {
           firstName: form.firstName,
           otherNames: form.otherNames || undefined,
@@ -55,17 +60,31 @@ export default function DonorRegisterPage() {
           emergencyContactRelationship: form.emergencyContactRelationship,
         },
       });
-      setMessage('Donor registered successfully. Please check your email for verification.');
+      const method = response.data?.data?.verificationMethod ?? form.verificationMethod;
+      const maskedDestination = response.data?.data?.maskedDestination;
+      setMessage(`Donor registered successfully. Verification code sent by ${method === 'SMS' ? 'SMS' : 'Email'}${maskedDestination ? ` to ${maskedDestination}` : ''}.`);
       setForm({ ...emptyForm });
-      setTimeout(() => navigate('/verify-email', { state: { email: form.email, role: 'donor' } }), 700);
+      setTimeout(() => navigate('/verify-email', {
+        state: {
+          email: form.email,
+          role: 'donor',
+          verificationMethod: method,
+          maskedDestination,
+          expiresInMinutes: response.data?.data?.expiresInMinutes ?? 5,
+        },
+      }), 700);
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Unable to register donor. Please check required fields and try again.');
+      setError(extracted ?? err?.message ?? 'Unable to register donor. Please check required fields and try again.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const maskedEmail = form.email.includes('@') ? `${form.email.slice(0, 1)}***@${form.email.split('@')[1]}` : 'your email address';
+  const fullPhone = `${form.countryCode}${form.phoneNumber}`;
+  const maskedPhone = form.phoneNumber ? `${'*'.repeat(Math.max(0, fullPhone.length - 4))}${fullPhone.slice(-4)}` : 'your phone number';
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -147,6 +166,23 @@ export default function DonorRegisterPage() {
             required
           />
         </div>
+        <fieldset className="space-y-3 rounded-2xl border border-slate-100 bg-white/70 p-4">
+          <legend className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Verification Code</legend>
+          <p className="text-sm font-semibold text-slate-700">How would you like to receive your verification code?</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className={`cursor-pointer rounded-xl border p-3 text-sm ${form.verificationMethod === 'EMAIL' ? 'border-primary bg-red-50 text-primary' : 'border-slate-200 bg-white text-slate-700'}`}>
+              <input className="mr-2" type="radio" name="verificationMethod" checked={form.verificationMethod === 'EMAIL'} onChange={() => setForm((v) => ({ ...v, verificationMethod: 'EMAIL' }))} />
+              Email
+              <span className="mt-1 block text-xs text-slate-500">{maskedEmail}</span>
+            </label>
+            <label className={`cursor-pointer rounded-xl border p-3 text-sm ${form.verificationMethod === 'SMS' ? 'border-primary bg-red-50 text-primary' : 'border-slate-200 bg-white text-slate-700'}`}>
+              <input className="mr-2" type="radio" name="verificationMethod" checked={form.verificationMethod === 'SMS'} onChange={() => setForm((v) => ({ ...v, verificationMethod: 'SMS' }))} />
+              SMS
+              <span className="mt-1 block text-xs text-slate-500">{maskedPhone}</span>
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">Your verification code expires in 5 minutes.</p>
+        </fieldset>
         <div className="grid grid-cols-[1fr_2fr] gap-2">
           <select className="legacy-input" value={form.alternativeCountryCode} onChange={(e) => setForm((v) => ({ ...v, alternativeCountryCode: e.target.value }))}>
             {countryCodes.map((code) => (

@@ -14,8 +14,21 @@ import {
 } from '../services/hospital-portal';
 import { bloodGroups } from '../constants/blood-groups';
 import { FilterBox, Pager } from '../components/TableControls';
+import { TODAY_APPOINTMENT_STATUSES_INCLUDED, getTodayAppointmentQuery } from '../utils/appointment-date-filter';
 
-const statusOptions: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'MISSED'];
+const statusOptions: AppointmentStatus[] = [
+  'SCHEDULED',
+  'PENDING_CONFIRMATION',
+  'CONFIRMED',
+  'DONOR_ARRIVED',
+  'IN_PROGRESS',
+  'RESCHEDULE_REQUESTED',
+  'RESCHEDULED',
+  'DECLINED',
+  'COMPLETED',
+  'CANCELLED',
+  'MISSED',
+];
 const appointmentTypes: Array<{ value: AppointmentType; label: string }> = [
   { value: 'BLOOD_DONATION', label: 'Blood Donation' },
   { value: 'ELIGIBILITY_SCREENING', label: 'Eligibility Screening' },
@@ -25,6 +38,28 @@ const appointmentTypes: Array<{ value: AppointmentType; label: string }> = [
 
 const typeLabel = (value?: AppointmentType) =>
   appointmentTypes.find((item) => item.value === value)?.label ?? 'Blood Donation';
+
+const completionAllowedStatuses: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED', 'DONOR_ARRIVED', 'IN_PROGRESS'];
+const completionHiddenStatuses: AppointmentStatus[] = ['PENDING_CONFIRMATION', 'DECLINED', 'CANCELLED', 'NO_SHOW', 'COMPLETED'];
+const terminalStatuses: AppointmentStatus[] = ['DECLINED', 'CANCELLED', 'COMPLETED', 'MISSED', 'NO_SHOW'];
+
+const canCompleteAppointment = (item: AppointmentItem) =>
+  item.appointmentType === 'BLOOD_DONATION' && !item.donationPostedAt && completionAllowedStatuses.includes(item.status);
+
+const shouldHideCompletionPanel = (item: AppointmentItem) =>
+  item.appointmentType !== 'BLOOD_DONATION' || item.donationPostedAt || completionHiddenStatuses.includes(item.status);
+
+const statusChoicesFor = (status: AppointmentStatus): AppointmentStatus[] => {
+  if (status === 'COMPLETED') return ['COMPLETED'];
+  if (status === 'CANCELLED') return ['CANCELLED'];
+  if (status === 'DECLINED') return ['DECLINED'];
+  if (status === 'NO_SHOW') return ['NO_SHOW'];
+  if (terminalStatuses.includes(status)) return [status];
+  return statusOptions.filter((option) => {
+    if (option === 'COMPLETED') return completionAllowedStatuses.includes(status);
+    return true;
+  });
+};
 
 function defaultScheduledAt() {
   const date = new Date();
@@ -37,6 +72,7 @@ export default function HospitalAppointmentsPage() {
   const preselectedDonorId = searchParams.get('donorId') ?? '';
   const preselectedRequestId = searchParams.get('requestId') ?? '';
   const requestReference = searchParams.get('requestReference') ?? '';
+  const initialDateFilter = searchParams.get('dateFilter') === 'today' ? 'today' : 'all';
 
   const [items, setItems] = useState<AppointmentItem[]>([]);
   const [donors, setDonors] = useState<DonorMatch[]>([]);
@@ -47,6 +83,7 @@ export default function HospitalAppointmentsPage() {
   const [hasMore, setHasMore] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today'>(initialDateFilter);
   const pageSize = 25;
 
   const [donorId, setDonorId] = useState(preselectedDonorId);
@@ -61,7 +98,11 @@ export default function HospitalAppointmentsPage() {
 
   const load = async (nextPage = page) => {
     try {
-      const data = await getHospitalAppointments({ skip: nextPage * pageSize, take: pageSize });
+      const data = await getHospitalAppointments({
+        skip: nextPage * pageSize,
+        take: pageSize,
+        ...(dateFilter === 'today' ? getTodayAppointmentQuery() : {}),
+      });
       setItems(data);
       setHasMore(data.length === pageSize);
       void loadDonationNumberPreviews(data);
@@ -72,7 +113,7 @@ export default function HospitalAppointmentsPage() {
 
   const loadDonationNumberPreviews = async (appointments: AppointmentItem[]) => {
     const pendingDonationAppointments = appointments.filter(
-      (item) => item.appointmentType === 'BLOOD_DONATION' && !item.donationPostedAt,
+      (item) => canCompleteAppointment(item),
     );
     const results = await Promise.allSettled(
       pendingDonationAppointments.map(async (item) => {
@@ -100,7 +141,7 @@ export default function HospitalAppointmentsPage() {
 
   useEffect(() => {
     void load();
-  }, [page]);
+  }, [page, dateFilter]);
 
   useEffect(() => {
     void loadDonors();
@@ -189,6 +230,10 @@ export default function HospitalAppointmentsPage() {
   };
 
   const completeDonationWorkflow = async (item: AppointmentItem) => {
+    if (!canCompleteAppointment(item)) {
+      setMessage('This appointment cannot be completed or posted to inventory from its current status.');
+      return;
+    }
     const draft = completionDraft(item);
     if (Number(draft.unitsCollected) <= 0) {
       setMessage('Enter units collected before posting donation inventory.');
@@ -286,10 +331,46 @@ export default function HospitalAppointmentsPage() {
         onChange={setSearchInput}
       />
 
+      <div className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-primary">Appointment Date</p>
+          <p className="text-xs text-muted">
+            Today uses the appointment scheduled date in your local calendar day. Included statuses:{' '}
+            {TODAY_APPOINTMENT_STATUSES_INCLUDED.join(', ')}.
+          </p>
+        </div>
+        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+          <button
+            className={`rounded-lg px-3 py-2 text-sm font-bold transition focus:outline-none focus:ring-4 focus:ring-red-100 ${
+              dateFilter === 'all' ? 'bg-primary text-white' : 'text-slate-700 hover:bg-slate-50'
+            }`}
+            onClick={() => {
+              setPage(0);
+              setDateFilter('all');
+            }}
+            type="button"
+          >
+            All
+          </button>
+          <button
+            className={`rounded-lg px-3 py-2 text-sm font-bold transition focus:outline-none focus:ring-4 focus:ring-red-100 ${
+              dateFilter === 'today' ? 'bg-primary text-white' : 'text-slate-700 hover:bg-slate-50'
+            }`}
+            onClick={() => {
+              setPage(0);
+              setDateFilter('today');
+            }}
+            type="button"
+          >
+            Today
+          </button>
+        </div>
+      </div>
+
       <div className="card overflow-x-auto">
         <h2 className="text-lg font-bold text-primary">Scheduled Appointments</h2>
         {loading ? <p className="mt-2 text-sm text-muted">Loading appointments...</p> : null}
-        {!loading && filteredItems.length === 0 ? <p className="mt-2 text-sm text-muted">No appointments found.</p> : null}
+        {!loading && filteredItems.length === 0 ? <p className="mt-2 text-sm text-muted">No appointments found for the selected filters. New bookings and donor responses will appear here.</p> : null}
         {!loading && filteredItems.length > 0 ? (
           <table className="mt-3 min-w-full text-left text-sm">
             <thead>
@@ -329,7 +410,7 @@ export default function HospitalAppointmentsPage() {
                         value={item.status}
                         onChange={(e) => void updateStatus(item.id, e.target.value as AppointmentStatus)}
                       >
-                        {statusOptions.map((status) => (
+                        {statusChoicesFor(item.status).map((status) => (
                           <option key={status} value={status}>
                             {status}
                           </option>
@@ -343,9 +424,25 @@ export default function HospitalAppointmentsPage() {
                             <p>Units: {item.unitsCollected ?? 1}</p>
                             <p>Blood: {item.donor?.bloodGroup ?? '-'}</p>
                           </div>
-                        ) : (
+                        ) : item.status === 'CANCELLED' ? (
+                          <div className="min-w-60 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                            <p className="font-bold text-slate-900">Cancellation Summary</p>
+                            <p className="mt-2">Status: {item.status}</p>
+                            <p>Cancelled By: {item.cancelledBy ?? 'Not recorded'}</p>
+                            <p>Cancellation Date: {item.cancelledAt ? new Date(item.cancelledAt).toLocaleString() : 'Not recorded'}</p>
+                            {item.cancellationReason ? <p>Cancellation Reason: {item.cancellationReason}</p> : null}
+                            <p className="mt-2 font-bold text-slate-800">This appointment has been cancelled and cannot be completed.</p>
+                          </div>
+                        ) : item.status === 'COMPLETED' ? (
+                          <div className="rounded-lg bg-green-50 p-2 text-xs font-semibold text-green-700">
+                            <p>Appointment completed</p>
+                            <p>Donation No: {item.donationNumber ?? 'Not posted'}</p>
+                            <p>Units: {item.unitsCollected ?? '-'}</p>
+                            <p>Blood: {item.donor?.bloodGroup ?? '-'}</p>
+                          </div>
+                        ) : canCompleteAppointment(item) ? (
                           <div className="min-w-60 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs">
-                            <p className="font-bold text-amber-800">{item.status === 'COMPLETED' ? 'Complete Donation Workflow' : 'Complete with donation posting'}</p>
+                            <p className="font-bold text-amber-800">Complete with donation posting</p>
                             <label className="mt-2 block font-semibold">
                               Units Collected *
                               <input className="legacy-input mt-1 !py-1" min={1} type="number" value={completionDraft(item).unitsCollected} onChange={(event) => setCompletionDraft(item.id, { unitsCollected: Number(event.target.value) })} />
@@ -366,10 +463,10 @@ export default function HospitalAppointmentsPage() {
                               <input className="legacy-input mt-1 !py-1" value={completionDraft(item).donationNotes} onChange={(event) => setCompletionDraft(item.id, { donationNotes: event.target.value })} />
                             </label>
                             <button className="mt-2 rounded-lg bg-red-700 px-3 py-2 font-bold text-white" type="button" onClick={() => void completeDonationWorkflow(item)}>
-                              {item.status === 'COMPLETED' ? 'Post Donation to Inventory' : 'Complete Appointment'}
+                              Complete Appointment
                             </button>
                           </div>
-                        )
+                        ) : null
                       ) : null}
                     </div>
                   </td>

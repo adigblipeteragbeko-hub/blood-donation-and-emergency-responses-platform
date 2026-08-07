@@ -1,11 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { AuditService } from '../../common/audit/audit.service';
 import { CreateHospitalAppointmentDto } from './dto/create-hospital-appointment.dto';
+import { DeclineAppointmentDto } from './dto/decline-appointment.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { RequestAppointmentRescheduleDto } from './dto/request-appointment-reschedule.dto';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
+import { AppointmentQueryDto } from './dto/appointment-query.dto';
 import {
   AppointmentStatus,
   AppointmentType,
@@ -15,8 +19,10 @@ import {
   NotificationType,
   Prisma,
   Role,
+  SmsPurpose,
 } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SmsService } from '../sms/sms.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -25,7 +31,24 @@ export class AppointmentsService {
     private readonly audit: AuditService,
     private readonly hospitalAccess: HospitalAccessService,
     private readonly notifications: NotificationsService,
+    private readonly smsService: SmsService,
+    private readonly realtime: RealtimeService,
   ) {}
+
+  private readonly todayAppointmentStatuses = [
+    AppointmentStatus.SCHEDULED,
+    AppointmentStatus.PENDING_CONFIRMATION,
+    AppointmentStatus.CONFIRMED,
+    AppointmentStatus.DONOR_ARRIVED,
+    AppointmentStatus.IN_PROGRESS,
+    AppointmentStatus.RESCHEDULE_REQUESTED,
+    AppointmentStatus.RESCHEDULED,
+    AppointmentStatus.DECLINED,
+    AppointmentStatus.COMPLETED,
+    AppointmentStatus.CANCELLED,
+    AppointmentStatus.MISSED,
+    AppointmentStatus.NO_SHOW,
+  ];
 
   private appointmentTypeLabel(type: AppointmentType) {
     const labels: Record<AppointmentType, string> = {
@@ -48,6 +71,137 @@ export class AppointmentsService {
     hospital: true,
     bloodRequest: { select: { requestReference: true } },
   };
+
+  private toLocalDateString(date: Date, timezoneOffsetMinutes: number) {
+    const localTime = date.getTime() - timezoneOffsetMinutes * 60_000;
+    return new Date(localTime).toISOString().slice(0, 10);
+  }
+
+  private getLocalDayRange(query: AppointmentQueryDto) {
+    if (query.dateFilter !== 'today') {
+      return null;
+    }
+
+    const timezoneOffsetMinutes = query.timezoneOffsetMinutes ?? 0;
+    const localDate = query.localDate ?? this.toLocalDateString(new Date(), timezoneOffsetMinutes);
+    const [year, month, day] = localDate.split('-').map(Number);
+    if (!year || !month || !day) {
+      throw new BadRequestException('Invalid local appointment date.');
+    }
+
+    const start = new Date(Date.UTC(year, month - 1, day) + timezoneOffsetMinutes * 60_000);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, end };
+  }
+
+  private withAppointmentQuery(where: Prisma.AppointmentWhereInput, query: AppointmentQueryDto) {
+    const dayRange = this.getLocalDayRange(query);
+    if (!dayRange) {
+      return where;
+    }
+
+    return {
+      ...where,
+      scheduledAt: { gte: dayRange.start, lt: dayRange.end },
+      status: { in: this.todayAppointmentStatuses },
+    };
+  }
+
+  private async whereForUser(userId: string, role: Role, query: AppointmentQueryDto) {
+    if (role === Role.ADMIN) {
+      return this.withAppointmentQuery({}, query);
+    }
+
+    if (role === Role.DONOR) {
+      return this.withAppointmentQuery({ donor: { userId } }, query);
+    }
+
+    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
+    return this.withAppointmentQuery({ hospitalId: hospital.id }, query);
+  }
+
+  private async broadcastAppointmentChanged(appointment: { id: string; hospitalId: string; status: AppointmentStatus; scheduledAt: Date }) {
+    await this.realtime.broadcastAppointmentUpdate({
+      appointmentId: appointment.id,
+      hospitalId: appointment.hospitalId,
+      status: appointment.status,
+      scheduledAt: appointment.scheduledAt.toISOString(),
+    }, appointment.hospitalId);
+  }
+
+  private async notifyAppointmentParticipants(appointment: {
+    id: string;
+    appointmentReference: string;
+    scheduledAt: Date;
+    appointmentType: AppointmentType;
+    donor: { userId: string; fullName: string; phone?: string | null; alternativePhoneNumber?: string | null; notificationSmsEnabled?: boolean };
+    hospital: { userId: string; hospitalName: string; contactPhone?: string | null };
+  }, title: string, body: string, smsPurpose: SmsPurpose = SmsPurpose.APPOINTMENT_CREATED) {
+    await Promise.all([
+      this.notifications.createAndBroadcastNotification({
+        userId: appointment.donor.userId,
+        title,
+        body,
+        channel: 'IN_APP',
+        type: NotificationType.APPOINTMENT,
+        delivered: true,
+      }),
+      this.notifications.createAndBroadcastNotification({
+        userId: appointment.hospital.userId,
+        title,
+        body,
+        channel: 'IN_APP',
+        type: NotificationType.APPOINTMENT,
+        delivered: true,
+      }),
+    ]);
+
+    const smsRecipients = [
+      appointment.donor.notificationSmsEnabled ? appointment.donor.phone ?? appointment.donor.alternativePhoneNumber : null,
+      appointment.hospital.contactPhone ?? null,
+    ];
+    await this.smsService.sendAppointmentNotification({
+      recipients: smsRecipients,
+      message: `BloodSOS: ${body}`.slice(0, 300),
+      purpose: smsPurpose,
+      relatedEntityType: 'APPOINTMENT',
+      relatedEntityId: appointment.id,
+      idempotencyKey: this.smsService.buildEventIdempotencyKey(
+        smsPurpose,
+        'APPOINTMENT',
+        appointment.id,
+        title,
+        smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+      ),
+    });
+  }
+
+  private async getOwnedDonorAppointment(id: string, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        donor: { select: { id: true, userId: true, fullName: true, phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true } },
+        hospital: { select: { id: true, userId: true, hospitalName: true, location: true, contactPhone: true } },
+        bloodRequest: { select: { requestReference: true } },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+    if (appointment.donor.userId !== userId) {
+      throw new ForbiddenException('Only the appointment owner can respond to this appointment.');
+    }
+    return appointment;
+  }
+
+  private canCompleteAppointment(status: AppointmentStatus) {
+    return new Set<AppointmentStatus>([
+      AppointmentStatus.SCHEDULED,
+      AppointmentStatus.CONFIRMED,
+      AppointmentStatus.DONOR_ARRIVED,
+      AppointmentStatus.IN_PROGRESS,
+    ]).has(status);
+  }
 
   private deriveHospitalCode(hospitalName?: string | null, registrationCode?: string | null) {
     const words = (hospitalName ?? '')
@@ -187,6 +341,10 @@ export class AppointmentsService {
       availabilityStatus: true,
       eligibilityStatus: true,
       bloodGroup: { not: 'UNKNOWN' as const },
+      OR: [
+        { nextEligibilityDate: null },
+        { nextEligibilityDate: { lte: new Date() } },
+      ],
       user: {
         isActive: true,
         emailVerified: true,
@@ -205,17 +363,27 @@ export class AppointmentsService {
       },
       ...(term
         ? {
-            OR: [
+            AND: [{
+              OR: [
               { fullName: { contains: term, mode: 'insensitive' as const } },
               { firstName: { contains: term, mode: 'insensitive' as const } },
               { otherNames: { contains: term, mode: 'insensitive' as const } },
               { surname: { contains: term, mode: 'insensitive' as const } },
               { donorNumber: { contains: term, mode: 'insensitive' as const } },
               { location: { contains: term, mode: 'insensitive' as const } },
-            ],
+              ],
+            }],
           }
         : {}),
     };
+  }
+
+  private assertDonorCanAttendDonation(donor: { nextEligibilityDate?: Date | null }, scheduledAt: Date) {
+    if (donor.nextEligibilityDate && scheduledAt < donor.nextEligibilityDate) {
+      throw new BadRequestException(
+        `This donor is in donation cooldown until ${donor.nextEligibilityDate.toLocaleDateString()}. Schedule donation appointments after this date.`,
+      );
+    }
   }
 
   async create(userId: string, dto: CreateAppointmentDto) {
@@ -223,11 +391,15 @@ export class AppointmentsService {
     if (!donor) {
       throw new NotFoundException('Donor profile not found');
     }
+    const scheduledAt = new Date(dto.scheduledAt);
+    if ((dto.appointmentType ?? AppointmentType.BLOOD_DONATION) === AppointmentType.BLOOD_DONATION) {
+      this.assertDonorCanAttendDonation(donor, scheduledAt);
+    }
 
     const appointment = await this.createAppointmentWithReference({
       donor: { connect: { id: donor.id } },
       hospital: { connect: { id: dto.hospitalId } },
-      scheduledAt: new Date(dto.scheduledAt),
+      scheduledAt,
       appointmentType: dto.appointmentType ?? AppointmentType.BLOOD_DONATION,
       notes: dto.notes,
     });
@@ -236,12 +408,14 @@ export class AppointmentsService {
       ...dto,
       appointmentReference: appointment.appointmentReference,
     });
+    await this.broadcastAppointmentChanged(appointment);
     return appointment;
   }
 
   async createByHospital(userId: string, dto: CreateHospitalAppointmentDto) {
     const hospital = await this.hospitalAccess.getHospitalForUser(userId);
 
+    const scheduledAt = new Date(dto.scheduledAt);
     const donor = await this.prisma.donor.findFirst({
       where: {
         id: dto.donorId,
@@ -254,6 +428,9 @@ export class AppointmentsService {
     });
     if (!donor) {
       throw new NotFoundException('Approved active donor not found');
+    }
+    if ((dto.appointmentType ?? AppointmentType.BLOOD_DONATION) === AppointmentType.BLOOD_DONATION) {
+      this.assertDonorCanAttendDonation(donor, scheduledAt);
     }
 
     if (dto.bloodRequestId) {
@@ -268,8 +445,9 @@ export class AppointmentsService {
         donor: { connect: { id: donor.id } },
         hospital: { connect: { id: hospital.id } },
         ...(dto.bloodRequestId ? { bloodRequest: { connect: { id: dto.bloodRequestId } } } : {}),
-        scheduledAt: new Date(dto.scheduledAt),
+        scheduledAt,
         appointmentType: dto.appointmentType ?? AppointmentType.BLOOD_DONATION,
+        status: AppointmentStatus.PENDING_CONFIRMATION,
         notes: dto.notes,
       },
       {
@@ -293,10 +471,32 @@ export class AppointmentsService {
       delivered: true,
     });
 
+    const createdSmsRecipients = [
+      donor.notificationSmsEnabled ? donor.phone ?? donor.alternativePhoneNumber : null,
+      hospital.contactPhone ?? null,
+    ];
+    await this.smsService.sendAppointmentNotification({
+      recipients: createdSmsRecipients,
+      message: `BloodSOS: ${hospital.hospitalName} proposed a blood donation appointment for ${appointment.scheduledAt.toLocaleDateString()} at ${appointment.scheduledAt.toLocaleTimeString()}. Log in to accept, decline, or request another time.`,
+      purpose: SmsPurpose.APPOINTMENT_CREATED,
+      hospitalId: hospital.id,
+      triggeredByUserId: userId,
+      relatedEntityType: 'APPOINTMENT',
+      relatedEntityId: appointment.id,
+      idempotencyKey: this.smsService.buildEventIdempotencyKey(
+        SmsPurpose.APPOINTMENT_CREATED,
+        'APPOINTMENT',
+        appointment.id,
+        'PENDING_CONFIRMATION',
+        createdSmsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+      ),
+    });
+
     await this.audit.log('APPOINTMENT_CREATED_BY_HOSPITAL', 'APPOINTMENT', userId, appointment.id, {
       ...dto,
       appointmentReference: appointment.appointmentReference,
     });
+    await this.broadcastAppointmentChanged(appointment);
     return appointment;
   }
 
@@ -325,41 +525,187 @@ export class AppointmentsService {
         emergencyContactRelationship: true,
         availabilityStatus: true,
         eligibilityStatus: true,
+        nextEligibilityDate: true,
         donationHistory: { orderBy: { donatedAt: 'desc' }, take: 1, select: { donatedAt: true } },
       },
     });
   }
 
-  async listForUser(userId: string, role: Role, query: PaginationQueryDto) {
+  async listForUser(userId: string, role: Role, query: AppointmentQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
-      return this.prisma.appointment.findMany({
-        include: this.appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
-        skip,
-        take,
-      });
-    }
-
-    if (role === Role.DONOR) {
-      return this.prisma.appointment.findMany({
-        where: { donor: { userId } },
-        include: this.appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
-        skip,
-        take,
-      });
-    }
-
-    const hospital = await this.hospitalAccess.getHospitalForUser(userId);
+    const where = await this.whereForUser(userId, role, query);
     return this.prisma.appointment.findMany({
-      where: { hospitalId: hospital.id },
+      where,
       include: this.appointmentInclude,
       orderBy: { scheduledAt: 'asc' },
       skip,
       take,
     });
+  }
+
+  async summaryForUser(userId: string, role: Role, query: AppointmentQueryDto) {
+    const where = await this.whereForUser(userId, role, query);
+    const total = await this.prisma.appointment.count({ where });
+    return {
+      total,
+      todayStatusesIncluded: this.todayAppointmentStatuses,
+      dateField: 'scheduledAt',
+      dateFilter: query.dateFilter ?? null,
+      localDate: query.dateFilter === 'today'
+        ? query.localDate ?? this.toLocalDateString(new Date(), query.timezoneOffsetMinutes ?? 0)
+        : null,
+      timezoneOffsetMinutes: query.timezoneOffsetMinutes ?? 0,
+    };
+  }
+
+  async acceptAppointment(id: string, userId: string) {
+    const appointment = await this.getOwnedDonorAppointment(id, userId);
+    if (appointment.status !== AppointmentStatus.PENDING_CONFIRMATION) {
+      throw new BadRequestException('Only appointments pending confirmation can be accepted.');
+    }
+
+    const confirmedAt = new Date();
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.CONFIRMED,
+        confirmedAt,
+      },
+      include: this.appointmentInclude,
+    });
+
+    await this.notifyAppointmentParticipants(
+      appointment,
+      `Appointment accepted: ${appointment.appointmentReference}`,
+      `${appointment.donor.fullName} accepted appointment ${appointment.appointmentReference} at ${appointment.hospital.hospitalName}. Date and time: ${appointment.scheduledAt.toLocaleString()}.`,
+      SmsPurpose.APPOINTMENT_CREATED,
+    );
+    await this.audit.log('APPOINTMENT_ACCEPTED_BY_DONOR', 'APPOINTMENT', userId, id, {
+      appointmentReference: appointment.appointmentReference,
+      confirmedAt,
+    });
+    await this.broadcastAppointmentChanged(updated);
+
+    return updated;
+  }
+
+  async requestReschedule(id: string, userId: string, dto: RequestAppointmentRescheduleDto) {
+    const appointment = await this.getOwnedDonorAppointment(id, userId);
+    const reschedulableStatuses = new Set<AppointmentStatus>([
+      AppointmentStatus.PENDING_CONFIRMATION,
+      AppointmentStatus.CONFIRMED,
+      AppointmentStatus.RESCHEDULED,
+    ]);
+    if (!reschedulableStatuses.has(appointment.status)) {
+      throw new BadRequestException('This appointment cannot be rescheduled by the donor.');
+    }
+
+    const preferredAt = new Date(dto.preferredAt);
+    if (Number.isNaN(preferredAt.getTime())) {
+      throw new BadRequestException('Preferred appointment date and time is invalid.');
+    }
+
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.RESCHEDULE_REQUESTED,
+        reschedulePreferredAt: preferredAt,
+        rescheduleReason: dto.reason?.trim() || null,
+      },
+      include: this.appointmentInclude,
+    });
+
+    await this.notifyAppointmentParticipants(
+      appointment,
+      `Reschedule requested: ${appointment.appointmentReference}`,
+      `${appointment.donor.fullName} requested to reschedule appointment ${appointment.appointmentReference}. Current time: ${appointment.scheduledAt.toLocaleString()}. Preferred time: ${preferredAt.toLocaleString()}${dto.reason ? `. Reason: ${dto.reason}` : ''}.`,
+      SmsPurpose.APPOINTMENT_RESCHEDULED,
+    );
+    await this.audit.log('APPOINTMENT_RESCHEDULE_REQUESTED_BY_DONOR', 'APPOINTMENT', userId, id, {
+      appointmentReference: appointment.appointmentReference,
+      currentScheduledAt: appointment.scheduledAt,
+      preferredAt,
+      reason: dto.reason ?? null,
+    });
+    await this.broadcastAppointmentChanged(updated);
+
+    return updated;
+  }
+
+  async declineAppointment(id: string, userId: string, dto: DeclineAppointmentDto) {
+    const appointment = await this.getOwnedDonorAppointment(id, userId);
+    if (appointment.status !== AppointmentStatus.PENDING_CONFIRMATION) {
+      throw new BadRequestException('Only appointments pending confirmation can be declined.');
+    }
+
+    const declinedAt = new Date();
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.DECLINED,
+        declinedAt,
+        declineReason: dto.reason,
+        declineNotes: dto.notes?.trim() || null,
+      },
+      include: this.appointmentInclude,
+    });
+
+    await this.notifyAppointmentParticipants(
+      appointment,
+      `Appointment declined: ${appointment.appointmentReference}`,
+      `${appointment.donor.fullName} declined appointment ${appointment.appointmentReference}. Reason: ${dto.reason}${dto.notes ? `. Notes: ${dto.notes}` : ''}.`,
+      SmsPurpose.APPOINTMENT_CANCELLED,
+    );
+    await this.audit.log('APPOINTMENT_DECLINED_BY_DONOR', 'APPOINTMENT', userId, id, {
+      appointmentReference: appointment.appointmentReference,
+      declinedAt,
+      reason: dto.reason,
+      notes: dto.notes ?? null,
+    });
+    await this.broadcastAppointmentChanged(updated);
+
+    return updated;
+  }
+
+  async cancelAppointmentByDonor(id: string, userId: string) {
+    const appointment = await this.getOwnedDonorAppointment(id, userId);
+    const closedStatuses = new Set<AppointmentStatus>([
+      AppointmentStatus.COMPLETED,
+      AppointmentStatus.CANCELLED,
+      AppointmentStatus.DECLINED,
+      AppointmentStatus.MISSED,
+      AppointmentStatus.NO_SHOW,
+    ]);
+    if (closedStatuses.has(appointment.status)) {
+      throw new BadRequestException('This appointment can no longer be cancelled.');
+    }
+
+    const cancelledAt = new Date();
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.CANCELLED,
+        cancelledAt,
+        cancelledBy: 'Donor',
+        cancellationReason: 'Cancelled by donor',
+      },
+      include: this.appointmentInclude,
+    });
+
+    await this.notifyAppointmentParticipants(
+      appointment,
+      `Appointment cancelled: ${appointment.appointmentReference}`,
+      `${appointment.donor.fullName} cancelled appointment ${appointment.appointmentReference} at ${appointment.hospital.hospitalName}.`,
+      SmsPurpose.APPOINTMENT_CANCELLED,
+    );
+    await this.audit.log('APPOINTMENT_CANCELLED_BY_DONOR', 'APPOINTMENT', userId, id, {
+      appointmentReference: appointment.appointmentReference,
+      cancelledAt,
+    });
+    await this.broadcastAppointmentChanged(updated);
+
+    return updated;
   }
 
   async previewDonationNumber(id: string, userId: string, role: Role) {
@@ -408,10 +754,23 @@ export class AppointmentsService {
 
     const isBloodDonation = appointment.appointmentType === AppointmentType.BLOOD_DONATION;
     const shouldPostDonation = dto.status === AppointmentStatus.COMPLETED && isBloodDonation;
+    if (appointment.status === AppointmentStatus.CANCELLED && dto.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Cancelled appointments cannot be completed or posted to inventory.');
+    }
+    if (appointment.status === AppointmentStatus.DECLINED && dto.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Declined appointments cannot be completed or posted to inventory.');
+    }
+    if (appointment.status === AppointmentStatus.COMPLETED && dto.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Completed appointments cannot be cancelled.');
+    }
+    if (shouldPostDonation && !this.canCompleteAppointment(appointment.status)) {
+      throw new BadRequestException('Donation inventory can only be posted for scheduled, confirmed, donor-arrived, or in-progress appointments.');
+    }
     const unitsCollected = Number(dto.unitsCollected ?? appointment.unitsCollected ?? 0);
     const volumeCollectedMl = dto.volumeCollectedMl ?? appointment.volumeCollectedMl ?? 450;
 
     if (shouldPostDonation && !appointment.donationPostedAt) {
+      this.assertDonorCanAttendDonation(appointment.donor, appointment.scheduledAt);
       if (!Number.isFinite(unitsCollected) || unitsCollected <= 0) {
         throw new BadRequestException('Units collected is required before completing a blood donation appointment.');
       }
@@ -440,6 +799,8 @@ export class AppointmentsService {
         data: {
           status: dto.status,
           completedAt,
+          ...(dto.status === AppointmentStatus.CONFIRMED ? { confirmedAt: new Date() } : {}),
+          ...(dto.status === AppointmentStatus.CANCELLED ? { cancelledAt: new Date(), cancelledBy: 'Hospital Admin', cancellationReason: dto.donationNotes?.trim() || 'Cancelled by hospital' } : {}),
           ...(shouldPostDonation ? {
             unitsCollected,
             volumeCollectedMl,
@@ -549,6 +910,33 @@ export class AppointmentsService {
       appointmentReference: appointment.appointmentReference,
       donationNumber: updated.donationNumber,
     });
-    return this.prisma.appointment.findUnique({ where: { id: updated.id }, include: this.appointmentInclude });
+    const hospitalNotificationStatuses = new Set<AppointmentStatus>([
+      AppointmentStatus.CONFIRMED,
+      AppointmentStatus.RESCHEDULED,
+      AppointmentStatus.CANCELLED,
+    ]);
+    if (hospitalNotificationStatuses.has(dto.status)) {
+      const notificationTitle = dto.status === AppointmentStatus.RESCHEDULED
+        ? `Appointment rescheduled: ${appointment.appointmentReference}`
+        : dto.status === AppointmentStatus.CANCELLED
+          ? `Appointment cancelled: ${appointment.appointmentReference}`
+          : `Appointment confirmed: ${appointment.appointmentReference}`;
+      const notificationBody = dto.status === AppointmentStatus.RESCHEDULED
+        ? `${appointment.hospital.hospitalName} approved or proposed a new time for appointment ${appointment.appointmentReference}. Please review your appointment details.`
+        : dto.status === AppointmentStatus.CANCELLED
+          ? `${appointment.hospital.hospitalName} cancelled appointment ${appointment.appointmentReference}.`
+          : `${appointment.hospital.hospitalName} confirmed appointment ${appointment.appointmentReference}.`;
+      await this.notifyAppointmentParticipants(
+        appointment,
+        notificationTitle,
+        notificationBody,
+        dto.status === AppointmentStatus.CANCELLED ? SmsPurpose.APPOINTMENT_CANCELLED : SmsPurpose.APPOINTMENT_RESCHEDULED,
+      );
+    }
+    const finalAppointment = await this.prisma.appointment.findUnique({ where: { id: updated.id }, include: this.appointmentInclude });
+    if (finalAppointment) {
+      await this.broadcastAppointmentChanged(finalAppointment);
+    }
+    return finalAppointment;
   }
 }

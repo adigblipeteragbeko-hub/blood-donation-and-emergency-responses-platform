@@ -12,17 +12,57 @@ import {
 } from './dto/donor-clinical-record.dto';
 
 const STAFF_ROLES = new Set<Role>([
-  Role.BLOOD_BANK_OFFICER,
-  Role.HOSPITAL_STAFF,
-  Role.SUPER_ADMIN,
+  Role.HOSPITAL_ADMIN,
+  Role.HOSPITAL_ADMIN,
+  Role.ADMIN,
   Role.ADMIN,
 ]);
 
-const PLATFORM_REVIEW_ROLES: Role[] = [Role.ADMIN, Role.SUPER_ADMIN];
+const PLATFORM_REVIEW_ROLES: Role[] = [Role.ADMIN];
 
 const RISK_YES_KEYS = new Set([
   'q2','q3','q4','q5','q6','q7','q8','q9','q10','q12','q13','q14','q15','q16','q17','q18','q19','q20','q21','q22',
 ]);
+
+const DOCUMENT_TYPES = new Set(['Ghana Card', 'Passport', "Driver's License", 'Voter ID', 'NHIS', 'Other']);
+
+function normalizeDocumentNumber(idType?: string | null, idNumber?: string | null) {
+  const type = String(idType ?? '').trim();
+  const raw = String(idNumber ?? '').trim();
+  if (!raw) return raw;
+  if (type === 'Ghana Card') return raw.toUpperCase();
+  if (['Passport', "Driver's License", 'Voter ID', 'NHIS'].includes(type)) return raw.toUpperCase().replace(/\s+/g, '');
+  return raw.replace(/\s+/g, ' ');
+}
+
+function validateDocumentNumber(idType?: string | null, idNumber?: string | null) {
+  const type = String(idType ?? '').trim();
+  const value = normalizeDocumentNumber(type, idNumber);
+  if (!type && !value) return value;
+  if (!DOCUMENT_TYPES.has(type)) {
+    throw new BadRequestException('Select a supported identity document type.');
+  }
+  if (!value) {
+    throw new BadRequestException('Enter the selected identity document number.');
+  }
+  if (type === 'Ghana Card' && !/^GHA-[0-9]{9}-[0-9]$/.test(value)) {
+    throw new BadRequestException('Enter a valid Ghana Card format, for example GHA-123456789-0. This checks format only and does not verify authenticity.');
+  }
+  if (['Passport', "Driver's License", 'Voter ID', 'NHIS'].includes(type) && !/^[A-Z0-9-]{5,20}$/.test(value)) {
+    throw new BadRequestException(`${type} numbers should use 5 to 20 letters or numbers. Hyphens are allowed where printed on the document.`);
+  }
+  if (type === 'Other' && !/^[A-Za-z0-9 -]{3,30}$/.test(value)) {
+    throw new BadRequestException('Document numbers should use 3 to 30 letters, numbers, spaces, or hyphens.');
+  }
+  return value;
+}
+
+function maskDocumentNumber(value?: string | null) {
+  const text = String(value ?? '').trim();
+  if (!text) return text;
+  if (text.length <= 4) return '****';
+  return `${text.slice(0, 3)}****${text.slice(-2)}`;
+}
 
 @Injectable()
 export class DonorClinicalRecordsService {
@@ -40,6 +80,18 @@ export class DonorClinicalRecordsService {
 
   private json(value: unknown) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  }
+
+  private redactClinicalAuditValue(value: unknown): unknown {
+    if (!value || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map((item) => this.redactClinicalAuditValue(item));
+    const source = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(source).map(([key, entry]) => [
+        key,
+        key === 'idNumber' ? maskDocumentNumber(String(entry ?? '')) : this.redactClinicalAuditValue(entry),
+      ]),
+    );
   }
 
   private async donorForUser(userId: string) {
@@ -82,24 +134,27 @@ export class DonorClinicalRecordsService {
   }
 
   private async clinicalAudit(recordId: string, actorUserId: string | undefined, action: string, description: string, oldValue?: unknown, newValue?: unknown) {
+    const safeOldValue = this.redactClinicalAuditValue(oldValue);
+    const safeNewValue = this.redactClinicalAuditValue(newValue);
     await this.prisma.donorClinicalAuditTrail.create({
       data: {
         clinicalRecordId: recordId,
         actorUserId,
         action,
         description,
-        oldValue: this.json(oldValue) as object,
-        newValue: this.json(newValue) as object,
+        oldValue: this.json(safeOldValue) as object,
+        newValue: this.json(safeNewValue) as object,
       },
     });
-    await this.audit.log(action, 'DONOR_CLINICAL_RECORD', actorUserId, recordId, this.json(newValue), description, {
+    await this.audit.log(action, 'DONOR_CLINICAL_RECORD', actorUserId, recordId, this.json(safeNewValue), description, {
       module: 'DONOR_CLINICAL_RECORDS',
-      oldValue: this.json(oldValue),
-      newValue: this.json(newValue),
+      oldValue: this.json(safeOldValue),
+      newValue: this.json(safeNewValue),
     });
   }
 
   private recordPayload(dto: UpsertDonorClinicalDraftDto) {
+    const idNumber = dto.idType || dto.idNumber ? validateDocumentNumber(dto.idType, dto.idNumber) : dto.idNumber;
     return {
       selectedHospitalId: dto.selectedHospitalId,
       formDate: this.date(dto.formDate) ?? new Date(),
@@ -114,7 +169,7 @@ export class DonorClinicalRecordsService {
       addressOrWorkplace: dto.addressOrWorkplace,
       occupation: dto.occupation,
       idType: dto.idType,
-      idNumber: dto.idNumber,
+      idNumber,
       phoneNumber: dto.phoneNumber,
       email: dto.email,
       preferredContactMethod: dto.preferredContactMethod,

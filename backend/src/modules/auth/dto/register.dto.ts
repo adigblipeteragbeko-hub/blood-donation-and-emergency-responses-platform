@@ -11,8 +11,12 @@ export class RegisterDto {
   @MinLength(8)
   password!: string;
 
-  @IsIn(['DONOR', 'HOSPITAL_STAFF'])
-  role!: 'DONOR' | 'HOSPITAL_STAFF';
+  @IsIn(['DONOR', 'HOSPITAL_ADMIN'])
+  role!: 'DONOR' | 'HOSPITAL_ADMIN';
+
+  @IsOptional()
+  @IsIn(['EMAIL', 'SMS'])
+  verificationMethod?: 'EMAIL' | 'SMS';
 
   @IsOptional()
   @ValidateNested()

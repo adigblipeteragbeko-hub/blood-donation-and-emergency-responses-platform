@@ -1,24 +1,15 @@
-export type Role =
-  | 'SUPER_ADMIN'
-  | 'ADMIN'
-  | 'DONOR'
-  | 'HOSPITAL_STAFF'
-  | 'BLOOD_BANK_OFFICER';
+export type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_ADMIN';
 
-export const ADMIN_PORTAL_ROLES: Role[] = [
-  'SUPER_ADMIN',
-  'ADMIN',
-];
+export const ADMIN_PORTAL_ROLES: Role[] = ['ADMIN'];
 
-export const HOSPITAL_PORTAL_ROLES: Role[] = [
-  'HOSPITAL_STAFF',
-  'BLOOD_BANK_OFFICER',
-];
+export const HOSPITAL_PORTAL_ROLES: Role[] = ['HOSPITAL_ADMIN'];
 
 export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+  profileImageUrl?: string | null;
+  profileImageUpdatedAt?: string | null;
 }
 
 export interface AuthSession {

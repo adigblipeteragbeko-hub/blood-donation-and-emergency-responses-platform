@@ -7,15 +7,20 @@ import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { PermissionsGuard } from '../../common/rbac/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UsersService } from './users.service';
+import { AuthService } from '../auth/auth.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserAdminDto } from './dto/admin/create-user-admin.dto';
+import { ManualVerifyUserDto } from './dto/manual-verify-user.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.ADMIN, Role.SUPER_ADMIN)
+@Roles(Role.ADMIN)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get()
   @Permissions([PermissionCode.PLATFORM_ANALYTICS_VIEW], 'any')
@@ -24,19 +29,35 @@ export class UsersController {
   }
 
   @Post()
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
+  @Permissions([PermissionCode.HOSPITAL_ADMIN_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
   create(@Body() dto: CreateUserAdminDto, @CurrentUser() user: { id: string }) {
     return this.usersService.create(dto, user.id);
   }
 
   @Patch(':id')
-  @Permissions([PermissionCode.HOSPITAL_STAFF_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
+  @Permissions([PermissionCode.HOSPITAL_ADMIN_MANAGE, PermissionCode.RBAC_MANAGE], 'any')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
     @CurrentUser() user: { id: string },
   ) {
     return this.usersService.update(id, dto, user.id);
+  }
+
+  @Post(':id/resend-verification')
+  @Permissions([PermissionCode.RBAC_MANAGE, PermissionCode.PLATFORM_ANALYTICS_VIEW], 'any')
+  resendVerification(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.authService.adminResendVerificationCode(id, user.id);
+  }
+
+  @Post(':id/manual-verify')
+  @Permissions([PermissionCode.RBAC_MANAGE, PermissionCode.PLATFORM_ANALYTICS_VIEW], 'any')
+  manualVerify(
+    @Param('id') id: string,
+    @Body() dto: ManualVerifyUserDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.usersService.manualVerify(id, user.id, dto);
   }
 
   @Delete(':id')

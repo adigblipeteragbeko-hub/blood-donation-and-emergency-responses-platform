@@ -57,7 +57,7 @@ Use this simplified structure when explaining the project quickly:
 ```txt
 User
   -> Donor
-  -> Hospital Staff / Admin roles
+  -> Hospital Admin / Admin roles
 
 Hospital
   -> BloodRequest

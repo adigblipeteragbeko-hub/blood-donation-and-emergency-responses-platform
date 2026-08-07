@@ -21,7 +21,7 @@ export default function RequestPage() {
     );
   }
 
-  if (user.role === 'HOSPITAL_STAFF') {
+  if (user.role === 'HOSPITAL_ADMIN') {
     return <Navigate to="/hospital/request-blood" replace />;
   }
 
@@ -31,7 +31,7 @@ export default function RequestPage() {
 
   return (
     <section className="card mx-auto max-w-2xl space-y-4 text-center">
-      <h1 className="text-2xl font-bold text-primary">Hospital Staff Only</h1>
+      <h1 className="text-2xl font-bold text-primary">Hospital Admin Only</h1>
       <p className="text-sm text-muted">Blood request creation is available to authenticated hospital staff accounts.</p>
       <Link className="btn-primary" to="/dashboard/donor">
         Go To Donor Dashboard

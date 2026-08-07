@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import api from '../services/api';
+import { useTheme } from '../hooks/useTheme';
+import { ThemePreference } from '../utils/theme';
 
 type ProfileVisibility = 'PRIVATE' | 'PUBLIC';
 
@@ -12,6 +14,7 @@ const emptySettings = {
 };
 
 export default function SettingsPage() {
+  const { preference, setPreference } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -72,6 +75,30 @@ export default function SettingsPage() {
       {saved ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">Settings saved.</p> : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
       <form className="space-y-3" onSubmit={submit} autoComplete="off">
+        <div className="rounded-2xl border border-slate-100 p-4">
+          <h2 className="text-lg font-bold text-primary">Appearance</h2>
+          <p className="mt-1 text-sm text-muted">Choose how the platform looks on this device.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Appearance">
+            {[
+              { value: 'light', label: 'Light', description: 'Use the light platform appearance.' },
+              { value: 'dark', label: 'Dark', description: 'Use a darker appearance designed for low-light environments.' },
+              { value: 'system', label: 'System', description: 'Automatically match your device appearance.' },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="radio"
+                aria-checked={preference === item.value}
+                className={`${preference === item.value ? 'border-primary bg-red-50 text-primary' : 'border-slate-200 bg-white text-slate-700'} rounded-2xl border p-3 text-left transition hover:border-red-200`}
+                onClick={() => setPreference(item.value as ThemePreference)}
+              >
+                <span className="block font-black">{item.label}</span>
+                <span className="mt-1 block text-xs text-muted">{item.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-semibold">
             Current Password

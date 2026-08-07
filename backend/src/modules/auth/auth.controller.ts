@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -17,6 +18,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { UpdateUserProfileImageDto } from './dto/update-user-profile-image.dto';
 import { JwtAccessGuard } from './guards/jwt-access.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -96,6 +98,12 @@ export class AuthController {
   }
 
   @UseGuards(JwtAccessGuard)
+  @Patch('profile-image')
+  updateProfileImage(@CurrentUser() user: { id: string }, @Body() dto: UpdateUserProfileImageDto) {
+    return this.authService.updateProfileImage(user.id, dto.profileImageUrl);
+  }
+
+  @UseGuards(JwtAccessGuard)
   @Post('me')
   me(@Req() req: Request & { user?: Record<string, unknown> }) {
     if (!req.user) {
@@ -108,12 +116,26 @@ export class AuthController {
       role,
       isActive,
       emailVerified,
+      profileImageUrl,
+      profileImageUpdatedAt,
       failedLoginCount,
       lockedUntil,
       createdAt,
       updatedAt,
     } = req.user;
 
-    return { id, email, role, isActive, emailVerified, failedLoginCount, lockedUntil, createdAt, updatedAt };
+    return {
+      id,
+      email,
+      role,
+      isActive,
+      emailVerified,
+      profileImageUrl,
+      profileImageUpdatedAt,
+      failedLoginCount,
+      lockedUntil,
+      createdAt,
+      updatedAt,
+    };
   }
 }

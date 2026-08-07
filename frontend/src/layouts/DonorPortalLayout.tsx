@@ -1,9 +1,16 @@
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner';
 import { AppIcon } from '../components/ui/AppIcon';
+import { AccountIdentityMenu } from '../components/AccountIdentityMenu';
+import { useAuth } from '../hooks/useAuth';
+import api from '../services/api';
+import { buildAccountIdentity } from '../utils/account-identity';
+import { rememberAccount } from '../utils/remembered-accounts';
 
 const donorLinks = [
   { to: '/donor/dashboard', label: 'Dashboard', icon: 'dashboard' as const },
+  { to: '/donor/assistant', label: 'Assistant', icon: 'notification' as const },
   { to: '/donor/profile', label: 'Profile', icon: 'users' as const },
   { to: '/donor/card', label: 'Donor Card', icon: 'heart' as const },
   { to: '/donor/eligibility', label: 'Eligibility', icon: 'form' as const },
@@ -21,9 +28,43 @@ const donorLinks = [
 ];
 
 export function DonorPortalLayout() {
+  const { user, logout } = useAuth();
+  const [profile, setProfile] = useState<Parameters<typeof buildAccountIdentity>[0]['donorProfile']>(null);
+  const identity = useMemo(() => buildAccountIdentity({ user, donorProfile: profile }), [profile, user]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadProfile = () => api.get('/donors/profile')
+      .then((response) => {
+        if (mounted) setProfile(response.data?.data ?? response.data ?? null);
+      })
+      .catch(() => {
+        if (mounted) setProfile(null);
+      });
+    void loadProfile();
+    const onProfileImage = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail && mounted) {
+        setProfile((current) => ({ ...(current ?? {}), ...detail }));
+      } else {
+        void loadProfile();
+      }
+    };
+    window.addEventListener('donor-profile-image-updated', onProfileImage);
+    return () => {
+      mounted = false;
+      window.removeEventListener('donor-profile-image-updated', onProfileImage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (identity) rememberAccount(identity);
+  }, [identity]);
+
   return (
     <section className="grid gap-4 overflow-x-hidden pt-4 md:grid-cols-[250px_minmax(0,1fr)] md:pt-6 xl:grid-cols-[238px_minmax(0,1fr)]">
       <aside className="card h-fit space-y-2 p-4">
+        <AccountIdentityMenu identity={identity} onLogout={logout} />
         <h2 className="flex items-center gap-2 text-base font-bold text-primary">
           <AppIcon name="heart" className="h-5 w-5" />
           Donor Menu
@@ -44,7 +85,7 @@ export function DonorPortalLayout() {
         </nav>
       </aside>
 
-      <div className="min-w-0 space-y-5 pt-2 md:pt-3">
+      <div className="page-content-safe-bottom min-w-0 space-y-5 pt-2 md:pt-3">
         <LiveEmergencyAlertBanner />
         <Outlet />
       </div>

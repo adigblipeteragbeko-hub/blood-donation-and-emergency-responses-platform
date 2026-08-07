@@ -13,7 +13,7 @@ import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 export class DonorResponsesController {
   constructor(private readonly bloodRequestsService: BloodRequestsService) {}
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HOSPITAL_STAFF, Role.HOSPITAL_STAFF)
+  @Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
   @Patch(':id')
   update(
     @Param('id') id: string,

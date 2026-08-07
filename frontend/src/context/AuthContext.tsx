@@ -106,6 +106,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const onProfileImageUpdated = (event: Event) => {
+      const profileImageUrl = (event as CustomEvent<{ profileImageUrl?: string | null }>).detail?.profileImageUrl ?? null;
+      setUser((current) => {
+        if (!current) return current;
+        const next = { ...current, profileImageUrl };
+        localStorage.setItem('user', JSON.stringify(next));
+        return next;
+      });
+    };
+
+    window.addEventListener('account-profile-image-updated', onProfileImageUpdated);
+    return () => {
+      window.removeEventListener('account-profile-image-updated', onProfileImageUpdated);
+    };
+  }, []);
+
   const login = async (email: string, password: string) => {
     const response = await api.post('/auth/login', { email, password });
     const payload = unwrapApiResponse<AuthSession>(response.data);

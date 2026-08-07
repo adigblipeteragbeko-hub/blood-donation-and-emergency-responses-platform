@@ -8,7 +8,7 @@ import { ReportFilterDto } from './dto/report-filter.dto';
 import { ReportsService } from './reports.service';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.HOSPITAL_STAFF)
+@Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}

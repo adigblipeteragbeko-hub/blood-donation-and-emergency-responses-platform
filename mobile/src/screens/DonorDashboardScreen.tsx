@@ -6,6 +6,7 @@ import { AppButton } from '../components/AppButton';
 import { AppCard } from '../components/AppCard';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
+import { SmartAvatar } from '../components/SmartAvatar';
 import { formatBloodGroup } from '../constants/bloodGroups';
 import { colors } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
@@ -91,12 +92,18 @@ export function DonorDashboardScreen() {
             <Text style={styles.title}>{greeting()}, {donorFirstName(profile)}</Text>
             <Text style={styles.muted}>Thank you for being a lifesaving donor.</Text>
           </View>
+          <SmartAvatar name={donorDisplayName(profile)} email={profile?.email ?? profile?.user?.email} src={profile?.profileImageUrl} size="md" />
           <AppButton title="Logout" variant="outline" onPress={() => void logout()} style={{ minHeight: 42 }} />
         </View>
         <Text style={styles.ref}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
       </AppCard>
 
       {message ? <Text style={styles.warning}>{message}</Text> : null}
+      {eligibility && eligibility.canSetAvailable === false ? (
+        <Text style={styles.warning}>
+          {eligibility.reason ?? 'Complete your Health Eligibility Form and hospital review before becoming available for emergency matching.'}
+        </Text>
+      ) : null}
 
       <AppCard>
         <Text style={styles.sectionTitle}>Today's Status</Text>

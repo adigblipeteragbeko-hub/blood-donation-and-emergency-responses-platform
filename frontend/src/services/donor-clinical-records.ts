@@ -19,6 +19,13 @@ export type HealthAnswer = {
   details?: string;
 };
 
+export type HealthAnswerPayload = {
+  questionKey: string;
+  questionText: string;
+  answer: boolean;
+  details?: string | null;
+};
+
 export type DonorClinicalRecord = {
   id: string;
   status: ClinicalStatus;
@@ -71,7 +78,7 @@ export type DonorClinicalRecord = {
   auditTrails?: Array<{ id: string; action: string; description?: string; createdAt: string; actor?: { email: string; role: string } | null }>;
 };
 
-export type ClinicalDraftPayload = Record<string, unknown> & { healthAnswers?: HealthAnswer[] };
+export type ClinicalDraftPayload = Record<string, unknown> & { healthAnswers?: HealthAnswerPayload[] };
 
 export async function getMyClinicalRecords() {
   return unwrap<{

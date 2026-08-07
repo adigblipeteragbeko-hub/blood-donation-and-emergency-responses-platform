@@ -16,3 +16,6 @@ coverage/
 # Local debug artifacts
 .playwright-mcp/
 docx_extracted.txt
+.env
+.env.*
+!.env.example

@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
 import { Screen } from '../components/Screen';
+import { SmartAvatar } from '../components/SmartAvatar';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatBloodGroup } from '../constants/bloodGroups';
 import { colors } from '../constants/colors';
@@ -44,9 +45,14 @@ export function ProfileScreen() {
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
       <AppCard style={styles.hero}>
-        <Text style={styles.kicker}>Donor Profile</Text>
-        <Text style={styles.title}>{donorDisplayName(profile) || 'Loading donor...'}</Text>
-        <Text style={styles.muted}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
+        <View style={styles.profileHero}>
+          <SmartAvatar name={donorDisplayName(profile)} email={donorEmail(profile)} src={profile?.profileImageUrl} size="lg" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.kicker}>Donor Profile</Text>
+            <Text style={styles.title}>{donorDisplayName(profile) || 'Loading donor...'}</Text>
+            <Text style={styles.muted}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
+          </View>
+        </View>
       </AppCard>
 
       <AppCard>
@@ -92,6 +98,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   hero: { backgroundColor: colors.primarySoft, borderColor: '#fecaca' },
+  profileHero: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontSize: 12 },
   title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
   muted: { color: colors.muted, lineHeight: 20 },

@@ -4,6 +4,8 @@ import { AppCard } from '../components/AppCard';
 import { Screen } from '../components/Screen';
 import { colors } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
+import { ThemePreference } from '../theme/colors';
 
 export function HealthFormScreen() {
   return (
@@ -24,11 +26,30 @@ export function HealthFormScreen() {
 
 export function SettingsScreen() {
   const { logout } = useAuth();
+  const { preference, setPreference } = useTheme();
   return (
     <Screen>
       <AppCard>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.muted}>Mobile settings are intentionally focused on privacy and safe access.</Text>
+      </AppCard>
+      <AppCard>
+        <Text style={styles.section}>Appearance</Text>
+        <Text style={styles.detail}>Choose how the donor mobile app looks on this device.</Text>
+        <View style={styles.themeGrid}>
+          {[
+            { value: 'light', label: 'Light', description: 'Use the light platform appearance.' },
+            { value: 'dark', label: 'Dark', description: 'Use a darker appearance for low-light environments.' },
+            { value: 'system', label: 'System', description: 'Match your device appearance automatically.' },
+          ].map((item) => (
+            <AppButton
+              key={item.value}
+              title={`${preference === item.value ? 'Selected: ' : ''}${item.label}`}
+              variant={preference === item.value ? 'primary' : 'outline'}
+              onPress={() => void setPreference(item.value as ThemePreference)}
+            />
+          ))}
+        </View>
       </AppCard>
       <AppCard>
         <Text style={styles.section}>Account Settings</Text>
@@ -97,4 +118,5 @@ const styles = StyleSheet.create({
   textArea: { minHeight: 110, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 12, backgroundColor: '#fff', color: colors.ink },
   faq: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, gap: 4 },
   faqQuestion: { color: colors.primaryDark, fontWeight: '900' },
+  themeGrid: { gap: 10, marginTop: 10 },
 });

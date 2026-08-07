@@ -3,9 +3,50 @@
 @tailwind utilities;
 
 :root {
-  color: #1f2937;
-  background: #ffffff;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-tint: #fef2f2;
+  --text-primary: #1f2937;
+  --text-secondary: #64748b;
+  --border: #e5e7eb;
+  --brand: #c8102e;
+  --brand-hover: #991b1b;
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --focus: #fb7185;
+  --disabled: #94a3b8;
+  --shadow: rgba(15, 23, 42, 0.12);
+  color: var(--text-primary);
+  background: var(--bg-primary);
   font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+
+:root[data-theme='dark'] {
+  --bg-primary: #111827;
+  --bg-secondary: #0f172a;
+  --surface: #1f2937;
+  --surface-muted: #263244;
+  --surface-tint: #3b111b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --border: #334155;
+  --brand: #fb365b;
+  --brand-hover: #ff6b83;
+  --success: #34d399;
+  --success-soft: #0f2f24;
+  --warning: #fbbf24;
+  --warning-soft: #33260b;
+  --danger: #fb7185;
+  --danger-soft: #3b111b;
+  --focus: #fb7185;
+  --disabled: #64748b;
+  --shadow: rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -27,8 +68,8 @@ body {
   margin: 0;
   background:
     radial-gradient(circle at top, rgba(248, 113, 113, 0.06), transparent 28rem),
-    #ffffff;
-  color: #1f2937;
+    var(--bg-primary);
+  color: var(--text-primary);
   transition:
     background-color 220ms ease,
     color 220ms ease;
@@ -84,13 +125,21 @@ main > * {
 
 input::placeholder,
 textarea::placeholder {
-  color: #4b5563;
+  color: var(--text-secondary);
   opacity: 1;
   font-weight: 600;
 }
 
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 70%, transparent);
+  outline-offset: 3px;
+}
+
 .card {
   @apply rounded-xl border border-gray-200 bg-white p-5 shadow-sm;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-primary);
   max-width: 100%;
   min-width: 0;
 }
@@ -106,6 +155,7 @@ textarea::placeholder {
 
 .legacy-panel {
   @apply rounded-xl border border-red-200 bg-white/95 p-6;
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
   box-shadow:
     0 30px 60px rgba(15, 23, 42, 0.12),
     0 12px 24px rgba(200, 16, 46, 0.08);
@@ -118,6 +168,119 @@ textarea::placeholder {
 
 .legacy-input {
   @apply w-full rounded border border-gray-300 bg-white px-3 py-2;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.theme-surface {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+:root[data-theme='dark'] body {
+  background:
+    radial-gradient(circle at top, rgba(251, 54, 91, 0.12), transparent 28rem),
+    var(--bg-primary);
+}
+
+:root[data-theme='dark'] .bg-white,
+:root[data-theme='dark'] .bg-white\/90,
+:root[data-theme='dark'] .bg-white\/95 {
+  background-color: var(--surface) !important;
+}
+
+:root[data-theme='dark'] .bg-slate-50,
+:root[data-theme='dark'] .bg-gray-50,
+:root[data-theme='dark'] .bg-slate-100,
+:root[data-theme='dark'] .bg-gray-100 {
+  background-color: var(--surface-muted) !important;
+}
+
+:root[data-theme='dark'] .bg-red-50,
+:root[data-theme='dark'] .bg-red-50\/40,
+:root[data-theme='dark'] .bg-red-100 {
+  background-color: var(--surface-tint) !important;
+}
+
+:root[data-theme='dark'] .bg-green-50,
+:root[data-theme='dark'] .bg-emerald-50,
+:root[data-theme='dark'] .bg-green-100,
+:root[data-theme='dark'] .bg-emerald-100 {
+  background-color: var(--success-soft) !important;
+}
+
+:root[data-theme='dark'] .bg-amber-50,
+:root[data-theme='dark'] .bg-yellow-50,
+:root[data-theme='dark'] .bg-amber-100,
+:root[data-theme='dark'] .bg-yellow-100 {
+  background-color: var(--warning-soft) !important;
+}
+
+:root[data-theme='dark'] .text-slate-950,
+:root[data-theme='dark'] .text-slate-900,
+:root[data-theme='dark'] .text-slate-800,
+:root[data-theme='dark'] .text-gray-900,
+:root[data-theme='dark'] .text-gray-800,
+:root[data-theme='dark'] .text-navy {
+  color: var(--text-primary) !important;
+}
+
+:root[data-theme='dark'] .text-slate-700,
+:root[data-theme='dark'] .text-slate-600,
+:root[data-theme='dark'] .text-slate-500,
+:root[data-theme='dark'] .text-gray-700,
+:root[data-theme='dark'] .text-gray-600,
+:root[data-theme='dark'] .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+:root[data-theme='dark'] .border-slate-100,
+:root[data-theme='dark'] .border-slate-200,
+:root[data-theme='dark'] .border-gray-100,
+:root[data-theme='dark'] .border-gray-200,
+:root[data-theme='dark'] .border-gray-300 {
+  border-color: var(--border) !important;
+}
+
+:root[data-theme='dark'] .text-red-700,
+:root[data-theme='dark'] .text-red-800,
+:root[data-theme='dark'] .text-primary {
+  color: var(--brand) !important;
+}
+
+:root[data-theme='dark'] .text-green-700,
+:root[data-theme='dark'] .text-emerald-700 {
+  color: var(--success) !important;
+}
+
+:root[data-theme='dark'] .text-amber-700,
+:root[data-theme='dark'] .text-amber-800,
+:root[data-theme='dark'] .text-yellow-700,
+:root[data-theme='dark'] .text-yellow-800 {
+  color: var(--warning) !important;
+}
+
+:root[data-theme='dark'] table,
+:root[data-theme='dark'] thead,
+:root[data-theme='dark'] tbody,
+:root[data-theme='dark'] tr,
+:root[data-theme='dark'] th,
+:root[data-theme='dark'] td,
+:root[data-theme='dark'] .leaflet-popup-content-wrapper,
+:root[data-theme='dark'] .leaflet-popup-tip {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+:root[data-theme='dark'] input,
+:root[data-theme='dark'] textarea,
+:root[data-theme='dark'] select {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
 }
 
 .live-map-marker {
@@ -1061,6 +1224,22 @@ textarea:focus-visible {
 
 .smart-blood-marker-blue {
   background: #2563eb;
+}
+
+.page-content-safe-bottom {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .page-content-safe-bottom {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 767px) {
+  .page-content-safe-bottom {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
 }
 
 @keyframes smartBloodPulse {

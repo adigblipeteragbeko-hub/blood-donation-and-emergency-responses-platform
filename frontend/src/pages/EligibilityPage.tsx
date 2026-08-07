@@ -61,7 +61,7 @@ export default function EligibilityPage() {
         Review status: <span className="font-semibold">{formatStatus(status?.reviewStatus)}</span>
       </div>
       <div className="rounded-md border border-gray-200 p-3 text-sm text-gray-700">
-        Blood group: <span className="font-semibold">{status?.bloodGroupConfirmed ? status?.bloodGroup : 'Pending hospital confirmation'}</span>
+        Blood Group: <span className="font-semibold">{status?.bloodGroupConfirmed ? status?.bloodGroup : 'Pending hospital confirmation'}</span>
       </div>
       <div className="rounded-md border border-gray-200 p-3 text-sm text-gray-700">
         Last donation date: <span className="font-semibold">{formatDate(status?.lastDonationDate)}</span>

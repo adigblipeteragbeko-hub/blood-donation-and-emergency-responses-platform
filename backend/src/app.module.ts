@@ -15,7 +15,11 @@ import { WebsiteManagementModule } from './modules/website-management/website-ma
 import { AdminDashboardModule } from './modules/admin-dashboard/admin-dashboard.module';
 import { MapsModule } from './modules/maps/maps.module';
 import { DonorClinicalRecordsModule } from './modules/donor-clinical-records/donor-clinical-records.module';
-import { SmsModule } from './common/sms/sms.module';
+import { SmsModule } from './modules/sms/sms.module';
+import { AdminDonorCommunicationsModule } from './modules/admin-donor-communications/admin-donor-communications.module';
+import { DonorRemindersModule } from './modules/donor-reminders/donor-reminders.module';
+import { AiIntelligenceModule } from './modules/ai-intelligence/ai-intelligence.module';
+import { AssistantModule } from './modules/assistant/assistant.module';
 import { CoreModule } from './core/core.module';
 import { HealthController } from './health.controller';
 
@@ -38,6 +42,10 @@ import { HealthController } from './health.controller';
     MapsModule,
     DonorClinicalRecordsModule,
     SmsModule,
+    AdminDonorCommunicationsModule,
+    DonorRemindersModule,
+    AiIntelligenceModule,
+    AssistantModule,
   ],
   controllers: [HealthController],
 })

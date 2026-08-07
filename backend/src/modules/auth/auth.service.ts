@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Role } from '@prisma/client';
+import { EmailVerificationDeliveryStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes, randomInt } from 'crypto';
 import { PrismaService } from '../../prisma.service';
@@ -13,6 +13,7 @@ import { SecurityEventsService } from '../../common/security/security-events.ser
 import { GeocodingService } from '../../common/maps/geocoding.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import { generateDonorReference } from '../../common/utils/donor-reference';
+import { SmsService } from '../sms/sms.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -27,6 +28,8 @@ type SafeUser = {
   role: Role;
   isActive: boolean;
   emailVerified: boolean;
+  profileImageUrl?: string | null;
+  profileImageUpdatedAt?: Date | null;
   failedLoginCount: number;
   lockedUntil: Date | null;
   createdAt: Date;
@@ -37,6 +40,14 @@ type RequestMetadata = {
   ipAddress?: string | null;
   userAgent?: string | null;
 };
+
+type VerificationRequestMetadata = RequestMetadata & {
+  requestedByUserId?: string | null;
+  createdByAdminId?: string | null;
+  method?: VerificationDeliveryMethod;
+};
+
+type VerificationDeliveryMethod = 'EMAIL' | 'SMS';
 
 @Injectable()
 export class AuthService {
@@ -51,6 +62,7 @@ export class AuthService {
     private readonly securityEvents: SecurityEventsService,
     private readonly geocoding: GeocodingService,
     private readonly realtime: RealtimeService,
+    private readonly smsService: SmsService,
   ) {}
 
   private async buildHospitalRegistrationCode() {
@@ -89,7 +101,7 @@ export class AuthService {
     if (payload.role === 'DONOR' && !payload.donorProfile) {
       throw new BadRequestException('Donor profile details are required');
     }
-    if (payload.role === 'HOSPITAL_STAFF' && !payload.hospitalProfile) {
+    if (payload.role === 'HOSPITAL_ADMIN' && !payload.hospitalProfile) {
       throw new BadRequestException('Hospital profile details are required');
     }
 
@@ -147,7 +159,7 @@ export class AuthService {
         });
       }
 
-      if (payload.role === 'HOSPITAL_STAFF' && payload.hospitalProfile) {
+      if (payload.role === 'HOSPITAL_ADMIN' && payload.hospitalProfile) {
         if (!payload.hospitalProfile.city?.trim() || !payload.hospitalProfile.region?.trim()) {
           throw new BadRequestException('City and region are required for hospital emergency map coordination.');
         }
@@ -191,12 +203,8 @@ export class AuthService {
       return createdUser;
     });
 
-    void this.createAndSendVerificationCode(user.id, user.email).catch(() => {
-      this.alertsService.notifyCritical('EMAIL_DELIVERY_FAILED', {
-        userId: user.id,
-        email: user.email,
-      });
-    });
+    const verificationMethod = this.resolveVerificationMethod(payload.verificationMethod, payload.role);
+    const delivery = await this.createAndSendVerificationCode(user.id, user.email, { method: verificationMethod });
     await this.auditService.log('REGISTER', 'USER', user.id, user.id);
     if (payload.role === 'DONOR') {
       await this.activityService.log({
@@ -228,9 +236,12 @@ export class AuthService {
     }
 
     return {
-      message: 'Registration successful. A verification code has been sent to your email.',
+      message: `Registration successful. Verification code sent by ${delivery.methodLabel}.`,
       requiresEmailVerification: true,
       email: user.email,
+      verificationMethod: delivery.method,
+      maskedDestination: delivery.maskedDestination,
+      expiresInMinutes: this.verificationTtlMinutes,
     };
   }
 
@@ -327,7 +338,7 @@ export class AuthService {
     }
 
     if (user.emailVerified) {
-      return { message: 'Email already verified' };
+      return { message: 'This account is already verified.' };
     }
 
     const codeHash = createHash('sha256').update(payload.code).digest('hex');
@@ -340,8 +351,24 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!token || token.codeHash !== codeHash) {
-      throw new BadRequestException('Invalid or expired verification code');
+    if (!token) {
+      await this.auditService.log('VERIFICATION_EXPIRED', 'USER', user.id, user.id, undefined, 'Verification failed because the code was expired or missing.', { module: 'AUTH' });
+      throw new BadRequestException('This verification code has expired. Request a new code.');
+    }
+
+    if (token.attempts >= this.maxVerificationAttempts) {
+      throw new BadRequestException('Too many verification attempts. Please wait before trying again.');
+    }
+
+    if (token.codeHash !== codeHash) {
+      await this.prisma.emailVerificationToken.update({
+        where: { id: token.id },
+        data: { attempts: { increment: 1 } as any },
+      });
+      await this.auditService.log('VERIFICATION_FAILED', 'USER', user.id, user.id, {
+        attemptsUsed: token.attempts + 1,
+      }, 'Verification failed with an incorrect code.', { module: 'AUTH' });
+      throw new BadRequestException('The verification code is incorrect.');
     }
 
     await this.prisma.$transaction([
@@ -351,11 +378,17 @@ export class AuthService {
       }),
       this.prisma.user.update({
         where: { id: user.id },
-        data: { emailVerified: true },
+        data: { emailVerified: true, verifiedAt: new Date() },
+      }),
+      this.prisma.emailVerificationAttempt.updateMany({
+        where: { userId: user.id, status: EmailVerificationDeliveryStatus.SENT },
+        data: { status: EmailVerificationDeliveryStatus.VERIFIED, verifiedAt: new Date() },
       }),
     ]);
 
-    await this.auditService.log('EMAIL_VERIFIED', 'USER', user.id, user.id);
+    await this.auditService.log('VERIFICATION_SUCCEEDED', 'USER', user.id, user.id, {
+      deliveryMethod: token.deliveryMethod,
+    }, 'Account verification succeeded.', { module: 'AUTH' });
 
     return { message: 'Email verified successfully. You can now login.' };
   }
@@ -363,7 +396,25 @@ export class AuthService {
   async resendVerificationCode(payload: ResendVerificationDto) {
     const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
     if (!user || user.emailVerified) {
-      return { message: 'If verification is pending, a new code has been sent.' };
+      return { message: user?.emailVerified ? 'This account is already verified.' : 'If verification is pending, a new code has been sent.' };
+    }
+
+    const now = new Date();
+    const cooldownSince = new Date(now.getTime() - this.resendCooldownSeconds * 1000);
+    const recentAttempt = await this.prisma.emailVerificationAttempt.findFirst({
+      where: { userId: user.id, createdAt: { gt: cooldownSince } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (recentAttempt) {
+      throw new BadRequestException(`Please wait ${this.resendCooldownSeconds} seconds before requesting another code.`);
+    }
+
+    const hourlyAttempts = await this.prisma.emailVerificationAttempt.count({
+      where: { userId: user.id, createdAt: { gt: new Date(now.getTime() - 60 * 60_000) } },
+    });
+    if (hourlyAttempts >= this.maxResendsPerHour) {
+      throw new BadRequestException('Too many verification attempts. Please wait before trying again.');
     }
 
     await this.prisma.emailVerificationToken.updateMany({
@@ -371,11 +422,21 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    await this.createAndSendVerificationCode(user.id, user.email);
+    const method = this.resolveVerificationMethod(payload.method, user.role);
+    const delivery = await this.createAndSendVerificationCode(user.id, user.email, { requestedByUserId: user.id, method });
 
-    await this.auditService.log('EMAIL_VERIFICATION_CODE_RESENT', 'USER', user.id, user.id);
+    await this.auditService.log(payload.method ? 'VERIFICATION_METHOD_SWITCHED' : 'VERIFICATION_CODE_RESENT', 'USER', user.id, user.id, {
+      deliveryMethod: delivery.method,
+      maskedDestination: delivery.maskedDestination,
+    }, 'Verification code was requested again.', { module: 'AUTH' });
 
-    return { message: 'If verification is pending, a new code has been sent.' };
+    return {
+      message: `Verification code sent by ${delivery.methodLabel}.`,
+      verificationMethod: delivery.method,
+      maskedDestination: delivery.maskedDestination,
+      expiresInMinutes: this.verificationTtlMinutes,
+      resendCooldownSeconds: this.resendCooldownSeconds,
+    };
   }
 
   async logout(userId: string, refreshToken: string, metadata?: RequestMetadata) {
@@ -542,6 +603,35 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
+  private validateProfileImage(profileImageUrl: string) {
+    if (
+      profileImageUrl &&
+      !profileImageUrl.startsWith('data:image/jpeg;base64,') &&
+      !profileImageUrl.startsWith('data:image/png;base64,') &&
+      !profileImageUrl.startsWith('data:image/webp;base64,') &&
+      !/^https?:\/\//i.test(profileImageUrl)
+    ) {
+      throw new BadRequestException('Profile image must be a JPG, PNG, WebP, or secure hosted image URL.');
+    }
+  }
+
+  async updateProfileImage(userId: string, profileImageUrl: string) {
+    this.validateProfileImage(profileImageUrl);
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        profileImageUrl: profileImageUrl || null,
+        profileImageUpdatedAt: profileImageUrl ? new Date() : null,
+      },
+    });
+
+    await this.auditService.log('USER_PROFILE_IMAGE_UPDATED', 'USER', userId, userId, {
+      hasImage: Boolean(profileImageUrl),
+    });
+
+    return this.toSafeUser(user);
+  }
+
   private async generateTokens(userId: string, role: Role) {
     const accessToken = await this.jwtService.signAsync(
       { sub: userId, role },
@@ -624,29 +714,200 @@ export class AuthService {
     return `${randomInt(0, 1_000_000)}`.padStart(6, '0');
   }
 
-  private async createAndSendVerificationCode(userId: string, email: string) {
+  async adminResendVerificationCode(userId: string, actorUserId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestException('User account not found.');
+    }
+    if (user.emailVerified) {
+      return { message: 'This account is already verified.' };
+    }
+
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    await this.createAndSendVerificationCode(user.id, user.email, { createdByAdminId: actorUserId, method: 'EMAIL' });
+    await this.auditService.log('ADMIN_EMAIL_VERIFICATION_RESENT', 'USER', actorUserId, user.id, {
+      maskedEmail: this.maskEmail(user.email),
+    });
+
+    return { message: 'Verification email has been queued for delivery.' };
+  }
+
+  async createAndSendVerificationCode(userId: string, email: string, metadata?: VerificationRequestMetadata) {
+    const method = this.resolveVerificationMethod(metadata?.method, undefined);
     const code = this.generateVerificationCode();
     const codeHash = createHash('sha256').update(code).digest('hex');
-    const ttlMinutes = this.config.get<number>('security.emailVerificationTtlMinutes', 10);
+    const ttlMinutes = this.verificationTtlMinutes;
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+    const destination = await this.resolveVerificationDestination(userId, email, method);
 
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
     await this.prisma.emailVerificationToken.create({
-      data: { userId, codeHash, expiresAt },
+      data: { userId, codeHash, expiresAt, deliveryMethod: method } as any,
+    });
+
+    const attempt = await this.prisma.emailVerificationAttempt.create({
+      data: {
+        userId,
+        email,
+        deliveryMethod: method,
+        maskedDestination: destination.masked,
+        status: EmailVerificationDeliveryStatus.PENDING,
+        requestedByUserId: metadata?.requestedByUserId ?? undefined,
+        createdByAdminId: metadata?.createdByAdminId ?? undefined,
+        ipAddress: metadata?.ipAddress ?? undefined,
+        userAgent: metadata?.userAgent ?? undefined,
+        expiresAt,
+      },
     });
 
     try {
-      await this.mailService.sendEmail({
-        to: email,
-        subject: 'Verify your Blood Response account',
-        text: `Your verification code is ${code}. It expires in ${ttlMinutes} minutes.`,
-        html: `<p>Your verification code is <strong>${code}</strong>.</p><p>It expires in ${ttlMinutes} minutes.</p>`,
+      const delivery = method === 'SMS'
+        ? await this.sendVerificationSms(userId, destination.value, code, ttlMinutes)
+        : await this.sendVerificationEmail(email, code, ttlMinutes);
+      await this.prisma.emailVerificationAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: EmailVerificationDeliveryStatus.SENT,
+          provider: delivery.provider,
+          providerMessageId: delivery.messageId,
+          sentAt: new Date(),
+        },
       });
+      await this.auditService.log(method === 'SMS' ? 'VERIFICATION_CODE_SMS_REQUESTED' : 'VERIFICATION_CODE_EMAIL_REQUESTED', 'USER', userId, userId, {
+        deliveryMethod: method,
+        maskedDestination: destination.masked,
+        provider: delivery.provider,
+        providerAccepted: true,
+      }, 'Verification code delivery requested.', { module: 'AUTH' });
+      return {
+        method,
+        methodLabel: method === 'SMS' ? 'SMS' : 'Email',
+        maskedDestination: destination.masked,
+        expiresAt,
+      };
     } catch (error) {
+      await this.prisma.emailVerificationAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: EmailVerificationDeliveryStatus.FAILED,
+          failureReason: error instanceof Error ? error.message.slice(0, 500) : 'Email delivery failed',
+          failedAt: new Date(),
+        },
+      });
       this.alertsService.notifyCritical('EMAIL_DELIVERY_FAILED', {
         userId,
-        email,
+        deliveryMethod: method,
       });
+      throw new BadRequestException(
+        method === 'SMS'
+          ? "We couldn't send the SMS verification code. Please retry or choose Email."
+          : "We couldn't send the email verification code. Please retry or choose SMS.",
+      );
     }
+  }
+
+  private resolveVerificationMethod(method?: string | null, role?: string): VerificationDeliveryMethod {
+    if (role === 'HOSPITAL_ADMIN') return 'EMAIL';
+    return method === 'SMS' ? 'SMS' : 'EMAIL';
+  }
+
+  private async resolveVerificationDestination(userId: string, email: string, method: VerificationDeliveryMethod) {
+    if (method === 'EMAIL') {
+      return { value: email, masked: this.maskEmail(email) };
+    }
+
+    const donor = await this.prisma.donor.findUnique({
+      where: { userId },
+      select: { phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true },
+    });
+    if (!donor) {
+      throw new BadRequestException('SMS verification is available for donor accounts only.');
+    }
+    const normalized = this.normalizeDonorVerificationPhone(donor);
+    if (!normalized) {
+      throw new BadRequestException('Enter a valid Ghana phone number before choosing SMS verification.');
+    }
+    return { value: normalized, masked: this.maskPhone(normalized) };
+  }
+
+  private normalizeDonorVerificationPhone(donor: { phone?: string | null; alternativePhoneNumber?: string | null }) {
+    const candidates = [donor.phone, donor.alternativePhoneNumber].filter((value): value is string => Boolean(value));
+    for (const candidate of candidates) {
+      const normalized = this.smsService.normalizeGhanaPhone(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  private async sendVerificationEmail(email: string, code: string, ttlMinutes: number) {
+    const delivery = await this.mailService.sendEmail({
+      to: email,
+      subject: 'BloodSOS Email Verification Code',
+      text: `Your BloodSOS verification code is ${code}. It expires in ${ttlMinutes} minutes. Do not share this code with anyone. If you did not register, ignore this message.`,
+      html: [
+        '<p>Hello,</p>',
+        `<p>Your BloodSOS verification code is <strong>${code}</strong>.</p>`,
+        `<p>It expires in ${ttlMinutes} minutes. Do not share this code with anyone.</p>`,
+        '<p>If you did not register, please ignore this message.</p>',
+      ].join(''),
+    });
+    if (delivery.rejected?.length && !delivery.accepted?.length) {
+      throw new BadRequestException('Email provider rejected the verification email.');
+    }
+    return delivery;
+  }
+
+  private async sendVerificationSms(userId: string, phone: string, code: string, ttlMinutes: number) {
+    const result = await this.smsService.sendSms({
+      recipient: phone,
+      message: `BloodSOS: Your verification code is ${code}. It expires in ${ttlMinutes} minutes. Do not share this code.`,
+      messagePreviewOverride: `BloodSOS: Your verification code is ******. It expires in ${ttlMinutes} minutes. Do not share this code.`,
+      purpose: 'ACCOUNT_VERIFICATION' as any,
+      triggeredByUserId: userId,
+      relatedEntityType: 'USER',
+      relatedEntityId: userId,
+      idempotencyKey: `account-verification:${userId}:${Date.now()}`,
+    });
+    if (!result.success) {
+      throw new BadRequestException(result.errorCode ?? 'SMS verification failed.');
+    }
+    return {
+      provider: result.provider,
+      messageId: result.providerCampaignId ?? result.smsLogId ?? null,
+    };
+  }
+
+  private maskEmail(email: string) {
+    const [name, domain] = email.split('@');
+    if (!domain) return '***';
+    return `${name.slice(0, 1)}***@${domain}`;
+  }
+
+  private maskPhone(phone: string) {
+    return phone.length <= 4 ? '****' : `${'*'.repeat(Math.max(0, phone.length - 4))}${phone.slice(-4)}`;
+  }
+
+  private get verificationTtlMinutes() {
+    return this.config.get<number>('security.emailVerificationTtlMinutes', 5);
+  }
+
+  private get resendCooldownSeconds() {
+    return this.config.get<number>('security.verificationResendCooldownSeconds', 45);
+  }
+
+  private get maxResendsPerHour() {
+    return this.config.get<number>('security.verificationMaxResendsPerHour', 5);
+  }
+
+  private get maxVerificationAttempts() {
+    return this.config.get<number>('security.verificationMaxAttemptsPerCode', 5);
   }
 
   toSafeUser(user: {
@@ -655,6 +916,8 @@ export class AuthService {
     role: Role;
     isActive: boolean;
     emailVerified: boolean;
+    profileImageUrl?: string | null;
+    profileImageUpdatedAt?: Date | null;
     failedLoginCount: number;
     lockedUntil: Date | null;
     createdAt: Date;
@@ -666,6 +929,8 @@ export class AuthService {
       role: user.role,
       isActive: user.isActive,
       emailVerified: user.emailVerified,
+      profileImageUrl: user.profileImageUrl ?? null,
+      profileImageUpdatedAt: user.profileImageUpdatedAt ?? null,
       failedLoginCount: user.failedLoginCount,
       lockedUntil: user.lockedUntil,
       createdAt: user.createdAt,

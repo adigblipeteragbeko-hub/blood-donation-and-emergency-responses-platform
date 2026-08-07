@@ -10,10 +10,10 @@ export class RealtimeService {
     private readonly prisma: PrismaService,
   ) {}
   private readonly operationsRoles = [
-    Role.SUPER_ADMIN,
     Role.ADMIN,
-    Role.HOSPITAL_STAFF,
-    Role.BLOOD_BANK_OFFICER,
+    Role.ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.HOSPITAL_ADMIN,
   ];
 
   async broadcastEmergencyRequest(
@@ -52,7 +52,7 @@ export class RealtimeService {
 
     recipientIds.forEach((userId) => this.gateway.emitToUser(userId, 'emergency.request.updated', payload));
 
-    this.gateway.emitToRoles([Role.ADMIN, Role.SUPER_ADMIN], 'emergency.request.updated', payload);
+    this.gateway.emitToRoles([Role.ADMIN], 'emergency.request.updated', payload);
 
     if (context.isPublicEmergency) {
       this.gateway.emitToPublic('emergency.request.public.updated', this.sanitizeEmergencyPublicPayload(payload));
@@ -63,8 +63,35 @@ export class RealtimeService {
     this.gateway.emitEvent('donor.response.updated', payload);
   }
 
+  async broadcastMobilizationResponse(payload: Record<string, unknown>, hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { userId: true },
+    });
+
+    if (hospital?.userId) {
+      this.gateway.emitToUser(hospital.userId, 'donor.mobilization.response.updated', payload);
+    }
+
+    this.gateway.emitToRoles([Role.ADMIN], 'donor.mobilization.response.updated', payload);
+  }
+
   broadcastDonorLocation(payload: unknown) {
     this.gateway.emitToRoles(this.operationsRoles, 'donor.location.updated', payload);
+  }
+
+  broadcastDonorSearchInvalidated(payload: {
+    donorId: string;
+    bloodGroup?: string | null;
+    preferredHospitalId?: string | null;
+    reason: string;
+  }) {
+    this.gateway.emitToRoles(this.operationsRoles, 'donor.search.invalidated', {
+      donorId: payload.donorId,
+      bloodGroup: payload.bloodGroup ?? null,
+      preferredHospitalId: payload.preferredHospitalId ?? null,
+      reason: payload.reason,
+    });
   }
 
   broadcastInventoryUpdate(payload: unknown) {
@@ -77,6 +104,19 @@ export class RealtimeService {
       return;
     }
     this.gateway.emitEvent('notification.created', payload);
+  }
+
+  async broadcastAppointmentUpdate(payload: Record<string, unknown>, hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+      select: { userId: true },
+    });
+
+    if (hospital?.userId) {
+      this.gateway.emitToUser(hospital.userId, 'appointment.updated', payload);
+    }
+
+    this.gateway.emitToRoles([Role.ADMIN], 'appointment.updated', payload);
   }
 
   broadcastWebsiteAnnouncement(payload: unknown) {

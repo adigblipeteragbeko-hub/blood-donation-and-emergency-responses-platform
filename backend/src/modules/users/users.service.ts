@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ManualVerificationMethod, NotificationType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditService } from '../../common/audit/audit.service';
@@ -20,7 +20,29 @@ export class UsersService {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
     return this.prisma.user.findMany({
-      select: { id: true, email: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        verifiedAt: true,
+        verificationMethod: true,
+        verificationReason: true,
+        createdAt: true,
+        emailVerificationAttempts: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            status: true,
+            provider: true,
+            failureReason: true,
+            sentAt: true,
+            failedAt: true,
+            createdAt: true,
+          },
+        },
+      },
       skip,
       take,
       orderBy: { createdAt: 'desc' },
@@ -41,6 +63,8 @@ export class UsersService {
       role: updated.role,
       isActive: updated.isActive,
       createdAt: updated.createdAt,
+      emailVerified: updated.emailVerified,
+      verifiedAt: updated.verifiedAt,
     };
   }
 
@@ -68,7 +92,94 @@ export class UsersService {
       role: created.role,
       isActive: created.isActive,
       createdAt: created.createdAt,
+      emailVerified: created.emailVerified,
+      verifiedAt: created.verifiedAt,
     };
+  }
+
+  async manualVerify(
+    id: string,
+    actorUserId: string,
+    dto: { method: ManualVerificationMethod; reason: string; note?: string },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.emailVerified) {
+      return {
+        message: 'User is already verified.',
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          emailVerified: true,
+          verifiedAt: user.verifiedAt,
+        },
+      };
+    }
+
+    const verifiedAt = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.user.update({
+        where: { id },
+        data: {
+          emailVerified: true,
+          verifiedAt,
+          verifiedByAdminId: actorUserId,
+          verificationMethod: dto.method,
+          verificationReason: dto.reason,
+          verificationNote: dto.note?.trim() || null,
+        },
+      });
+
+      await tx.emailVerificationAttempt.updateMany({
+        where: { userId: id, verifiedAt: null },
+        data: { status: 'VERIFIED', verifiedAt },
+      });
+
+      await tx.emailVerificationToken.updateMany({
+        where: { userId: id, usedAt: null },
+        data: { usedAt: verifiedAt },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: id,
+          title: 'Account verified',
+          body: 'Your account has been manually verified by an administrator. You can now sign in.',
+          channel: 'IN_APP',
+          type: NotificationType.SYSTEM,
+          delivered: false,
+        },
+      });
+
+      return next;
+    });
+
+    await this.audit.log('DONOR_MANUALLY_VERIFIED', 'USER', actorUserId, id, {
+      maskedEmail: this.maskEmail(user.email),
+      method: dto.method,
+      reason: dto.reason,
+    });
+
+    return {
+      message: 'User verified successfully.',
+      user: {
+        id: updated.id,
+        email: updated.email,
+        role: updated.role,
+        emailVerified: updated.emailVerified,
+        verifiedAt: updated.verifiedAt,
+      },
+    };
+  }
+
+  private maskEmail(email: string) {
+    const [name, domain] = email.split('@');
+    if (!domain) return '***';
+    return `${name.slice(0, 1)}***@${domain}`;
   }
 
   async remove(id: string, actorUserId: string) {

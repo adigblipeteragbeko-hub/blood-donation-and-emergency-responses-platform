@@ -17,7 +17,7 @@ import { AdminDashboardSearchQueryDto } from './dto/admin-dashboard-search-query
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.ADMIN)
+@Roles(Role.ADMIN)
 @Permissions(
   [
     PermissionCode.PLATFORM_ANALYTICS_VIEW,

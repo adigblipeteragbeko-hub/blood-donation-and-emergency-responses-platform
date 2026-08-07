@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getHospitalNotifications, markNotificationDelivered, NotificationItem } from '../services/hospital-portal';
+import {
+  getHospitalNotifications,
+  markNotificationDelivered,
+  NotificationItem,
+  respondToMobilizationCampaign,
+} from '../services/hospital-portal';
 import { AppIcon } from '../components/ui/AppIcon';
+import { createRealtimeSocket } from '../services/live-map';
 
 function extractRequestId(item: NotificationItem) {
   const match = item.body?.match(/requestId=([A-Za-z0-9_-]+)/);
@@ -12,6 +18,16 @@ function actionHref(item: NotificationItem) {
   const requestId = extractRequestId(item);
   if (!requestId) return null;
   return `/donor/emergency-requests?requestId=${requestId}`;
+}
+
+function isProactiveDonation(item: NotificationItem) {
+  return item.type === 'PROACTIVE_DONATION' || Boolean(item.campaignId);
+}
+
+function notificationLabel(item: NotificationItem) {
+  if (isProactiveDonation(item)) return 'Emergency Donation Appeal';
+  if (!item.type || item.type === 'SYSTEM') return item.delivered ? 'Read' : 'Unread';
+  return item.type.replace(/_/g, ' ').toLowerCase();
 }
 
 export default function NotificationsPage() {
@@ -38,12 +54,38 @@ export default function NotificationsPage() {
     void loadNotifications();
   }, []);
 
+  useEffect(() => {
+    const socket = createRealtimeSocket();
+    let refreshTimer: number | null = null;
+    const refreshNotifications = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void loadNotifications(), 250);
+    };
+
+    socket.on('notification.created', refreshNotifications);
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      socket.off('notification.created', refreshNotifications);
+      socket.disconnect();
+    };
+  }, []);
+
   const markDelivered = async (notificationId: string) => {
     try {
       await markNotificationDelivered(notificationId, true);
       await loadNotifications();
     } catch (error: any) {
       setMessage(error?.response?.data?.error?.message ?? 'Unable to update notification.');
+    }
+  };
+
+  const respondToCampaign = async (campaignId: string, responseStatus: 'INTERESTED' | 'NOT_AVAILABLE') => {
+    try {
+      const result = await respondToMobilizationCampaign({ campaignId, responseStatus });
+      setMessage(result.message);
+      await loadNotifications();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit your response right now.');
     }
   };
 
@@ -80,10 +122,27 @@ export default function NotificationsPage() {
                     <p className="mt-2 text-xs font-semibold text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${item.delivered ? 'bg-slate-100 text-slate-600' : 'bg-red-50 text-red-700'}`}>
-                    {item.delivered ? 'Read' : 'Unread'}
+                    {notificationLabel(item)}
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {isProactiveDonation(item) && item.campaignId ? (
+                    <>
+                      <button className="btn-primary" onClick={() => void respondToCampaign(item.campaignId!, 'INTERESTED')} type="button">
+                        I'm Interested
+                      </button>
+                      <button
+                        className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700"
+                        onClick={() => void respondToCampaign(item.campaignId!, 'NOT_AVAILABLE')}
+                        type="button"
+                      >
+                        Not Available
+                      </button>
+                      <span className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                        Appointment scheduling is coordinated by hospital staff.
+                      </span>
+                    </>
+                  ) : null}
                   {href ? (
                     <Link className="btn-primary" to={href}>
                       View Alert

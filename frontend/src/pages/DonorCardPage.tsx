@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import { SmartAvatar } from '../components/SmartAvatar';
 
 type DonorProfile = {
   donorNumber?: string;
@@ -172,7 +173,9 @@ export default function DonorCardPage() {
             {profile.passportPhotoUrl ? (
               <img src={profile.passportPhotoUrl} alt="Donor passport" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center text-center text-xs text-gray-500">FIX PASSPORT PHOTO HERE</div>
+              <div className="flex h-full items-center justify-center">
+                <SmartAvatar name={profile.fullName} email={userEmail} size="xl" />
+              </div>
             )}
           </div>
           <div className="space-y-2 text-sm">

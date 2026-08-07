@@ -63,10 +63,10 @@ export default function HospitalRegisterPage() {
     }
 
     try {
-      await api.post('/auth/register', {
+      const response = await api.post('/auth/register', {
         email: form.email,
         password: form.password,
-        role: 'HOSPITAL_STAFF',
+        role: 'HOSPITAL_ADMIN',
         hospitalProfile: {
           hospitalName: form.hospitalName,
           address: form.address,
@@ -81,7 +81,15 @@ export default function HospitalRegisterPage() {
         },
       });
       setForm({ ...emptyForm });
-      navigate('/verify-email', { state: { email: form.email, role: 'hospital' } });
+      navigate('/verify-email', {
+        state: {
+          email: form.email,
+          role: 'hospital',
+          verificationMethod: response.data?.data?.verificationMethod ?? 'EMAIL',
+          maskedDestination: response.data?.data?.maskedDestination,
+          expiresInMinutes: response.data?.data?.expiresInMinutes ?? 5,
+        },
+      });
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;

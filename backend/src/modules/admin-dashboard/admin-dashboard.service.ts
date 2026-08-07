@@ -3,12 +3,14 @@ import {
   BloodGroup,
   DonorResponseStatus,
   DonorReviewStatus,
+  MobilizationResponseStatus,
   NotificationType,
   Prisma,
   PriorityLevel,
   RequestProgressStatus,
   RequestStatus,
   SecurityEventSeverity,
+  StockWarningLevel,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { ActivityService } from '../../common/activity/activity.service';
@@ -569,8 +571,8 @@ export class AdminDashboardService {
       }),
       this.prisma.auditLog.count({ where }),
       this.prisma.user.findMany({
-        where: { role: 'ADMIN' },
-        select: { id: true, email: true },
+        where: { auditLogs: { some: {} } },
+        select: { id: true, email: true, role: true },
         orderBy: { email: 'asc' },
       }),
     ]);
@@ -580,7 +582,16 @@ export class AdminDashboardService {
 
   async getReports() {
     const start = this.getDateRange(6);
-    const [donations, requests, requestByType, donorResponses, hospitals] = await Promise.all([
+    const [
+      donations,
+      requests,
+      requestByType,
+      donorResponses,
+      hospitals,
+      atRiskWarnings,
+      campaigns,
+      campaignResponses,
+    ] = await Promise.all([
       this.prisma.donation.findMany({
         where: { donatedAt: { gte: start } },
         select: { donatedAt: true, unitsDonated: true, bloodGroup: true },
@@ -599,6 +610,24 @@ export class AdminDashboardService {
         select: { responseStatus: true, bloodRequestId: true, bloodRequest: { select: { hospitalId: true } } },
       }),
       this.prisma.hospital.findMany({ select: { id: true, hospitalName: true } }),
+      this.prisma.bloodStockWarning.findMany({
+        where: {
+          level: { in: [StockWarningLevel.WATCH, StockWarningLevel.LIKELY_SHORTAGE, StockWarningLevel.CRITICAL] },
+          createdAt: { gte: start },
+        },
+        include: { hospital: { select: { hospitalName: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+      }),
+      this.prisma.donorMobilizationCampaign.findMany({
+        where: { createdAt: { gte: start } },
+        include: { hospital: { select: { hospitalName: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.donorMobilizationCampaignResponse.findMany({
+        where: { createdAt: { gte: start } },
+        select: { responseStatus: true, campaignId: true },
+      }),
     ]);
 
     const monthKey = (value: Date) =>
@@ -650,6 +679,37 @@ export class AdminDashboardService {
       ],
       hospitalPerformance,
       shortageTrends: await this.getInventoryMonitoring(),
+      proactiveMobilization: {
+        atRiskHospitals: atRiskWarnings.map((warning) => ({
+          hospitalName: warning.hospital.hospitalName,
+          bloodGroup: warning.bloodGroup,
+          level: warning.level,
+          currentUnits: warning.currentUnits,
+          createdAt: warning.createdAt,
+        })),
+        campaigns: campaigns.map((campaign) => {
+          const responses = campaignResponses.filter((response) => response.campaignId === campaign.id);
+          const positiveResponses = responses.filter(
+            (response) =>
+              response.responseStatus === MobilizationResponseStatus.INTERESTED ||
+              response.responseStatus === MobilizationResponseStatus.APPOINTMENT_SCHEDULED,
+          ).length;
+          return {
+            id: campaign.id,
+            hospitalName: campaign.hospital.hospitalName,
+            bloodGroup: campaign.bloodGroup,
+            warningLevel: campaign.warningLevel,
+            targetDonorCount: campaign.targetDonorCount,
+            donorsNotified: campaign.targetDonorCount,
+            responseCount: responses.length,
+            responseRate: campaign.targetDonorCount
+              ? Number(((responses.length / campaign.targetDonorCount) * 100).toFixed(1))
+              : 0,
+            positiveResponses,
+            createdAt: campaign.createdAt,
+          };
+        }),
+      },
     };
   }
 

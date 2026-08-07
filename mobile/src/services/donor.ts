@@ -28,6 +28,7 @@ export type DonorProfile = {
   postalAddress?: string | null;
   dateOfBirth?: string | null;
   dateIssued?: string | null;
+  profileImageUrl?: string | null;
   eligibilityStatus?: boolean | null;
   availabilityStatus?: boolean | null;
   lastDonationDate?: string | null;
@@ -45,6 +46,9 @@ export type EligibilityStatus = {
   status?: string;
   eligibilityStatus?: boolean;
   availabilityStatus?: boolean;
+  canSetAvailable?: boolean;
+  reason?: string;
+  reviewStatus?: string | null;
   lastDonationDate?: string | null;
   nextEligibilityDate?: string | null;
   message?: string;

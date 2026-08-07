@@ -485,7 +485,7 @@ export function LiveOperationsMap({ mode = 'operations' }: { mode?: 'operations'
                           className={disabledActionClass}
                           type="button"
                           disabled
-                          title="No safe direct donor alert endpoint is available from the map yet."
+                          title="Open donor search to send alerts through the approved workflow."
                         >
                           Contact Donor / Send Alert
                         </button>

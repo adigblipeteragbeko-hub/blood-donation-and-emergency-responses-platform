@@ -14,7 +14,19 @@ export type RequestStatus = 'OPEN' | 'MATCHING' | 'FULFILLED' | 'CANCELLED';
 export type RequestProgressStatus = 'PENDING' | 'MATCHED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type PriorityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type RequestSource = 'DONORS_ONLY' | 'HOSPITALS_ONLY' | 'DONORS_AND_HOSPITALS';
-export type AppointmentStatus = 'SCHEDULED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'MISSED' | 'NO_SHOW';
+export type AppointmentStatus =
+  | 'SCHEDULED'
+  | 'PENDING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'DONOR_ARRIVED'
+  | 'IN_PROGRESS'
+  | 'RESCHEDULE_REQUESTED'
+  | 'RESCHEDULED'
+  | 'DECLINED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'MISSED'
+  | 'NO_SHOW';
 export type AppointmentType = 'BLOOD_DONATION' | 'ELIGIBILITY_SCREENING' | 'FOLLOW_UP' | 'EMERGENCY_DONATION';
 export type DonorResponseStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'DONATED';
 export type InventoryChangeType = 'ADDED' | 'USED' | 'EXPIRED' | 'ADJUSTED';
@@ -26,6 +38,8 @@ export type InventoryItem = {
   id: string;
   bloodGroup: BloodGroup;
   availableUnits: number;
+  expiringUnits?: number;
+  expiryWindowDays?: number;
   lastUpdated: string;
   hospital?: { hospitalName: string; location: string };
   updatedBy?: { email: string } | null;
@@ -45,6 +59,121 @@ export type InventoryLogItem = {
     bloodGroup: BloodGroup;
     hospital?: { hospitalName: string; location: string };
   };
+};
+
+export type StockWarningLevel = 'STABLE' | 'WATCH' | 'LIKELY_SHORTAGE' | 'CRITICAL';
+
+export type BloodStockWarningItem = {
+  hospitalId: string;
+  hospital?: { id: string; hospitalName: string; city?: string | null; region?: string | null };
+  bloodGroup: BloodGroup;
+  level: StockWarningLevel;
+  status?: 'Critical' | 'Low Stock' | 'Monitor' | 'Healthy';
+  currentUnits: number;
+  usableUnits?: number;
+  minimumStockLevel?: number;
+  criticalStockLevel?: number;
+  forecastPeriodHours?: number;
+  activeDemandUnits: number;
+  activeRequestedUnits?: number;
+  urgentRequestedUnits?: number;
+  expiringUnits: number;
+  unitsExpiringSoon?: number;
+  expiryWindowDays?: number;
+  incomingTransferUnits: number;
+  scheduledDonationUnits: number;
+  recentIncomingUnits?: number;
+  recentOutgoingUnits?: number;
+  eligibleDonorCount?: number;
+  exactAvailableDonors?: number;
+  compatibleAvailableDonors?: number;
+  averageDailyUsage?: number | null;
+  usageHistoryCount?: number;
+  riskScore?: number;
+  riskLevel?: 'Low' | 'Moderate' | 'High' | 'Critical';
+  dataFreshness?: string;
+  lastUpdatedAt?: string | null;
+  recommendedActionType?: string;
+  explanation: string;
+  recommendedAction?: string | null;
+  riskFactors?: string[];
+};
+
+export type MobilizationPreview = {
+  hospitalId: string;
+  hospitalName: string;
+  bloodGroup: BloodGroup;
+  warningLevel: StockWarningLevel;
+  forecastPeriodHours: number;
+  radiusKm: number;
+  eligibleDonorCount: number;
+  donorBloodGroups: Record<string, number>;
+  previewNote: string;
+};
+
+export type MobilizationCampaign = {
+  id: string;
+  campaignName: string;
+  hospital?: { id: string; hospitalName: string; city?: string | null; region?: string | null };
+  bloodGroup: BloodGroup;
+  warningLevel: StockWarningLevel;
+  status: string;
+  forecastPeriodHours: number;
+  radiusKm: number;
+  eligibleDonors: number;
+  donorsNotified: number;
+  interestedDonors: number;
+  declinedResponses: number;
+  appointmentRequests: number;
+  confirmedAppointments: number;
+  completedDonations: number;
+  donatedUnits: number;
+  responseRate: number;
+  appointmentConversionRate: number;
+  donationSuccessRate: number;
+  warningReason?: string | null;
+  message: string;
+  sentAt?: string | null;
+  createdAt: string;
+  responses: Array<{
+    id: string;
+    responseStatus: 'INTERESTED' | 'NOT_AVAILABLE' | 'APPOINTMENT_SCHEDULED';
+    respondedAt: string;
+    notes?: string | null;
+    donor: {
+      id: string;
+      donorNumber?: string | null;
+      fullName: string;
+      bloodGroup: BloodGroup;
+      location: string;
+      lastDonationDate?: string | null;
+      nextEligibilityDate?: string | null;
+    };
+    appointments: Array<{
+      id: string;
+      appointmentReference: string;
+      status: AppointmentStatus;
+      scheduledAt: string;
+      donationPostedAt?: string | null;
+    }>;
+    donations: Array<{
+      id: string;
+      donationNumber?: string | null;
+      unitsDonated: number;
+      donatedAt: string;
+    }>;
+  }>;
+};
+
+export type BloodStockTrendResponse = {
+  windowDays: number;
+  generatedAt: string;
+  trends: Array<{
+    bloodGroup: BloodGroup;
+    points: Array<{ date: string; units: number }>;
+    lowEvents: number;
+    criticalEvents: number;
+  }>;
 };
 
 export type BloodRequestUpdateItem = {
@@ -108,6 +237,7 @@ export type BloodRequestItem = {
   locationNotes?: string | null;
   requiredBy: string;
   createdAt: string;
+  updatedAt?: string;
   notes?: string | null;
   updates?: BloodRequestUpdateItem[];
   donorResponses?: DonorResponseItem[];
@@ -223,6 +353,15 @@ export type DonorMatch = {
   latitude?: number | null;
   longitude?: number | null;
   lastLocationUpdateAt?: string | null;
+  locationFreshness?: {
+    status: 'FRESH' | 'STALE' | 'UNAVAILABLE';
+    label: string;
+    ageMinutes: number | null;
+    thresholdHours: number;
+  };
+  emergencyNotificationConsent?: boolean;
+  matchReasons?: string[];
+  matchReasonSummary?: string;
   clinicalStatus?: string | null;
   temporaryDeferralDuration?: string | null;
   donationHistory?: Array<{ donatedAt: string }>;
@@ -232,13 +371,32 @@ export type DonorLocatorResponse = {
   donors: DonorMatch[];
   summary: {
     totalMatches: number;
+    evaluatedDonors?: number;
     totalBeforeRadius: number;
     availableCount: number;
     cooldownCount: number;
     deferredCount: number;
     mapReadyCount: number;
-    origin: { latitude: number; longitude: number; source: 'query' | 'hospital'; hospitalName: string } | null;
+    staleLocationCount?: number;
+    origin: { latitude: number; longitude: number; source: 'request' | 'query' | 'hospital'; hospitalName: string; location?: string | null } | null;
+    requestContext?: {
+      id: string;
+      requestReference: string;
+      bloodGroup: BloodGroup;
+      bloodComponent: string;
+      unitsNeeded: number;
+      priority: PriorityLevel;
+      requestSource: RequestSource;
+      type: 'STANDARD' | 'EMERGENCY';
+      location: string;
+      city?: string | null;
+      region?: string | null;
+      requestingHospital: { id: string; hospitalName: string; location: string; city?: string | null; region?: string | null };
+      loggedInHospital: { id: string; hospitalName: string; location: string; city?: string | null; region?: string | null };
+      interHospital: boolean;
+    } | null;
     radiusFallback: { applied: boolean; requestedRadiusKm: number };
+    exclusionSummary?: Record<string, number>;
   };
 };
 
@@ -249,6 +407,15 @@ export type AppointmentItem = {
   status: AppointmentStatus;
   appointmentType?: AppointmentType;
   notes?: string | null;
+  confirmedAt?: string | null;
+  reschedulePreferredAt?: string | null;
+  rescheduleReason?: string | null;
+  declinedAt?: string | null;
+  declineReason?: string | null;
+  declineNotes?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
   completedAt?: string | null;
   unitsCollected?: number | null;
   volumeCollectedMl?: number | null;
@@ -269,6 +436,7 @@ export type AppointmentItem = {
     eligibilityStatus?: boolean;
     donationHistory?: Array<{ donatedAt: string }>;
   };
+  hospital?: { id: string; hospitalName: string; location: string };
   bloodRequest?: { requestReference?: string | null };
 };
 
@@ -282,6 +450,9 @@ export type NotificationItem = {
   body: string;
   delivered: boolean;
   createdAt: string;
+  type?: string | null;
+  bloodRequestId?: string | null;
+  campaignId?: string | null;
 };
 
 export type TypeaheadPayload = {
@@ -308,6 +479,8 @@ export type HospitalProfile = {
   bloodBankAvailable?: boolean;
   contactName: string;
   contactPhone: string;
+  logoUrl?: string | null;
+  logoUpdatedAt?: string | null;
   inventoryItems?: InventoryItem[];
 };
 
@@ -338,6 +511,11 @@ export type EligibilitySubmissionItem = {
 
 type ApiEnvelope<T> = { success: boolean; data: T };
 type PaginationParams = { skip?: number; take?: number };
+export type AppointmentDateFilterParams = {
+  dateFilter?: 'today';
+  localDate?: string;
+  timezoneOffsetMinutes?: number;
+};
 
 const unwrap = <T>(payload: ApiEnvelope<T> | T): T => ((payload as ApiEnvelope<T>)?.data ?? payload) as T;
 
@@ -351,12 +529,17 @@ export async function upsertHospitalProfile(payload: Omit<HospitalProfile, 'id'>
   return unwrap(response.data);
 }
 
+export async function updateHospitalLogo(logoUrl: string) {
+  const response = await api.patch<ApiEnvelope<HospitalProfile>>('/hospitals/profile/logo', { logoUrl });
+  return unwrap(response.data);
+}
+
 export async function getHospitalInventory(params?: PaginationParams) {
   const response = await api.get<ApiEnvelope<InventoryItem[]>>('/inventory', { params });
   return unwrap(response.data);
 }
 
-export async function upsertHospitalInventory(payload: { bloodGroup: BloodGroup; availableUnits: number }) {
+export async function upsertHospitalInventory(payload: { bloodGroup: BloodGroup; availableUnits: number; reason?: string }) {
   const response = await api.post<ApiEnvelope<InventoryItem>>('/inventory', payload);
   return unwrap(response.data);
 }
@@ -368,6 +551,66 @@ export async function patchInventoryItem(id: string, payload: { availableUnits: 
 
 export async function getInventoryLogs(params?: PaginationParams) {
   const response = await api.get<ApiEnvelope<InventoryLogItem[]>>('/inventory/logs', { params });
+  return unwrap(response.data);
+}
+
+export async function getBloodStockWarnings() {
+  const response = await api.get<ApiEnvelope<BloodStockWarningItem[]>>('/inventory/early-warning');
+  return unwrap(response.data);
+}
+
+export async function mobilizeCompatibleDonors(payload: {
+  bloodGroup: BloodGroup;
+  warningLevel?: StockWarningLevel;
+  message?: string;
+  forecastPeriodHours?: number;
+  radiusKm?: number;
+}) {
+  const response = await api.post<ApiEnvelope<{
+    success: boolean;
+    bloodGroup: BloodGroup;
+    exactMatchCount: number;
+    compatibleMatchCount: number;
+    targetDonorCount: number;
+    targetedDonorCount: number;
+    notificationsCreated: number;
+    notificationsSkipped: number;
+    skippedReasons: Record<string, number>;
+    auditLogCreated: boolean;
+    hospitalActivityCreated: boolean;
+    campaignReference: string | null;
+    createdAt: string;
+    message: string;
+  }>>('/inventory/early-warning/mobilize', payload);
+  return unwrap(response.data);
+}
+
+export async function previewCompatibleDonors(payload: {
+  bloodGroup: BloodGroup;
+  warningLevel?: StockWarningLevel;
+  forecastPeriodHours?: number;
+  radiusKm?: number;
+}) {
+  const response = await api.post<ApiEnvelope<MobilizationPreview>>('/inventory/early-warning/preview', payload);
+  return unwrap(response.data);
+}
+
+export async function getMobilizationCampaigns() {
+  const response = await api.get<ApiEnvelope<MobilizationCampaign[]>>('/inventory/early-warning/campaigns');
+  return unwrap(response.data);
+}
+
+export async function getBloodStockTrends(days = 30) {
+  const response = await api.get<ApiEnvelope<BloodStockTrendResponse>>('/inventory/early-warning/trends', { params: { days } });
+  return unwrap(response.data);
+}
+
+export async function respondToMobilizationCampaign(payload: {
+  campaignId: string;
+  responseStatus: 'INTERESTED' | 'NOT_AVAILABLE' | 'APPOINTMENT_SCHEDULED';
+  notes?: string;
+}) {
+  const response = await api.post<ApiEnvelope<{ responseStatus: string; message: string }>>('/notifications/mobilization-response', payload);
   return unwrap(response.data);
 }
 
@@ -414,6 +657,15 @@ export async function getHospitalRequests(params?: PaginationParams) {
 
 export async function getHospitalActiveRequests(params?: PaginationParams) {
   const response = await api.get<ApiEnvelope<BloodRequestItem[]>>('/blood-requests/hospital-active', { params });
+  return unwrap(response.data);
+}
+
+export async function getHospitalActiveRequestSummary() {
+  const response = await api.get<ApiEnvelope<{
+    total: number;
+    activeStatusesIncluded: RequestStatus[];
+    requestSourcesIncludedForOtherHospitals: RequestSource[];
+  }>>('/blood-requests/hospital-active/summary');
   return unwrap(response.data);
 }
 
@@ -512,6 +764,37 @@ export async function updateHospitalActiveRequestStatus(id: string, status: Requ
   return unwrap(response.data);
 }
 
+export async function updateHospitalActiveRequest(
+  id: string,
+  payload: Partial<{
+    hospitalCenterName: string;
+    ward: string;
+    hospitalPatientReference: string;
+    bloodGroup: BloodGroup;
+    unitsNeeded: number;
+    priority: PriorityLevel;
+    requestSource: RequestSource;
+    location: string;
+    emergencyLocation: string;
+    city: string;
+    region: string;
+    locationNotes: string;
+    latitude: number;
+    longitude: number;
+    requiredBy: string;
+    notes: string;
+    lastKnownUpdatedAt: string;
+  }>,
+) {
+  const response = await api.patch<ApiEnvelope<BloodRequestItem>>(`/blood-requests/hospital-active/${id}`, payload);
+  return unwrap(response.data);
+}
+
+export async function cancelHospitalActiveRequest(id: string, payload?: { reason?: string; lastKnownUpdatedAt?: string }) {
+  const response = await api.patch<ApiEnvelope<BloodRequestItem>>(`/blood-requests/hospital-active/${id}/cancel`, payload ?? {});
+  return unwrap(response.data);
+}
+
 export async function getBloodRequestUpdates(id: string) {
   const response = await api.get<ApiEnvelope<BloodRequestUpdateItem[]>>(`/blood-requests/${id}/updates`);
   return unwrap(response.data);
@@ -578,6 +861,7 @@ export async function updateDonorResponse(
 
 export async function searchHospitalDonors(payload: {
   bloodGroup?: BloodGroup;
+  requestId?: string;
   location?: string;
   matchMode?: 'EXACT' | 'COMPATIBLE';
   availabilityFilter?: 'AVAILABLE_ONLY' | 'INCLUDE_COOLDOWN' | 'INCLUDE_DEFERRED' | 'ALL_APPROVED';
@@ -590,8 +874,20 @@ export async function searchHospitalDonors(payload: {
   return unwrap(response.data);
 }
 
-export async function getHospitalAppointments(params?: PaginationParams) {
+export async function getHospitalAppointments(params?: PaginationParams & AppointmentDateFilterParams) {
   const response = await api.get<ApiEnvelope<AppointmentItem[]>>('/appointments', { params });
+  return unwrap(response.data);
+}
+
+export async function getHospitalAppointmentSummary(params?: AppointmentDateFilterParams) {
+  const response = await api.get<ApiEnvelope<{
+    total: number;
+    todayStatusesIncluded: AppointmentStatus[];
+    dateField: 'scheduledAt';
+    dateFilter: 'today' | null;
+    localDate: string | null;
+    timezoneOffsetMinutes: number;
+  }>>('/appointments/summary', { params });
   return unwrap(response.data);
 }
 
@@ -613,6 +909,26 @@ export async function createHospitalAppointment(payload: {
 
 export async function updateHospitalAppointmentStatus(id: string, status: AppointmentStatus) {
   const response = await api.patch<ApiEnvelope<AppointmentItem>>(`/appointments/${id}/status`, { status });
+  return unwrap(response.data);
+}
+
+export async function acceptAppointment(id: string) {
+  const response = await api.patch<ApiEnvelope<AppointmentItem>>(`/appointments/${id}/accept`);
+  return unwrap(response.data);
+}
+
+export async function requestAppointmentReschedule(id: string, payload: { preferredAt: string; reason?: string }) {
+  const response = await api.patch<ApiEnvelope<AppointmentItem>>(`/appointments/${id}/reschedule-request`, payload);
+  return unwrap(response.data);
+}
+
+export async function declineAppointment(id: string, payload: { reason: string; notes?: string }) {
+  const response = await api.patch<ApiEnvelope<AppointmentItem>>(`/appointments/${id}/decline`, payload);
+  return unwrap(response.data);
+}
+
+export async function cancelAppointment(id: string) {
+  const response = await api.patch<ApiEnvelope<AppointmentItem>>(`/appointments/${id}/cancel`);
   return unwrap(response.data);
 }
 

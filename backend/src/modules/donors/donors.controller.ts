@@ -8,13 +8,14 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateDonationHistoryDto } from './dto/create-donation-history.dto';
 import { UpsertDonorProfileDto } from './dto/upsert-donor-profile.dto';
 import { UpdatePassportPhotoDto } from './dto/update-passport-photo.dto';
+import { UpdateProfileImageDto } from './dto/update-profile-image.dto';
 import { DonorsService } from './donors.service';
 import { CreateDonorAdminDto } from './dto/admin/create-donor-admin.dto';
 import { UpdateDonorAdminDto } from './dto/admin/update-donor-admin.dto';
 import { SubmitHealthEligibilityDto } from './dto/submit-health-eligibility.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 import { UpdateDonorSettingsDto } from './dto/update-donor-settings.dto';
-import { UpdateDonorEligibilityApprovalDto } from './dto/admin/update-donor-eligibility-approval.dto';
+import { UpdateDonorAccountStatusDto } from './dto/admin/update-donor-account-status.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
@@ -36,6 +37,11 @@ export class DonorsController {
   @Patch('profile/passport-photo')
   updatePassportPhoto(@CurrentUser() user: { id: string }, @Body() dto: UpdatePassportPhotoDto) {
     return this.donorsService.updatePassportPhoto(user.id, dto.passportPhotoUrl);
+  }
+
+  @Patch('profile/image')
+  updateProfileImage(@CurrentUser() user: { id: string }, @Body() dto: UpdateProfileImageDto) {
+    return this.donorsService.updateProfileImage(user.id, dto.profileImageUrl);
   }
 
   @Post('donations')
@@ -91,13 +97,13 @@ export class DonorsController {
   }
 
   @Roles(Role.ADMIN)
-  @Patch('admin/:id/eligibility')
-  updateEligibilityApproval(
+  @Patch('admin/:id/account-status')
+  updateAccountStatus(
     @Param('id') id: string,
-    @Body() dto: UpdateDonorEligibilityApprovalDto,
+    @Body() dto: UpdateDonorAccountStatusDto,
     @CurrentUser() user: { id: string },
   ) {
-    return this.donorsService.updateEligibilityApproval(id, dto.approved, user.id);
+    return this.donorsService.updateAccountStatusByAdmin(id, dto.active, user.id);
   }
 
   @Roles(Role.ADMIN)

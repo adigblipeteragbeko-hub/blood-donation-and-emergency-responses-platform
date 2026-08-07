@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
+import { SmartAvatar } from '../components/SmartAvatar';
 import { formatBloodGroup } from '../constants/bloodGroups';
 import { colors } from '../constants/colors';
 import { DonorProfile, getDonorProfile } from '../services/donor';
@@ -40,7 +41,7 @@ export function DonorCardScreen() {
       {message ? <Text style={styles.error}>{message}</Text> : null}
       <View style={styles.cardShell}>
         <View style={styles.topStrip}>
-          <View style={styles.photo}><Text style={styles.photoText}>ID</Text></View>
+          <View style={styles.photo}><SmartAvatar name={donorDisplayName(profile)} email={donorEmail(profile)} src={profile?.profileImageUrl} size="lg" /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>{donorDisplayName(profile) || 'Donor Name'}</Text>
             <Text style={styles.ref}>{profile?.donorNumber ?? 'DON-YYYY-00000'}</Text>
@@ -87,7 +88,6 @@ const styles = StyleSheet.create({
   cardShell: { gap: 16, borderRadius: 28, backgroundColor: colors.primaryDark, padding: 18, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
   topStrip: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   photo: { width: 72, height: 72, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  photoText: { color: colors.primary, fontSize: 22, fontWeight: '900' },
   name: { color: '#fff', fontSize: 23, fontWeight: '900' },
   ref: { color: '#fecaca', fontWeight: '900', marginTop: 3 },
   qrBox: { width: 58, height: 58, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },

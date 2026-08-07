@@ -1,10 +1,18 @@
 import { StyleSheet, Text } from 'react-native';
-import { colors } from '../constants/colors';
+import { useTheme } from '../hooks/useTheme';
 
 type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'primary';
 
 export function StatusBadge({ label, tone = 'muted' }: { label: string; tone?: Tone }) {
-  return <Text style={[styles.badge, styles[tone]]}>{label}</Text>;
+  const { colors } = useTheme();
+  const tones = {
+    success: { backgroundColor: colors.successSoft, color: colors.success },
+    warning: { backgroundColor: colors.warningSoft, color: colors.warning },
+    danger: { backgroundColor: colors.dangerSoft, color: colors.danger },
+    muted: { backgroundColor: colors.border, color: colors.muted },
+    primary: { backgroundColor: colors.primarySoft, color: colors.primaryDark },
+  };
+  return <Text style={[styles.badge, tones[tone]]}>{label}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -17,9 +25,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
-  success: { backgroundColor: colors.successSoft, color: colors.success },
-  warning: { backgroundColor: colors.warningSoft, color: colors.warning },
-  danger: { backgroundColor: '#fef2f2', color: colors.danger },
-  muted: { backgroundColor: '#f3f4f6', color: colors.muted },
-  primary: { backgroundColor: colors.primarySoft, color: colors.primaryDark },
 });

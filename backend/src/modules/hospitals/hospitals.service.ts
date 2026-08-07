@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BloodGroup, DonorClinicalStatus, Role } from '@prisma/client';
+import { BloodGroup, DonorClinicalStatus, RequestSource, RequestStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AuditService } from '../../common/audit/audit.service';
 import { GeocodingService } from '../../common/maps/geocoding.service';
@@ -20,6 +20,7 @@ const DEFERRED_STATUSES: DonorClinicalStatus[] = [
   DonorClinicalStatus.REJECTED,
   DonorClinicalStatus.PERMANENTLY_DEFERRED,
 ];
+const LOCATION_FRESHNESS_THRESHOLD_HOURS = 6;
 
 @Injectable()
 export class HospitalsService {
@@ -115,6 +116,43 @@ export class HospitalsService {
     return hospital;
   }
 
+  private validateLogo(logoUrl: string) {
+    if (
+      logoUrl &&
+      !logoUrl.startsWith('data:image/jpeg;base64,') &&
+      !logoUrl.startsWith('data:image/png;base64,') &&
+      !logoUrl.startsWith('data:image/webp;base64,') &&
+      !/^https?:\/\//i.test(logoUrl)
+    ) {
+      throw new BadRequestException('Hospital logo must be a JPG, PNG, WebP, or secure hosted image URL.');
+    }
+  }
+
+  async updateLogo(userId: string, logoUrl: string) {
+    this.validateLogo(logoUrl);
+    const hospitalMembership = await this.hospitalAccess.getHospitalForUser(userId);
+    const hospital = await this.prisma.hospital.update({
+      where: { id: hospitalMembership.id },
+      data: {
+        logoUrl: logoUrl || null,
+        logoUpdatedAt: logoUrl ? new Date() : null,
+      },
+      include: { bloodRequests: true, inventoryItems: true },
+    });
+
+    await this.audit.log('HOSPITAL_LOGO_UPDATED', 'HOSPITAL', userId, hospital.id, {
+      hasLogo: Boolean(logoUrl),
+    });
+
+    this.realtime.broadcastHospitalMapUpdate({
+      reason: 'hospital.logo.updated',
+      hospitalId: hospital.id,
+      hospitalName: hospital.hospitalName,
+    });
+
+    return hospital;
+  }
+
   private toRad(value: number) {
     return (value * Math.PI) / 180;
   }
@@ -135,18 +173,93 @@ export class HospitalsService {
     return typeof value === 'number' ? Number(value.toFixed(3)) : null;
   }
 
+  private formatBloodGroup(value?: BloodGroup | null) {
+    return String(value ?? '').replace('_POS', '+').replace('_NEG', '-');
+  }
+
+  private getLocationFreshness(lastLocationUpdateAt?: Date | null) {
+    if (!lastLocationUpdateAt) {
+      return {
+        status: 'UNAVAILABLE',
+        label: 'Location not available',
+        ageMinutes: null,
+        thresholdHours: LOCATION_FRESHNESS_THRESHOLD_HOURS,
+      };
+    }
+
+    const ageMinutes = Math.max(0, Math.floor((Date.now() - lastLocationUpdateAt.getTime()) / (60 * 1000)));
+    const stale = ageMinutes > LOCATION_FRESHNESS_THRESHOLD_HOURS * 60;
+    return {
+      status: stale ? 'STALE' : 'FRESH',
+      label: stale
+        ? 'Location is stale'
+        : ageMinutes < 60
+          ? `Updated ${ageMinutes || 1} minute${ageMinutes === 1 ? '' : 's'} ago`
+          : `Updated ${Math.floor(ageMinutes / 60)} hour${Math.floor(ageMinutes / 60) === 1 ? '' : 's'} ago`,
+      ageMinutes,
+      thresholdHours: LOCATION_FRESHNESS_THRESHOLD_HOURS,
+    };
+  }
+
   async searchDonors(userId: string, query: DonorSearchDto) {
     const hospital = await this.hospitalAccess.getHospitalForUser(userId);
+    const activeRequest = query.requestId
+      ? await this.prisma.bloodRequest.findFirst({
+          where: {
+            id: query.requestId,
+            status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+            OR: [
+              { hospitalId: hospital.id },
+              {
+                hospitalId: { not: hospital.id },
+                requestSource: { in: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
+              },
+            ],
+          },
+          select: {
+            id: true,
+            requestReference: true,
+            bloodGroup: true,
+            unitsNeeded: true,
+            priority: true,
+            requestSource: true,
+            type: true,
+            location: true,
+            emergencyLocation: true,
+            city: true,
+            region: true,
+            latitude: true,
+            longitude: true,
+            hospitalId: true,
+            hospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true, latitude: true, longitude: true } },
+          },
+        })
+      : null;
+    if (query.requestId && !activeRequest) {
+      throw new NotFoundException('Emergency request context was not found or is not available to your hospital.');
+    }
     const locationFilter = query.location?.trim();
     const now = new Date();
-    const requestedGroup = query.bloodGroup && query.bloodGroup !== BloodGroup.UNKNOWN ? query.bloodGroup : undefined;
+    const requestedGroup = activeRequest?.bloodGroup ?? (query.bloodGroup && query.bloodGroup !== BloodGroup.UNKNOWN ? query.bloodGroup : undefined);
     const bloodGroups = requestedGroup
       ? query.matchMode === 'COMPATIBLE'
         ? getCompatibleDonorGroups(requestedGroup)
         : [requestedGroup]
       : BLOOD_GROUP_CODES as unknown as BloodGroup[];
-    const originLatitude = typeof query.latitude === 'number' ? query.latitude : hospital.latitude ?? undefined;
-    const originLongitude = typeof query.longitude === 'number' ? query.longitude : hospital.longitude ?? undefined;
+    const originLatitude = typeof activeRequest?.latitude === 'number'
+      ? activeRequest.latitude
+      : typeof activeRequest?.hospital.latitude === 'number'
+        ? activeRequest.hospital.latitude
+        : typeof query.latitude === 'number'
+          ? query.latitude
+          : hospital.latitude ?? undefined;
+    const originLongitude = typeof activeRequest?.longitude === 'number'
+      ? activeRequest.longitude
+      : typeof activeRequest?.hospital.longitude === 'number'
+        ? activeRequest.hospital.longitude
+        : typeof query.longitude === 'number'
+          ? query.longitude
+          : hospital.longitude ?? undefined;
     const hasOrigin = typeof originLatitude === 'number' && typeof originLongitude === 'number';
     const radiusKm = query.radiusKm ?? 25;
     const availabilityFilter = query.availabilityFilter ?? 'AVAILABLE_ONLY';
@@ -205,6 +318,8 @@ export class HospitalsService {
         region: true,
         locationSharingEnabled: true,
         lastLocationUpdateAt: true,
+        notificationEmailEnabled: true,
+        notificationSmsEnabled: true,
         preferredHospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true } },
         donationHistory: {
           select: { donatedAt: true },
@@ -241,6 +356,7 @@ export class HospitalsService {
       const positiveResponses = donor.donorResponses.filter((response: { responseStatus: string }) => ['ACCEPTED', 'DONATED'].includes(response.responseStatus)).length;
       const responseRate = totalResponses > 0 ? Math.round((positiveResponses / totalResponses) * 100) : null;
       const available = donor.availabilityStatus && donor.eligibilityStatus && !cooldown && !deferred;
+      const alertConsent = donor.notificationEmailEnabled || donor.notificationSmsEnabled;
       const status = deferred
         ? 'DEFERRED'
         : cooldownEndingSoon
@@ -248,8 +364,31 @@ export class HospitalsService {
           : cooldown
             ? 'COOLDOWN'
             : available
-              ? 'AVAILABLE'
-              : 'UNAVAILABLE';
+            ? 'AVAILABLE'
+            : 'UNAVAILABLE';
+      const locationFreshness = this.getLocationFreshness(donor.lastLocationUpdateAt);
+      const matchReasons = [
+        requestedGroup
+          ? donor.bloodGroup === requestedGroup
+            ? `${this.formatBloodGroup(donor.bloodGroup)} is an exact match for the requested blood group`
+            : `${this.formatBloodGroup(donor.bloodGroup)} is compatible with ${this.formatBloodGroup(requestedGroup)} by platform rules`
+          : 'Blood group is confirmed',
+        latestClinical?.status === DonorClinicalStatus.APPROVED ? 'eligibility is hospital-approved' : 'eligibility is not fully approved',
+        cooldown ? `cooling period ends in ${cooldownDaysRemaining} day(s)` : 'cooling period is complete',
+        available ? 'donor is currently available' : 'donor is not currently available',
+        alertConsent ? 'emergency notifications are enabled' : 'emergency notifications are not enabled',
+        mapEligible ? 'secure location sharing is enabled' : 'usable map location is unavailable',
+        distanceKm !== null
+          ? distanceKm <= radiusKm
+            ? `within ${radiusKm} km of the search origin`
+            : `outside the selected ${radiusKm} km radius`
+          : 'distance cannot be calculated',
+        locationFreshness.status === 'FRESH'
+          ? 'location update is fresh'
+          : locationFreshness.status === 'STALE'
+            ? 'location update is stale'
+            : 'location update is unavailable',
+      ];
 
       return {
         id: donor.id,
@@ -287,12 +426,17 @@ export class HospitalsService {
         latitude: mapEligible ? this.approximateCoordinate(donor.latitude) : null,
         longitude: mapEligible ? this.approximateCoordinate(donor.longitude) : null,
         lastLocationUpdateAt: donor.lastLocationUpdateAt,
+        locationFreshness,
+        emergencyNotificationConsent: alertConsent,
+        matchReasons,
+        matchReasonSummary: matchReasons.join(', ') + '.',
         clinicalStatus: latestClinical?.status ?? null,
         temporaryDeferralDuration: latestClinical?.clinicalReview?.temporaryDeferralDuration ?? null,
       };
     });
 
     const visible = decorated.filter((donor) => {
+      if (query.emergencyMode && !donor.emergencyNotificationConsent) return false;
       if (donor.operationalStatus === 'DEFERRED') return includeDeferred;
       if (availabilityFilter === 'AVAILABLE_ONLY') return donor.operationalStatus === 'AVAILABLE';
       if (availabilityFilter === 'INCLUDE_COOLDOWN') return ['AVAILABLE', 'COOLDOWN', 'COOLDOWN_ENDING_SOON'].includes(donor.operationalStatus);
@@ -306,6 +450,7 @@ export class HospitalsService {
         const statusDelta = (statusRank[a.operationalStatus] ?? 9) - (statusRank[b.operationalStatus] ?? 9);
         if (statusDelta !== 0) return statusDelta;
         if (a.matchType !== b.matchType) return a.matchType === 'EXACT' ? -1 : 1;
+        if (a.locationFreshness.status !== b.locationFreshness.status) return a.locationFreshness.status === 'FRESH' ? -1 : 1;
       }
       return (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY);
     });
@@ -315,28 +460,68 @@ export class HospitalsService {
       : sorted;
     const radiusFallbackApplied = Boolean(hasOrigin && radiusKm && sorted.length > 0 && withinRadius.length === 0);
     const finalResults = radiusFallbackApplied ? sorted.slice(0, 10) : withinRadius;
+    const visibleIds = new Set(visible.map((donor) => donor.id));
+    const finalIds = new Set(finalResults.map((donor) => donor.id));
+    const exclusionSummary = {
+      clinicalApprovalMissing: 0,
+      notCurrentlyAvailable: decorated.filter((donor) => !visibleIds.has(donor.id) && donor.operationalStatus === 'UNAVAILABLE').length,
+      coolingPeriod: decorated.filter((donor) => !visibleIds.has(donor.id) && ['COOLDOWN', 'COOLDOWN_ENDING_SOON'].includes(donor.operationalStatus)).length,
+      deferred: decorated.filter((donor) => !visibleIds.has(donor.id) && donor.operationalStatus === 'DEFERRED').length,
+      outsideRadius: hasOrigin && radiusKm ? sorted.filter((donor) => !finalIds.has(donor.id) && donor.distanceKm !== null && donor.distanceKm > radiusKm).length : 0,
+      missingOrStaleLocation: sorted.filter((donor) => !finalIds.has(donor.id) && (donor.locationFreshness.status !== 'FRESH' || donor.distanceKm === null)).length,
+      bloodGroupIncompatible: 0,
+      emergencyConsentMissing: decorated.filter((donor) => !visibleIds.has(donor.id) && query.emergencyMode && !donor.emergencyNotificationConsent).length,
+    };
 
     return {
       donors: finalResults,
       summary: {
+        evaluatedDonors: decorated.length,
         totalMatches: finalResults.length,
         totalBeforeRadius: sorted.length,
         availableCount: finalResults.filter((donor) => donor.operationalStatus === 'AVAILABLE').length,
         cooldownCount: finalResults.filter((donor) => donor.operationalStatus === 'COOLDOWN' || donor.operationalStatus === 'COOLDOWN_ENDING_SOON').length,
         deferredCount: finalResults.filter((donor) => donor.operationalStatus === 'DEFERRED').length,
         mapReadyCount: finalResults.filter((donor) => donor.mapLocationAvailable).length,
+        staleLocationCount: finalResults.filter((donor) => donor.locationFreshness.status === 'STALE').length,
         origin: hasOrigin
           ? {
               latitude: originLatitude,
               longitude: originLongitude,
-              source: typeof query.latitude === 'number' && typeof query.longitude === 'number' ? 'query' : 'hospital',
-              hospitalName: hospital.hospitalName,
+              source: activeRequest ? 'request' : typeof query.latitude === 'number' && typeof query.longitude === 'number' ? 'query' : 'hospital',
+              hospitalName: activeRequest?.hospital.hospitalName ?? hospital.hospitalName,
+              location: activeRequest?.emergencyLocation ?? activeRequest?.location ?? hospital.location,
+            }
+          : null,
+        requestContext: activeRequest
+          ? {
+              id: activeRequest.id,
+              requestReference: activeRequest.requestReference,
+              bloodGroup: activeRequest.bloodGroup,
+              bloodComponent: 'Whole blood',
+              unitsNeeded: activeRequest.unitsNeeded,
+              priority: activeRequest.priority,
+              requestSource: activeRequest.requestSource,
+              type: activeRequest.type,
+              location: activeRequest.emergencyLocation ?? activeRequest.location,
+              city: activeRequest.city,
+              region: activeRequest.region,
+              requestingHospital: activeRequest.hospital,
+              loggedInHospital: {
+                id: hospital.id,
+                hospitalName: hospital.hospitalName,
+                location: hospital.location,
+                city: hospital.city,
+                region: hospital.region,
+              },
+              interHospital: activeRequest.hospitalId !== hospital.id,
             }
           : null,
         radiusFallback: {
           applied: radiusFallbackApplied,
           requestedRadiusKm: radiusKm,
         },
+        exclusionSummary,
       },
     };
   }
@@ -565,7 +750,7 @@ export class HospitalsService {
         data: {
           email: dto.email,
           passwordHash: await argon2.hash(dto.password),
-          role: Role.HOSPITAL_STAFF,
+          role: Role.HOSPITAL_ADMIN,
           emailVerified: true,
         },
       });
@@ -812,6 +997,12 @@ export class HospitalsService {
     await this.audit.log('HOSPITAL_DONOR_ELIGIBILITY_DECISION', 'DONOR', userId, donorId, {
       hospitalId: hospital.id,
       approved,
+    });
+    this.realtime.broadcastDonorSearchInvalidated({
+      donorId: updated.id,
+      bloodGroup: updated.bloodGroup,
+      preferredHospitalId: updated.preferredHospitalId,
+      reason: 'hospital.donor-eligibility.updated',
     });
 
     return updated;

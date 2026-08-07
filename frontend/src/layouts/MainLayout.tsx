@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../hooks/useAuth';
-import { publicEmergencyAlerts } from '../data/publicContent';
 import { BrandLogo } from '../components/BrandLogo';
+import { FloatingAssistantLauncher } from '../components/FloatingAssistantLauncher';
 import {
   getPublicAnnouncements,
   getPublicWebsiteContent,
@@ -16,9 +16,6 @@ import {
 
 const ANNOUNCEMENT_READ_STORAGE_KEY = 'public-announcements-read-state';
 const ANNOUNCEMENT_MUTE_STORAGE_KEY = 'public-announcements-muted';
-
-const formatBloodGroup = (value: string) =>
-  value.replace('_POS', '+').replace('_NEG', '-').replace('_', ' ');
 
 type AnnouncementItem = {
   id: string;
@@ -97,7 +94,6 @@ export function MainLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [announcementsOpen, setAnnouncementsOpen] = useState(false);
   const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilter>('ALL');
-  const [liveAlert, setLiveAlert] = useState<{ bloodType: string | null; hospitalName: string } | null>(null);
   const [footerSettings, setFooterSettings] = useState<WebsiteFooterSettingsItem | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [guestReadAnnouncements, setGuestReadAnnouncements] = useState<Record<string, number>>({});
@@ -113,16 +109,10 @@ export function MainLayout() {
     ['/emergency-requests', 'Emergency Requests'],
     ['/nearby-centers', 'Blood Centers'],
     ['/donor-register', 'Become a Donor'],
+    ['/assistant', 'Assistant'],
     ['/contact', 'Contact'],
     ['/login', 'Login'],
   ] as const;
-
-  const alertItem = liveAlert
-    ? {
-        bloodType: formatBloodGroup(liveAlert.bloodType ?? 'O_NEG'),
-        hospital: liveAlert.hospitalName,
-      }
-    : publicEmergencyAlerts[0];
 
   const authNavItems = useMemo(() => {
     if (!user) return [];
@@ -133,7 +123,7 @@ export function MainLayout() {
         ['/donor/profile', 'Profile'],
       ] as const;
     }
-    if (user.role === 'HOSPITAL_STAFF') {
+    if (user.role === 'HOSPITAL_ADMIN') {
       return [
         ['/hospital/dashboard', 'Dashboard'],
         ['/hospital/notifications', 'Notifications'],
@@ -187,11 +177,6 @@ export function MainLayout() {
 
   const loadWebsiteChrome = useCallback(async () => {
     const websiteContent = await getPublicWebsiteContent();
-    setLiveAlert(
-      websiteContent.alert
-        ? { bloodType: websiteContent.alert.bloodType, hospitalName: websiteContent.alert.hospitalName }
-        : null,
-    );
     setFooterSettings(websiteContent.footerSettings);
   }, []);
 
@@ -215,11 +200,6 @@ export function MainLayout() {
           return;
         }
 
-        setLiveAlert(
-          websiteContent.alert
-            ? { bloodType: websiteContent.alert.bloodType, hospitalName: websiteContent.alert.hospitalName }
-            : null,
-        );
         setFooterSettings(websiteContent.footerSettings);
         setAnnouncements(feed.map((item) => mapAnnouncementItem(item, isAuthenticated, guestReadAnnouncements)));
         setLastAnnouncementSyncAt(new Date().toISOString());
@@ -228,7 +208,6 @@ export function MainLayout() {
           return;
         }
 
-        setLiveAlert(null);
         setAnnouncements([]);
       }
     };
@@ -394,21 +373,7 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-white text-text">
-      <div className="sticky top-3 z-50 mx-3 rounded-[1.75rem] border border-red-200/60 bg-primary px-4 py-2 text-sm text-white shadow-lg shadow-red-950/10">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          <p className="font-semibold">
-            URGENT: {alertItem.bloodType} blood needed at {alertItem.hospital}
-          </p>
-          <Link
-            className="rounded-full border border-white/30 px-3 py-1 text-xs font-bold uppercase tracking-wide transition hover:bg-white/10"
-            to="/emergency-requests"
-          >
-            View Alert
-          </Link>
-        </div>
-      </div>
-
-      <header className="sticky top-[74px] z-40 mx-3 mt-3 rounded-[2rem] border border-red-100 bg-white/95 shadow-lg shadow-slate-950/5 backdrop-blur">
+      <header className="sticky top-3 z-40 mx-3 mt-3 rounded-[2rem] border border-red-100 bg-white/95 shadow-lg shadow-slate-950/5 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
           <BrandLogo />
 
@@ -725,7 +690,7 @@ export function MainLayout() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="page-content-safe-bottom mx-auto max-w-7xl px-4 py-6">
         <Outlet />
       </main>
 
@@ -791,6 +756,7 @@ export function MainLayout() {
           </div>
         </div>
       </footer>
+      <FloatingAssistantLauncher />
     </div>
   );
 }

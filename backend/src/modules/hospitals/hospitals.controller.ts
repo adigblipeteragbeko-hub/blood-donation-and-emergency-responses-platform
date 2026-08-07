@@ -14,15 +14,16 @@ import { UpdateHospitalAdminDto } from './dto/admin/update-hospital-admin.dto';
 import { DonorSearchDto } from './dto/donor-search.dto';
 import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
 import { ApproveDonorEligibilityDto } from './dto/approve-donor-eligibility.dto';
+import { UpdateHospitalLogoDto } from './dto/update-hospital-logo.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
 @Roles(
-  Role.HOSPITAL_STAFF,
-  Role.HOSPITAL_STAFF,
-  Role.BLOOD_BANK_OFFICER,
+  Role.HOSPITAL_ADMIN,
+  Role.HOSPITAL_ADMIN,
+  Role.HOSPITAL_ADMIN,
   Role.ADMIN,
-  Role.SUPER_ADMIN,
+  Role.ADMIN,
 )
 @Permissions([PermissionCode.HOSPITAL_OPERATIONS_VIEW], 'any')
 @Controller('hospitals')
@@ -37,6 +38,11 @@ export class HospitalsController {
   @Get('profile')
   getProfile(@CurrentUser() user: { id: string }) {
     return this.hospitalsService.getProfile(user.id);
+  }
+
+  @Patch('profile/logo')
+  updateLogo(@CurrentUser() user: { id: string }, @Body() dto: UpdateHospitalLogoDto) {
+    return this.hospitalsService.updateLogo(user.id, dto.logoUrl);
   }
 
   @Get('donor-search')
@@ -77,22 +83,22 @@ export class HospitalsController {
     return this.hospitalsService.approveEligibility(user.id, donorId, dto.approved);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_STAFF_MANAGE], 'any')
+  @Roles(Role.ADMIN)
+  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_ADMIN_MANAGE], 'any')
   @Get('admin')
   listAllForAdmin(@Query() query: PaginationQueryDto) {
     return this.hospitalsService.listAllForAdmin(query);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_STAFF_MANAGE], 'any')
+  @Roles(Role.ADMIN)
+  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_ADMIN_MANAGE], 'any')
   @Post('admin')
   createByAdmin(@Body() dto: CreateHospitalAdminDto, @CurrentUser() user: { id: string }) {
     return this.hospitalsService.createByAdmin(dto, user.id);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_STAFF_MANAGE], 'any')
+  @Roles(Role.ADMIN)
+  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_ADMIN_MANAGE], 'any')
   @Patch('admin/:id')
   updateByAdmin(
     @Param('id') id: string,
@@ -102,8 +108,8 @@ export class HospitalsController {
     return this.hospitalsService.updateByAdmin(id, dto, user.id);
   }
 
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_STAFF_MANAGE], 'any')
+  @Roles(Role.ADMIN)
+  @Permissions([PermissionCode.HOSPITAL_APPROVE, PermissionCode.HOSPITAL_ADMIN_MANAGE], 'any')
   @Delete('admin/:id')
   removeByAdmin(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.hospitalsService.removeByAdmin(id, user.id);

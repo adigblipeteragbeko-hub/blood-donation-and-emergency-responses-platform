@@ -10,6 +10,8 @@ import {
   getHospitalActiveRequests,
   receiveHospitalBloodTransfer,
   respondToHospitalActiveRequest,
+  cancelHospitalActiveRequest,
+  updateHospitalActiveRequest,
   updateHospitalActiveResponseStatus,
 } from '../services/hospital-portal';
 import { bloodGroups } from '../constants/blood-groups';
@@ -24,6 +26,39 @@ const formatSource = (source: string) =>
   source === 'DONORS_ONLY' ? 'Donors Only' : source === 'HOSPITALS_ONLY' ? 'Hospitals Only' : 'Donors + Hospitals';
 
 const isHospitalSource = (source: string) => source === 'HOSPITALS_ONLY' || source === 'DONORS_AND_HOSPITALS';
+
+type RequestEditDraft = {
+  ward: string;
+  unitsNeeded: string;
+  priority: BloodRequestItem['priority'];
+  requestSource: BloodRequestItem['requestSource'];
+  location: string;
+  city: string;
+  region: string;
+  requiredBy: string;
+  notes: string;
+  cancelReason: string;
+};
+
+const toDateTimeInput = (value?: string | null) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 16);
+};
+
+const makeEditDraft = (request: BloodRequestItem): RequestEditDraft => ({
+  ward: request.ward ?? '',
+  unitsNeeded: String(request.unitsNeeded ?? 1),
+  priority: request.priority,
+  requestSource: request.requestSource,
+  location: request.location ?? '',
+  city: request.city ?? '',
+  region: request.region ?? '',
+  requiredBy: toDateTimeInput(request.requiredBy),
+  notes: request.notes ?? '',
+  cancelReason: '',
+});
 
 function getFulfillmentProgress(request: BloodRequestItem) {
   const transferMap = new Map<string, NonNullable<HospitalRequestResponseItem['transfer']>>();
@@ -91,6 +126,7 @@ function StatusBadge({ children, tone = 'slate' }: { children: string; tone?: 'r
 export default function HospitalActiveRequestsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focusRequestId = searchParams.get('requestId') ?? '';
+  const activeFilter = searchParams.get('filter') === 'active';
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState<BloodRequestItem[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<BloodRequestItem | null>(null);
@@ -106,6 +142,8 @@ export default function HospitalActiveRequestsPage() {
   const [cannotFulfillNote, setCannotFulfillNote] = useState('');
   const [dispatchDrafts, setDispatchDrafts] = useState<Record<string, { units: string; note: string; reference: string }>>({});
   const [receiveDrafts, setReceiveDrafts] = useState<Record<string, { units: string; note: string; condition: string }>>({});
+  const [editDraft, setEditDraft] = useState<RequestEditDraft | null>(null);
+  const [editing, setEditing] = useState(false);
   const pageSize = 25;
 
   const load = async (nextPage = page) => {
@@ -202,12 +240,16 @@ export default function HospitalActiveRequestsPage() {
 
   const submitCannotFulfill = async () => {
     if (!selectedRequest) return;
+    if (!cannotFulfillNote.trim()) {
+      setMessage('Enter a reason before marking this request as unable to fulfil.');
+      return;
+    }
     try {
       await respondToHospitalActiveRequest(selectedRequest.id, {
         responseType: 'CANNOT_FULFILL',
-        note: cannotFulfillNote.trim() || undefined,
+        note: cannotFulfillNote.trim(),
       });
-      setMessage('Cannot-fulfill response submitted.');
+      setMessage('Your hospital marked this request as unable to fulfil.');
       await refreshSelected();
     } catch (error: any) {
       setMessage(error?.response?.data?.error?.message ?? 'Unable to submit response.');
@@ -228,16 +270,58 @@ export default function HospitalActiveRequestsPage() {
   const cancelRequest = async () => {
     if (!selectedRequest) return;
     try {
-      const { updateHospitalActiveRequestStatus } = await import('../services/hospital-portal');
-      await updateHospitalActiveRequestStatus(
+      await cancelHospitalActiveRequest(
         selectedRequest.id,
-        'CANCELLED',
-        'Hospital coordination request cancelled.',
+        {
+          reason: editDraft?.cancelReason.trim() || 'Hospital cancelled this blood request.',
+          lastKnownUpdatedAt: selectedRequest.updatedAt,
+        },
       );
       setMessage('Request cancelled.');
+      setEditDraft(null);
       await refreshSelected();
     } catch (error: any) {
       setMessage(error?.response?.data?.error?.message ?? 'Unable to cancel request.');
+    }
+  };
+
+  const saveRequestEdits = async () => {
+    if (!selectedRequest || !editDraft) return;
+    const unitsNeeded = Number(editDraft.unitsNeeded);
+    if (!Number.isFinite(unitsNeeded) || unitsNeeded < 1) {
+      setMessage('Units requested must be at least 1.');
+      return;
+    }
+    if (!editDraft.ward.trim()) {
+      setMessage('Ward / Unit is required.');
+      return;
+    }
+    if (!editDraft.location.trim()) {
+      setMessage('Location is required.');
+      return;
+    }
+    try {
+      setEditing(true);
+      const updated = await updateHospitalActiveRequest(selectedRequest.id, {
+        ward: editDraft.ward.trim(),
+        unitsNeeded,
+        priority: editDraft.priority,
+        requestSource: editDraft.requestSource,
+        location: editDraft.location.trim(),
+        city: editDraft.city.trim() || undefined,
+        region: editDraft.region.trim() || undefined,
+        requiredBy: new Date(editDraft.requiredBy).toISOString(),
+        notes: editDraft.notes.trim() || undefined,
+        lastKnownUpdatedAt: selectedRequest.updatedAt,
+      });
+      setMessage(`Request ${updated.requestReference} updated successfully.`);
+      setSelectedRequest(updated);
+      setEditDraft(null);
+      await refreshSelected();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.error?.message ?? 'Unable to update request.');
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -290,6 +374,11 @@ export default function HospitalActiveRequestsPage() {
         <p className="text-sm text-muted">
           Coordinate open blood requests from your hospital and other hospitals seeking stock support.
         </p>
+        {activeFilter ? (
+          <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+            Showing active requests only. Active requests are open or matching requests available to this hospital.
+          </p>
+        ) : null}
       </div>
 
       <FilterBox
@@ -302,7 +391,7 @@ export default function HospitalActiveRequestsPage() {
       <div className="card">
         {loading ? <p className="text-sm text-muted">Loading requests...</p> : null}
         {!loading && filteredItems.length === 0 ? (
-          <p className="text-sm text-muted">No active hospital-coordination requests match this view.</p>
+          <p className="text-sm text-muted">There are no active blood requests.</p>
         ) : null}
         {!loading && filteredItems.length > 0 ? (
           <div className="overflow-x-auto">
@@ -383,11 +472,87 @@ export default function HospitalActiveRequestsPage() {
                     <p className="text-sm text-muted">Accept or reject supply offers. Inventory transfer remains a manual dispatch step.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+                      type="button"
+                      onClick={() => setEditDraft(makeEditDraft(selectedRequest))}
+                    >
+                      Edit Request
+                    </button>
                     <button className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold" type="button" onClick={() => void cancelRequest()}>
                       Cancel Request
                     </button>
                   </div>
                 </div>
+                {editDraft ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-slate-900">Edit request details</h4>
+                        <p className="text-xs text-muted">Blood Group is locked after coordination starts. Refresh if another user updated this request.</p>
+                      </div>
+                      <button className="text-sm font-bold text-slate-500" type="button" onClick={() => setEditDraft(null)}>
+                        Close
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <label className="text-sm font-semibold">
+                        Ward / Unit
+                        <input className="legacy-input mt-1" value={editDraft.ward} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, ward: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Units Requested
+                        <input className="legacy-input mt-1" min={1} type="number" value={editDraft.unitsNeeded} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, unitsNeeded: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Priority
+                        <select className="legacy-input mt-1" value={editDraft.priority} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, priority: e.target.value as RequestEditDraft['priority'] } : draft)}>
+                          {(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const).map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+                        </select>
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Request Source
+                        <select className="legacy-input mt-1" value={editDraft.requestSource} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, requestSource: e.target.value as RequestEditDraft['requestSource'] } : draft)}>
+                          <option value="DONORS_ONLY">Donors Only</option>
+                          <option value="HOSPITALS_ONLY">Hospitals Only</option>
+                          <option value="DONORS_AND_HOSPITALS">Donors + Hospitals</option>
+                        </select>
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Location
+                        <input className="legacy-input mt-1" value={editDraft.location} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, location: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Required By
+                        <input className="legacy-input mt-1" type="datetime-local" value={editDraft.requiredBy} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, requiredBy: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold">
+                        City
+                        <input className="legacy-input mt-1" value={editDraft.city} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, city: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold">
+                        Region
+                        <input className="legacy-input mt-1" value={editDraft.region} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, region: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold md:col-span-2">
+                        Notes
+                        <textarea className="legacy-input mt-1 min-h-20" value={editDraft.notes} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, notes: e.target.value } : draft)} />
+                      </label>
+                      <label className="text-sm font-semibold md:col-span-2">
+                        Cancellation Reason
+                        <input className="legacy-input mt-1" value={editDraft.cancelReason} onChange={(e) => setEditDraft((draft) => draft ? { ...draft, cancelReason: e.target.value } : draft)} placeholder="Optional reason if cancelling this request" />
+                      </label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button className="btn-primary !px-4 !py-2 text-sm" disabled={editing} type="button" onClick={() => void saveRequestEdits()}>
+                        {editing ? 'Saving...' : 'Save Changes'}
+                      </button>
+                      <button className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-700" type="button" onClick={() => void cancelRequest()}>
+                        Cancel Request
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 <TransferFulfillmentSummary request={selectedRequest} />
                 <div className="mt-4 space-y-3">
                   {selectedRequest.hospitalResponses?.length ? (
@@ -605,6 +770,11 @@ export default function HospitalActiveRequestsPage() {
                       <p className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50 p-3 font-semibold text-emerald-800">
                         Transfer completed and inventory receipt confirmed.
                       </p>
+                    ) : selectedRequest.currentHospitalResponse.responseType === 'CANNOT_FULFILL' ? (
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <p className="font-bold text-slate-900">Your hospital marked this request as unable to fulfil.</p>
+                        {selectedRequest.currentHospitalResponse.note ? <p className="mt-1">Reason: {selectedRequest.currentHospitalResponse.note}</p> : null}
+                      </div>
                     ) : selectedRequest.currentHospitalResponse.status === 'ACCEPTED' ? (
                       <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 p-3 font-semibold text-amber-800">
                         Accepted - awaiting dispatch record.
@@ -640,7 +810,7 @@ export default function HospitalActiveRequestsPage() {
                     <div className="rounded-xl border border-slate-100 p-3 lg:col-span-2">
                       <p className="font-bold text-slate-900">Cannot Fulfill</p>
                       <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
-                        <input className="legacy-input" placeholder="Reason / optional note" value={cannotFulfillNote} onChange={(e) => setCannotFulfillNote(e.target.value)} />
+                        <input className="legacy-input" placeholder="Reason / note required" value={cannotFulfillNote} onChange={(e) => setCannotFulfillNote(e.target.value)} required />
                         <button className="rounded-xl border border-slate-200 px-4 py-2 font-bold text-slate-700" type="button" onClick={() => void submitCannotFulfill()}>
                           Cannot Fulfill
                         </button>
@@ -648,7 +818,7 @@ export default function HospitalActiveRequestsPage() {
                     </div>
                   </div>
                 )}
-                <p className="mt-3 text-sm text-muted">Contact Requesting Hospital: placeholder until a safe messaging endpoint is enabled.</p>
+                <p className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-muted">Secure hospital messaging is not yet enabled. Use the recorded offer or unable-to-fulfil response for auditable coordination.</p>
               </div>
             )}
 

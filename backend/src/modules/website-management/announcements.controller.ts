@@ -9,7 +9,7 @@ import { WebsiteAnnouncementsService } from './website-announcements.service';
 
 @Controller('announcements')
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.DONOR, Role.HOSPITAL_STAFF)
+@Roles(Role.ADMIN, Role.DONOR, Role.HOSPITAL_ADMIN)
 export class AnnouncementsController {
   constructor(private readonly announcementsService: WebsiteAnnouncementsService) {}
 

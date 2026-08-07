@@ -3,7 +3,7 @@ import { api, clearStoredSession, saveStoredSession, unwrap } from './api';
 export type AuthUser = {
   id: string;
   email: string;
-  role: 'DONOR' | 'ADMIN' | 'SUPER_ADMIN' | 'HOSPITAL_STAFF' | 'BLOOD_BANK_OFFICER';
+  role: 'DONOR' | 'ADMIN' | 'HOSPITAL_ADMIN';
   isActive?: boolean;
   emailVerified?: boolean;
 };

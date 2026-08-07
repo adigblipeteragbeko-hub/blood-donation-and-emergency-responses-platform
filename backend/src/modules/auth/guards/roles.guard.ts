@@ -8,7 +8,7 @@ import { expandRoles } from '../../../common/rbac/permission-matrix';
 
 const AUDIT_SENSITIVE_ROLES = new Set<Role>([
   Role.ADMIN,
-  Role.SUPER_ADMIN,
+  Role.ADMIN,
   Role.ADMIN,
   Role.ADMIN,
 ]);

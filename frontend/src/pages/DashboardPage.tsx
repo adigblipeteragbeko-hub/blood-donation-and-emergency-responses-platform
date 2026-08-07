@@ -22,7 +22,7 @@ export default function DashboardPage() {
           <p className="text-sm text-muted">Availability, donation history, and emergency alerts.</p>
         </div>
         <div className="card">
-          <h2 className="font-semibold">Hospital Staff</h2>
+          <h2 className="font-semibold">Hospital Admin</h2>
           <p className="text-sm text-muted">Inventory, blood requests, and donor matching.</p>
         </div>
       </div>

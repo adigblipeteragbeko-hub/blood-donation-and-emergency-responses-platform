@@ -17,10 +17,10 @@ import {
 } from './smart-blood-banks.types';
 
 const LOCATION_VIEW_ROLES = new Set<Role>([
-  Role.SUPER_ADMIN,
   Role.ADMIN,
-  Role.HOSPITAL_STAFF,
-  Role.BLOOD_BANK_OFFICER,
+  Role.ADMIN,
+  Role.HOSPITAL_ADMIN,
+  Role.HOSPITAL_ADMIN,
 ]);
 
 const BLOOD_GROUPS: BloodGroup[] = [
@@ -881,7 +881,7 @@ export class MapsService {
     this.assertCanViewLiveLocations(role);
     await this.hydrateMissingHospitalCoordinates();
 
-    const isHospitalOperator = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    const isHospitalOperator = role === Role.HOSPITAL_ADMIN;
     const hospitalScope = isHospitalOperator ? await this.hospitalAccess.getHospitalForUser(userId) : null;
 
     const [hospitals, requests, donors] = await Promise.all([

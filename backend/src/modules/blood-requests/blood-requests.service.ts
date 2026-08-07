@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   BloodGroup,
   DonorClinicalStatus,
@@ -13,6 +13,7 @@ import {
   RequestProgressStatus,
   RequestStatus,
   Role,
+  SmsPurpose,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import { CreateBloodRequestDto } from './dto/create-blood-request.dto';
@@ -20,6 +21,7 @@ import { CreateBloodRequestUpdateDto } from './dto/create-blood-request-update.d
 import { RespondToBloodRequestDto } from './dto/respond-to-blood-request.dto';
 import { UpdateDonorResponseDto } from './dto/update-donor-response.dto';
 import { UpdateBloodRequestStatusDto } from './dto/update-blood-request-status.dto';
+import { CancelBloodRequestDto, UpdateBloodRequestDto } from './dto/update-blood-request.dto';
 import { AdminCorrectCompletionDto } from './dto/admin-correct-completion.dto';
 import {
   RespondToHospitalRequestDto,
@@ -34,6 +36,7 @@ import { RealtimeService } from '../../common/realtime/realtime.service';
 import { HospitalAccessService } from '../../common/rbac/hospital-access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { getCompatibilityRank, getCompatibleDonorGroups } from '../../common/utils/blood-compatibility';
+import { SmsService } from '../sms/sms.service';
 
 @Injectable()
 export class BloodRequestsService {
@@ -44,6 +47,7 @@ export class BloodRequestsService {
     private readonly realtime: RealtimeService,
     private readonly hospitalAccess: HospitalAccessService,
     private readonly notifications: NotificationsService,
+    private readonly smsService: SmsService,
   ) {}
 
   private mapStatusToTracking(status: RequestStatus): RequestProgressStatus {
@@ -83,7 +87,7 @@ export class BloodRequestsService {
     role?: Role,
   ) {
     const canSeeDonorResponses =
-      role === Role.ADMIN || role === Role.SUPER_ADMIN || (viewerHospitalId !== undefined && request.hospitalId === viewerHospitalId);
+      role === Role.ADMIN || (viewerHospitalId !== undefined && request.hospitalId === viewerHospitalId);
 
     return {
       ...request,
@@ -278,7 +282,17 @@ export class BloodRequestsService {
                   location: { contains: normalizedLocation, mode: 'insensitive' },
                 }),
           },
-          select: { id: true, userId: true, bloodGroup: true, latitude: true, longitude: true, location: true },
+          select: {
+            id: true,
+            userId: true,
+            bloodGroup: true,
+            latitude: true,
+            longitude: true,
+            location: true,
+            phone: true,
+            alternativePhoneNumber: true,
+            notificationSmsEnabled: true,
+          },
           take: 500,
         })
       : [];
@@ -321,6 +335,9 @@ export class BloodRequestsService {
       id: donor.id,
       userId: donor.userId,
       distanceKm: donor.distanceKm,
+      phone: donor.phone,
+      alternativePhoneNumber: donor.alternativePhoneNumber,
+      notificationSmsEnabled: donor.notificationSmsEnabled,
     }));
 
     if (shouldTargetDonors && matchedDonors.length < dto.unitsNeeded && dto.type === 'EMERGENCY') {
@@ -537,14 +554,43 @@ export class BloodRequestsService {
       );
     }
 
-    if (process.env.SMS_ENABLED === 'true' && shouldTargetDonors && matchedDonors.length > 0) {
-      await this.audit.log('EMERGENCY_SMS_DISPATCH_TRIGGERED', 'BLOOD_REQUEST', userId, request.id, {
+    if (shouldTargetDonors && matchedDonors.length > 0) {
+      const smsRecipients = matchedDonors
+        .filter((donor) => donor.notificationSmsEnabled)
+        .map((donor) => donor.phone ?? donor.alternativePhoneNumber);
+      const smsResult = await this.smsService.sendEmergencyDonorAlert({
+        recipients: smsRecipients,
+        message: `BloodSOS URGENT: ${hospital.hospitalName} needs ${dto.bloodGroup} blood, ${dto.unitsNeeded} unit(s). Open the BloodSOS platform to respond. Ref: ${request.requestReference}`,
+        hospitalId: hospital.id,
+        triggeredByUserId: userId,
+        relatedEntityType: 'BLOOD_REQUEST',
+        relatedEntityId: request.id,
+        idempotencyKey: this.smsService.buildEventIdempotencyKey(
+          SmsPurpose.EMERGENCY_REQUEST,
+          'BLOOD_REQUEST',
+          request.id,
+          request.requestReference,
+          smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+        ),
+      });
+      await this.audit.log(smsResult.success ? 'EMERGENCY_SMS_CAMPAIGN_SENT' : 'EMERGENCY_SMS_CAMPAIGN_FAILED', 'SMS', userId, smsResult.smsLogId ?? request.id, {
+        requestId: request.id,
+        requestReference: request.requestReference,
         matchedDonorCount: matchedDonors.length,
+        smsEligibleRecipients: smsResult.validRecipients,
+        smsSent: smsResult.sentCount,
+        smsRejected: smsResult.rejectedCount,
+        skippedInvalidRecipients: smsResult.skippedInvalidRecipients,
+        smsStatus: smsResult.status,
+        providerCampaignId: smsResult.providerCampaignId ?? null,
+        errorCode: smsResult.errorCode ?? null,
       });
       this.alerts.notifyCritical('EMERGENCY_SMS_DISPATCH_TRIGGERED', {
         requestId: request.id,
         requestReference: request.requestReference,
         matchedDonorCount: matchedDonors.length,
+        smsStatus: smsResult.status,
+        smsSent: smsResult.sentCount,
       });
     }
 
@@ -823,7 +869,7 @@ export class BloodRequestsService {
   async listMine(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = query.take ?? 100;
-    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
+    if (role === Role.ADMIN) {
       return this.listAll(userId, Role.ADMIN, query);
     }
 
@@ -845,31 +891,48 @@ export class BloodRequestsService {
     });
   }
 
+  private async getHospitalActiveContext(userId: string, role: Role) {
+    const isAdmin = role === Role.ADMIN;
+    const hospital = isAdmin ? null : await this.hospitalAccess.getHospitalForUser(userId);
+    const where = isAdmin
+      ? {
+          status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+          requestSource: { in: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
+        }
+      : {
+          OR: [
+            {
+              hospitalId: hospital!.id,
+              status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+            },
+            {
+              hospitalId: { not: hospital!.id },
+              status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+              requestSource: { in: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
+            },
+          ],
+        };
+
+    return { hospital, where };
+  }
+
+  async hospitalActiveSummary(userId: string, role: Role) {
+    const { where } = await this.getHospitalActiveContext(userId, role);
+    const total = await this.prisma.bloodRequest.count({ where });
+    return {
+      total,
+      activeStatusesIncluded: [RequestStatus.OPEN, RequestStatus.MATCHING],
+      requestSourcesIncludedForOtherHospitals: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS],
+    };
+  }
+
   async listHospitalActive(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = Math.min(query.take ?? 100, 100);
-    const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
-    const hospital = isAdmin ? null : await this.hospitalAccess.getHospitalForUser(userId);
+    const { hospital, where } = await this.getHospitalActiveContext(userId, role);
 
     const requests = await this.prisma.bloodRequest.findMany({
-      where: isAdmin
-        ? {
-            status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
-            requestSource: { in: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
-          }
-        : {
-            OR: [
-              {
-                hospitalId: hospital!.id,
-                status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
-              },
-              {
-                hospitalId: { not: hospital!.id },
-                status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
-                requestSource: { in: [RequestSource.HOSPITALS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
-              },
-            ],
-          },
+      where,
       include: {
         hospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true, contactPhone: true } },
         updates: { orderBy: { createdAt: 'desc' }, take: 5, include: { updatedBy: { select: { email: true, role: true } } } },
@@ -907,7 +970,7 @@ export class BloodRequestsService {
   async listHospitalHistory(userId: string, role: Role, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = Math.min(query.take ?? 100, 100);
-    const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+    const isAdmin = role === Role.ADMIN;
     const hospital = isAdmin ? null : await this.hospitalAccess.getHospitalForUser(userId);
     const archivedStatuses = [RequestStatus.FULFILLED, RequestStatus.CANCELLED];
 
@@ -982,7 +1045,7 @@ export class BloodRequestsService {
   }
 
   async getHospitalActiveById(id: string, userId: string, role: Role) {
-    const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+    const isAdmin = role === Role.ADMIN;
     const hospital = isAdmin ? null : await this.hospitalAccess.getHospitalForUser(userId);
     const request = await this.prisma.bloodRequest.findUnique({
       where: { id },
@@ -1028,6 +1091,180 @@ export class BloodRequestsService {
         ? request.hospitalResponses.find((response) => response.respondingHospitalId === hospital.id) ?? null
         : null,
     };
+  }
+
+  private getCommittedRequestUnits(request: {
+    donorResponses?: Array<{ responseStatus: DonorResponseStatus }>;
+    hospitalResponses?: Array<{ status: HospitalRequestResponseStatus; unitsOffered?: number | null; transfer?: { receivedUnits?: number | null; units?: number | null } | null }>;
+    hospitalTransfers?: Array<{ receivedUnits?: number | null; units?: number | null }>;
+  }) {
+    const acceptedDonorUnits = (request.donorResponses ?? []).filter((response) =>
+      response.responseStatus === DonorResponseStatus.ACCEPTED || response.responseStatus === DonorResponseStatus.DONATED,
+    ).length;
+    const acceptedHospitalUnits = (request.hospitalResponses ?? []).reduce((sum, response) => {
+      if (response.status !== HospitalRequestResponseStatus.ACCEPTED) return sum;
+      return sum + Number(response.transfer?.receivedUnits ?? response.transfer?.units ?? response.unitsOffered ?? 0);
+    }, 0);
+    const receivedTransferUnits = (request.hospitalTransfers ?? []).reduce(
+      (sum, transfer) => sum + Number(transfer.receivedUnits ?? 0),
+      0,
+    );
+
+    return Math.max(acceptedDonorUnits + acceptedHospitalUnits, receivedTransferUnits);
+  }
+
+  private assertRequestEditFresh(request: { updatedAt: Date }, lastKnownUpdatedAt?: string) {
+    if (!lastKnownUpdatedAt) return;
+    const clientTimestamp = new Date(lastKnownUpdatedAt).getTime();
+    if (!Number.isFinite(clientTimestamp) || clientTimestamp !== request.updatedAt.getTime()) {
+      throw new ConflictException('This request has changed since you opened it. Refresh the request before saving.');
+    }
+  }
+
+  async updateHospitalActiveRequest(id: string, userId: string, role: Role, dto: UpdateBloodRequestDto) {
+    const request = await this.prisma.bloodRequest.findUnique({
+      where: { id },
+      include: {
+        donorResponses: { select: { responseStatus: true } },
+        hospitalResponses: { select: { status: true, unitsOffered: true, transfer: { select: { units: true, receivedUnits: true } } } },
+        hospitalTransfers: { select: { units: true, receivedUnits: true } },
+      },
+    });
+    if (!request) {
+      throw new NotFoundException('Blood request not found');
+    }
+
+    await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
+    this.assertRequestEditFresh(request, dto.lastKnownUpdatedAt);
+
+    if (request.status === RequestStatus.FULFILLED || request.status === RequestStatus.CANCELLED) {
+      throw new BadRequestException('Fulfilled or cancelled requests cannot be edited.');
+    }
+
+    const committedUnits = this.getCommittedRequestUnits(request);
+    if (dto.unitsNeeded !== undefined && dto.unitsNeeded < committedUnits) {
+      throw new BadRequestException(`Units requested cannot be lower than ${committedUnits} already committed or received unit(s).`);
+    }
+
+    const hasCoordinationActivity =
+      (request.donorResponses?.length ?? 0) > 0 ||
+      (request.hospitalResponses?.length ?? 0) > 0 ||
+      (request.hospitalTransfers?.length ?? 0) > 0;
+    if (hasCoordinationActivity && dto.bloodGroup && dto.bloodGroup !== request.bloodGroup) {
+      throw new BadRequestException('Blood group cannot be changed after donor or hospital coordination has started.');
+    }
+
+    const data: Prisma.BloodRequestUpdateInput = {};
+    if (dto.hospitalCenterName !== undefined) data.hospitalCenterName = dto.hospitalCenterName?.trim() || null;
+    if (dto.ward !== undefined) data.ward = dto.ward?.trim() || null;
+    if (dto.hospitalPatientReference !== undefined) data.hospitalPatientReference = dto.hospitalPatientReference?.trim() || null;
+    if (dto.bloodGroup !== undefined) data.bloodGroup = dto.bloodGroup;
+    if (dto.unitsNeeded !== undefined) data.unitsNeeded = dto.unitsNeeded;
+    if (dto.priority !== undefined) data.priority = dto.priority;
+    if (dto.requestSource !== undefined) data.requestSource = dto.requestSource;
+    if (dto.location !== undefined) data.location = dto.location.trim();
+    if (dto.emergencyLocation !== undefined) data.emergencyLocation = dto.emergencyLocation?.trim() || null;
+    if (dto.city !== undefined) data.city = dto.city?.trim() || null;
+    if (dto.region !== undefined) data.region = dto.region?.trim() || null;
+    if (dto.locationNotes !== undefined) data.locationNotes = dto.locationNotes?.trim() || null;
+    if (dto.latitude !== undefined) data.latitude = dto.latitude;
+    if (dto.longitude !== undefined) data.longitude = dto.longitude;
+    if (dto.requiredBy !== undefined) data.requiredBy = new Date(dto.requiredBy);
+    if (dto.notes !== undefined) data.notes = dto.notes?.trim() || null;
+
+    const updated = await this.prisma.bloodRequest.update({
+      where: { id },
+      data,
+      include: {
+        hospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true, contactPhone: true } },
+        donorResponses: {
+          include: {
+            donor: { select: { id: true, donorNumber: true, fullName: true, bloodGroup: true, location: true, user: { select: { email: true } } } },
+          },
+        },
+        hospitalResponses: {
+          include: {
+            respondingHospital: { select: { id: true, hospitalName: true, location: true, city: true, region: true, contactPhone: true } },
+            transfer: true,
+          },
+        },
+        hospitalTransfers: true,
+      },
+    });
+
+    await this.audit.log('BLOOD_REQUEST_EDITED', 'BLOOD_REQUEST', userId, id, {
+      requestReference: request.requestReference,
+      editedFields: Object.keys(data),
+    });
+
+    await this.realtime.broadcastEmergencyRequest(
+      {
+        requestId: id,
+        requestReference: updated.requestReference,
+        status: updated.status,
+        trackingStatus: updated.trackingStatus,
+        hospitalId: updated.hospitalId,
+      },
+      { requestId: id, hospitalId: updated.hospitalId, isPublicEmergency: updated.type === 'EMERGENCY' },
+    );
+
+    return {
+      ...this.sanitizeHospitalActiveRequest(updated, updated.hospitalId, role),
+      currentHospitalStock: null,
+      currentHospitalResponse: null,
+    };
+  }
+
+  async cancelHospitalActiveRequest(id: string, userId: string, role: Role, dto: CancelBloodRequestDto) {
+    const request = await this.prisma.bloodRequest.findUnique({ where: { id } });
+    if (!request) {
+      throw new NotFoundException('Blood request not found');
+    }
+
+    await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
+    this.assertRequestEditFresh(request, dto.lastKnownUpdatedAt);
+
+    if (request.status === RequestStatus.FULFILLED || request.status === RequestStatus.CANCELLED) {
+      throw new BadRequestException('This request is already closed.');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const nextRequest = await tx.bloodRequest.update({
+        where: { id },
+        data: {
+          status: RequestStatus.CANCELLED,
+          trackingStatus: RequestProgressStatus.CANCELLED,
+        },
+      });
+      await tx.bloodRequestUpdate.create({
+        data: {
+          bloodRequestId: id,
+          updatedById: userId,
+          oldStatus: request.trackingStatus,
+          newStatus: RequestProgressStatus.CANCELLED,
+          comment: dto.reason?.trim() || 'Hospital cancelled this blood request.',
+        },
+      });
+      return nextRequest;
+    });
+
+    await this.audit.log('BLOOD_REQUEST_CANCELLED', 'BLOOD_REQUEST', userId, id, {
+      requestReference: request.requestReference,
+      reason: dto.reason ?? null,
+    });
+
+    await this.realtime.broadcastEmergencyRequest(
+      {
+        requestId: id,
+        requestReference: request.requestReference,
+        status: updated.status,
+        trackingStatus: updated.trackingStatus,
+        hospitalId: request.hospitalId,
+      },
+      { requestId: id, hospitalId: request.hospitalId, isPublicEmergency: request.type === 'EMERGENCY' },
+    );
+
+    return updated;
   }
 
   async updateHospitalActiveStatus(id: string, userId: string, role: Role, dto: UpdateBloodRequestStatusDto) {
@@ -1125,7 +1362,12 @@ export class BloodRequestsService {
       if (unitsOffered > stock.availableUnits) {
         throw new BadRequestException(`Cannot offer more than available stock (${stock.availableUnits} unit(s)).`);
       }
+    } else if (!dto.note?.trim()) {
+      throw new BadRequestException('Enter a reason before marking this request as unable to fulfil.');
     }
+    const responseStatus = responseType === HospitalRequestResponseType.CANNOT_FULFILL
+      ? HospitalRequestResponseStatus.CANCELLED
+      : HospitalRequestResponseStatus.PENDING;
 
     const response = await this.prisma.hospitalBloodRequestResponse.upsert({
       where: {
@@ -1139,7 +1381,7 @@ export class BloodRequestsService {
         unitsOffered: responseType === HospitalRequestResponseType.OFFERED ? dto.unitsOffered : null,
         bloodGroupOffered: responseType === HospitalRequestResponseType.OFFERED ? bloodGroupOffered : null,
         note: dto.note?.trim() || null,
-        status: HospitalRequestResponseStatus.PENDING,
+        status: responseStatus,
       },
       create: {
         requestId: id,
@@ -1148,6 +1390,7 @@ export class BloodRequestsService {
         unitsOffered: responseType === HospitalRequestResponseType.OFFERED ? dto.unitsOffered : null,
         bloodGroupOffered: responseType === HospitalRequestResponseType.OFFERED ? bloodGroupOffered : null,
         note: dto.note?.trim() || null,
+        status: responseStatus,
       },
       include: {
         respondingHospital: {
@@ -1633,7 +1876,7 @@ export class BloodRequestsService {
       throw new NotFoundException('Blood request not found');
     }
 
-    const isHospitalOperator = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    const isHospitalOperator = role === Role.HOSPITAL_ADMIN;
     if (isHospitalOperator) {
       await this.hospitalAccess.assertHospitalAccess(request.hospital.id, userId, role);
     }
@@ -1748,7 +1991,7 @@ export class BloodRequestsService {
     }
 
     if (dto.newStatus === RequestProgressStatus.COMPLETED) {
-      if (role !== Role.HOSPITAL_STAFF) {
+      if (role !== Role.HOSPITAL_ADMIN) {
         throw new BadRequestException('Only hospital staff can mark request as COMPLETED. Admin may use completion correction.');
       }
       if (!dto.transfusedByStaffId || !dto.unitDin || !dto.patientEncounterId) {
@@ -1860,7 +2103,7 @@ export class BloodRequestsService {
     const threeMinutesAgo = new Date(now.getTime() - 3 * 60 * 1000);
 
     const whereScope =
-      role === Role.ADMIN || role === Role.SUPER_ADMIN
+      role === Role.ADMIN
         ? {}
         : {
             hospital: {
@@ -2094,7 +2337,7 @@ export class BloodRequestsService {
       throw new NotFoundException('Donor response not found');
     }
 
-    const canHospitalUpdateResponse = role === Role.HOSPITAL_STAFF || role === Role.BLOOD_BANK_OFFICER;
+    const canHospitalUpdateResponse = role === Role.HOSPITAL_ADMIN;
     if (canHospitalUpdateResponse) {
       await this.hospitalAccess.assertHospitalAccess(response.bloodRequest.hospitalId, userId, role);
     }

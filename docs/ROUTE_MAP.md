@@ -35,7 +35,7 @@
 - `/donor/settings`
 - `/donor/support`
 
-### Hospital Area (Protected, `HOSPITAL_STAFF`)
+### Hospital Area (Protected, `HOSPITAL_ADMIN`)
 - `/dashboard/hospital` -> redirects to `/hospital/dashboard`
 - `/hospital/dashboard`
 - `/hospital/inventory`

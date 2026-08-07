@@ -5,6 +5,11 @@ import { FilterBox, Pager } from '../components/TableControls';
 import { EditModal } from '../components/ui/EditModal';
 import { HospitalLocationPicker } from '../components/ui/HospitalLocationPicker';
 import { AsyncTypeahead, TypeaheadSuggestion } from '../components/ui/AsyncTypeahead';
+import { SmartAvatar } from '../components/SmartAvatar';
+import { AdminAuditLogTable } from '../components/admin/AdminAuditLogTable';
+import { DonorCommunicationsSection } from '../components/admin/DonorCommunicationsSection';
+import { AiIntelligencePanel } from '../components/AiIntelligencePanel';
+import { BloodSosAssistant } from '../components/BloodSosAssistant';
 import { countryCodes } from '../constants/country-codes';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -20,22 +25,25 @@ import {
   updateDonorResponse,
 } from '../services/hospital-portal';
 
-type Role =
-  | 'SUPER_ADMIN'
-  | 'ADMIN'
-  | 'DONOR'
-  | 'HOSPITAL_STAFF'
-  | 'HOSPITAL_STAFF'
-  | 'BLOOD_BANK_OFFICER'
-  | 'BLOOD_BANK_OFFICER'
-  | 'ADMIN'
-  | 'ADMIN';
+type Role = 'ADMIN' | 'DONOR' | 'HOSPITAL_ADMIN';
 
 type UserItem = {
   id: string;
   email: string;
   role: Role;
   isActive: boolean;
+  emailVerified?: boolean;
+  verifiedAt?: string | null;
+  verificationMethod?: string | null;
+  verificationReason?: string | null;
+  emailVerificationAttempts?: Array<{
+    status: string;
+    provider?: string | null;
+    failureReason?: string | null;
+    sentAt?: string | null;
+    failedAt?: string | null;
+    createdAt: string;
+  }>;
 };
 
 type DonorItem = {
@@ -54,7 +62,45 @@ type DonorItem = {
   emergencyContactRelationship?: string | null;
   availabilityStatus: boolean;
   eligibilityStatus: boolean;
-  user: { id: string; email: string; role: Role; isActive: boolean };
+  phoneVerified?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  user: {
+    id: string;
+    email: string;
+    role: Role;
+    isActive: boolean;
+    emailVerified?: boolean;
+    verifiedAt?: string | null;
+    createdAt?: string;
+  };
+  clinicalRecords?: Array<{
+    id: string;
+    status: string;
+    submittedAt?: string | null;
+    hospitalReviewedAt?: string | null;
+    officeCompletedAt?: string | null;
+    finalDecisionAt?: string | null;
+    selectedHospital?: { hospitalName?: string | null } | null;
+    clinicalReview?: {
+      reviewedAt?: string | null;
+      outcomeOfScreening?: string | null;
+      qualifiesToDonate?: string | null;
+      temporaryDeferralDuration?: string | null;
+    } | null;
+  }>;
+};
+
+type EditingDonor = DonorItem & {
+  donorNumber: string;
+  firstName: string;
+  otherNames: string;
+  surname: string;
+  phone: string;
+  alternativePhoneNumber: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelationship: string;
 };
 
 type HospitalItem = {
@@ -70,6 +116,7 @@ type HospitalItem = {
   bloodBankAvailable?: boolean;
   contactName: string;
   contactPhone: string;
+  logoUrl?: string | null;
   user: { id: string; email: string; role: Role; isActive: boolean };
 };
 
@@ -80,16 +127,7 @@ const formatRole = (role: Role) =>
     .split('_')
     .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
     .join(' ');
-const adminAssignableRoles: Role[] = [
-  'ADMIN',
-  'ADMIN',
-  'ADMIN',
-  'DONOR',
-  'HOSPITAL_STAFF',
-  'HOSPITAL_STAFF',
-  'BLOOD_BANK_OFFICER',
-  'BLOOD_BANK_OFFICER',
-];
+const adminAssignableRoles: Role[] = ['ADMIN', 'DONOR', 'HOSPITAL_ADMIN'];
 const bloodGroupLabel: Record<string, string> = {
   UNKNOWN: 'Unknown / Not Tested Yet',
   O_POS: 'O_POS (O+)',
@@ -106,6 +144,33 @@ const nameRule = /^[A-Za-z\s'-]+$/;
 const relationshipOptions = ['Father', 'Mother', 'Brother', 'Sister', 'Spouse', 'Guardian', 'Friend', 'Relative', 'Other'];
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+const clinicalStatusLabel: Record<string, string> = {
+  DRAFT: 'Draft',
+  SUBMITTED: 'Submitted',
+  HOSPITAL_REVIEW: 'Under Hospital Review',
+  OFFICE_USE_COMPLETED: 'Office Use Completed',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  TEMPORARILY_DEFERRED: 'Temporarily Deferred',
+  PERMANENTLY_DEFERRED: 'Permanently Deferred',
+};
+const clinicalStatusClass: Record<string, string> = {
+  DRAFT: 'bg-slate-100 text-slate-700',
+  SUBMITTED: 'bg-blue-100 text-blue-700',
+  HOSPITAL_REVIEW: 'bg-indigo-100 text-indigo-700',
+  OFFICE_USE_COMPLETED: 'bg-cyan-100 text-cyan-700',
+  APPROVED: 'bg-green-100 text-green-700',
+  REJECTED: 'bg-red-100 text-red-700',
+  TEMPORARILY_DEFERRED: 'bg-amber-100 text-amber-700',
+  PERMANENTLY_DEFERRED: 'bg-rose-100 text-rose-700',
+};
+const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : '-';
+const getLatestClinicalRecord = (donor: Pick<DonorItem, 'clinicalRecords'>) => donor.clinicalRecords?.[0] ?? null;
+const getClinicalStatus = (donor: Pick<DonorItem, 'clinicalRecords'>) => getLatestClinicalRecord(donor)?.status ?? 'NOT_STARTED';
+const formatClinicalStatus = (status: string) => status === 'NOT_STARTED' ? 'Not Started' : clinicalStatusLabel[status] ?? status.replace(/_/g, ' ');
+const getClinicalStatusClass = (status: string) => clinicalStatusClass[status] ?? 'bg-slate-100 text-slate-700';
+const formatAccountStatus = (donor: DonorItem) => donor.user.isActive ? 'Approved' : 'Suspended';
+const getAccountStatusClass = (donor: DonorItem) => donor.user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
 const resolveHospitalMapStatus = (hospital: HospitalItem): 'Map Ready' | 'Coordinates Missing' | 'Pending Approval' => {
   if (!hospital.isApproved) return 'Pending Approval';
   const hasCoordinates = typeof hospital.latitude === 'number' && typeof hospital.longitude === 'number';
@@ -148,8 +213,6 @@ export default function AdminManagementPage() {
     alternativePhone: '',
     bloodGroup: '',
     location: '',
-    eligibilityStatus: true,
-    availabilityStatus: true,
     emergencyContactName: '',
     emergencyContactCode: '+233',
     emergencyContactPhone: '',
@@ -166,21 +229,13 @@ export default function AdminManagementPage() {
     contactPhone: '',
   });
   const [editingUser, setEditingUser] = useState<{ id: string; role: Role; isActive: boolean } | null>(null);
-  const [editingDonor, setEditingDonor] = useState<{
-    id: string;
-    donorNumber: string;
-    fullName: string;
-    firstName: string;
-    otherNames: string;
-    surname: string;
-    phone: string;
-    alternativePhoneNumber: string;
-    location: string;
-    bloodGroup: string;
-    emergencyContactName: string;
-    emergencyContactPhone: string;
-    emergencyContactRelationship: string;
-  } | null>(null);
+  const [manualVerifyUser, setManualVerifyUser] = useState<UserItem | null>(null);
+  const [manualVerifyForm, setManualVerifyForm] = useState({
+    method: 'USER_CONFIRMED_IN_PERSON',
+    reason: '',
+    note: '',
+  });
+  const [editingDonor, setEditingDonor] = useState<EditingDonor | null>(null);
   const [editingHospital, setEditingHospital] = useState<{
     id: string;
     hospitalName: string;
@@ -260,6 +315,8 @@ export default function AdminManagementPage() {
         await loadRequests();
       } else if (activeSection === 'inventory-tracking') {
         await loadInventoryLogData();
+      } else if (activeSection === 'donor-communications' || activeSection === 'ai-intelligence' || activeSection === 'assistant') {
+        return;
       }
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
@@ -359,8 +416,6 @@ export default function AdminManagementPage() {
       alternativePhone: '',
       bloodGroup: '',
       location: '',
-      eligibilityStatus: true,
-      availabilityStatus: true,
       emergencyContactName: '',
       emergencyContactCode: '+233',
       emergencyContactPhone: '',
@@ -405,31 +460,31 @@ export default function AdminManagementPage() {
       setError('Primary phone number, emergency contact phone number, and relationship are required for donor accounts.');
       return;
     }
-    if (accountRole === 'HOSPITAL_STAFF' && !nameRule.test(accountForm.contactName)) {
+    if (accountRole === 'HOSPITAL_ADMIN' && !nameRule.test(accountForm.contactName)) {
       setError('Contact name must contain letters only.');
       return;
     }
-    if (accountRole === 'HOSPITAL_STAFF' && (!accountForm.city.trim() || !accountForm.region.trim())) {
+    if (accountRole === 'HOSPITAL_ADMIN' && (!accountForm.city.trim() || !accountForm.region.trim())) {
       setError('City and region are required for emergency requests and live map coordination.');
       return;
     }
     const latitude = accountForm.latitude.trim() ? Number(accountForm.latitude) : undefined;
     const longitude = accountForm.longitude.trim() ? Number(accountForm.longitude) : undefined;
-    if (accountRole === 'HOSPITAL_STAFF' && (latitude === undefined || longitude === undefined)) {
+    if (accountRole === 'HOSPITAL_ADMIN' && (latitude === undefined || longitude === undefined)) {
       setError('Please select the hospital location on the map.');
       return;
     }
-    if (accountRole === 'HOSPITAL_STAFF' && latitude !== undefined && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
+    if (accountRole === 'HOSPITAL_ADMIN' && latitude !== undefined && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
       setError('Latitude must be between -90 and 90.');
       return;
     }
-    if (accountRole === 'HOSPITAL_STAFF' && longitude !== undefined && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
+    if (accountRole === 'HOSPITAL_ADMIN' && longitude !== undefined && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
       setError('Longitude must be between -180 and 180.');
       return;
     }
 
     try {
-      if (['ADMIN', 'ADMIN', 'ADMIN'].includes(accountRole)) {
+      if (accountRole === 'ADMIN') {
         await api.post('/users', {
           email: accountForm.email,
           password: accountForm.password,
@@ -451,15 +506,13 @@ export default function AdminManagementPage() {
           alternativePhoneNumber: accountForm.alternativePhone ? `${accountForm.alternativePhoneCode}${accountForm.alternativePhone}` : undefined,
           bloodGroup: accountForm.bloodGroup,
           location: accountForm.location,
-          eligibilityStatus: accountForm.eligibilityStatus,
-          availabilityStatus: accountForm.availabilityStatus,
           emergencyContactName: accountForm.emergencyContactName,
           emergencyContactPhone: `${accountForm.emergencyContactCode}${accountForm.emergencyContactPhone}`,
           emergencyContactRelationship: accountForm.emergencyContactRelationship,
         });
       }
 
-      if (accountRole === 'HOSPITAL_STAFF') {
+      if (accountRole === 'HOSPITAL_ADMIN') {
         await api.post('/hospitals/admin', {
           email: accountForm.email,
           password: accountForm.password,
@@ -480,7 +533,7 @@ export default function AdminManagementPage() {
       setSuccessMessage(
         accountRole === 'DONOR'
           ? 'Donor created successfully.'
-          : accountRole === 'HOSPITAL_STAFF'
+          : accountRole === 'HOSPITAL_ADMIN'
             ? 'Hospital created successfully.'
             : 'User created successfully.',
       );
@@ -511,6 +564,42 @@ export default function AdminManagementPage() {
       await refreshCurrentSection();
     } catch {
       setError('Could not update user.');
+    }
+  };
+
+  const resendUserVerification = async (user: UserItem) => {
+    try {
+      setError('');
+      await api.post(`/users/${user.id}/resend-verification`);
+      setSuccessMessage(`Verification email queued for ${user.email}.`);
+      await loadUsers();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setSuccessMessage('');
+      setError(extracted ?? 'Could not resend verification email.');
+    }
+  };
+
+  const submitManualVerification = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!manualVerifyUser) return;
+
+    try {
+      setSavingModal(true);
+      setError('');
+      await api.post(`/users/${manualVerifyUser.id}/manual-verify`, manualVerifyForm);
+      setSuccessMessage(`${manualVerifyUser.email} has been manually verified.`);
+      setManualVerifyUser(null);
+      setManualVerifyForm({ method: 'USER_CONFIRMED_IN_PERSON', reason: '', note: '' });
+      await loadUsers();
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setSuccessMessage('');
+      setError(extracted ?? 'Could not manually verify this account.');
+    } finally {
+      setSavingModal(false);
     }
   };
 
@@ -554,6 +643,7 @@ export default function AdminManagementPage() {
     const emergencyPhone = splitPhone(donor.emergencyContactPhone);
     const legacyNameParts = donor.fullName.trim().split(/\s+/).filter(Boolean);
     setEditingDonor({
+      ...donor,
       id: donor.id,
       donorNumber: donor.donorNumber ?? '',
       fullName: donor.fullName,
@@ -613,15 +703,36 @@ export default function AdminManagementPage() {
     }
   };
 
-  const setDonorApproval = async (id: string, approved: boolean) => {
+  const setDonorAccountStatus = async (id: string, approved: boolean) => {
+    const confirmMessage = approved
+      ? [
+          'Approve Donor Account',
+          '',
+          'This action approves the donor account to use the BloodSOS platform.',
+          '',
+          'This does NOT approve the donor for blood donation.',
+          '',
+          "Clinical eligibility can only be approved by an authorised Hospital Administrator after reviewing the donor's Health & Eligibility Form.",
+        ].join('\n')
+      : [
+          'Suspend Donor Account',
+          '',
+          'The donor will lose access to the platform.',
+          '',
+          'Existing clinical records will not be deleted.',
+        ].join('\n');
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
     try {
-      await api.patch(`/donors/admin/${id}/eligibility`, { approved });
-      setSuccessMessage(approved ? 'Donor approved successfully.' : 'Donor rejected successfully.');
+      await api.patch(`/donors/admin/${id}/account-status`, { active: approved });
+      setSuccessMessage(approved ? 'Donor account approved successfully.' : 'Donor account suspended successfully.');
       await refreshCurrentSection();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Could not update donor approval.');
+      setError(extracted ?? 'Could not update donor account status.');
     }
   };
 
@@ -752,7 +863,10 @@ export default function AdminManagementPage() {
       includesTerm(donor.fullName) ||
       includesTerm(donor.user.email) ||
       includesTerm(donor.location) ||
-      includesTerm(donor.bloodGroup),
+      includesTerm(donor.bloodGroup) ||
+      includesTerm(formatAccountStatus(donor)) ||
+      includesTerm(formatClinicalStatus(getClinicalStatus(donor))) ||
+      includesTerm(donor.availabilityStatus ? 'Available' : 'Unavailable'),
   );
   const filteredHospitals = hospitals.filter(
     (hospital) =>
@@ -777,6 +891,8 @@ export default function AdminManagementPage() {
       includesTerm(log.changeType) ||
       includesTerm(log.changedBy?.email),
   );
+  const editingClinicalRecord = editingDonor ? getLatestClinicalRecord(editingDonor) : null;
+  const editingClinicalStatus = editingDonor ? getClinicalStatus(editingDonor) : 'NOT_STARTED';
 
   const handleUserModalSubmit = async (event: FormEvent) => {
     setSavingModal(true);
@@ -841,7 +957,7 @@ export default function AdminManagementPage() {
       {activeSection === 'settings' ? (
       <form className="card space-y-3" onSubmit={createAccount} autoComplete="off">
         <h2 className="text-xl font-semibold">Add Account</h2>
-        <p className="text-sm text-muted">Create donor, hospital-admin, and delegated administrative accounts.</p>
+        <p className="text-sm text-muted">Create donor, hospital-admin, and administrative accounts.</p>
 
         <div className="grid gap-3 md:grid-cols-3">
           <label className="text-sm font-semibold">
@@ -852,10 +968,8 @@ export default function AdminManagementPage() {
               onChange={(e) => setAccountRole(e.target.value as Role)}
             >
               <option value="DONOR">Donor</option>
-              <option value="HOSPITAL_STAFF">Hospital Admin</option>
+              <option value="HOSPITAL_ADMIN">Hospital Admin</option>
               <option value="ADMIN">Admin</option>
-              <option value="ADMIN">Website Content Admin</option>
-              <option value="ADMIN">ADMIN</option>
             </select>
           </label>
 
@@ -941,7 +1055,7 @@ export default function AdminManagementPage() {
           </div>
         ) : null}
 
-        {accountRole === 'HOSPITAL_STAFF' ? (
+        {accountRole === 'HOSPITAL_ADMIN' ? (
           <div className="grid gap-3 md:grid-cols-3">
             <input className="rounded border p-2" placeholder="Hospital Name" value={accountForm.hospitalName} onChange={(e) => setAccountForm((v) => ({ ...v, hospitalName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') }))} pattern="[A-Za-z\s'-]+" title="Name should contain letters only" required />
             <input className="rounded border p-2" placeholder="Registration Code" value={accountForm.registrationCode} onChange={(e) => setAccountForm((v) => ({ ...v, registrationCode: e.target.value }))} required />
@@ -1001,29 +1115,69 @@ export default function AdminManagementPage() {
       <div id="settings" className="card space-y-3">
         <h2 className="text-xl font-semibold">Users</h2>
         <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
-          <table className={`min-w-[680px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+          <table className={`min-w-[920px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
             <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b">
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Role</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Active</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Verification</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Last Delivery</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="border-b">
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{user.email}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{formatRole(user.role)}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{String(user.isActive)}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
-                    <div className="flex flex-wrap gap-2">
-                      <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editUser(user)}>Edit</button>
-                      <button className="rounded bg-red-100 px-3 py-1 text-red-700" onClick={() => void deleteUser(user.id)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredUsers.map((user) => {
+                const lastAttempt = user.emailVerificationAttempts?.[0];
+                return (
+                  <tr key={user.id} className="border-b">
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{user.email}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{formatRole(user.role)}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{String(user.isActive)}</td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                      <span className={`rounded-full px-2 py-1 text-xs font-bold ${user.emailVerified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {user.emailVerified ? 'Verified' : 'Pending'}
+                      </span>
+                      {user.verifiedAt ? <p className="mt-1 text-xs text-slate-500">{new Date(user.verifiedAt).toLocaleString()}</p> : null}
+                    </td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                      {lastAttempt ? (
+                        <div>
+                          <span className={`rounded-full px-2 py-1 text-xs font-bold ${
+                            lastAttempt.status === 'FAILED'
+                              ? 'bg-red-100 text-red-700'
+                              : lastAttempt.status === 'SENT' || lastAttempt.status === 'VERIFIED'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {lastAttempt.status}
+                          </span>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {lastAttempt.sentAt || lastAttempt.failedAt || lastAttempt.createdAt
+                              ? new Date(lastAttempt.sentAt ?? lastAttempt.failedAt ?? lastAttempt.createdAt).toLocaleString()
+                              : 'Date not recorded'}
+                          </p>
+                          {lastAttempt.failureReason ? <p className="max-w-[240px] text-xs text-red-600">{lastAttempt.failureReason}</p> : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">No attempt recorded</span>
+                      )}
+                    </td>
+                    <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                      <div className="flex flex-wrap gap-2">
+                        {!user.emailVerified ? (
+                          <>
+                            <button className="rounded bg-blue-100 px-3 py-1 text-blue-700" onClick={() => void resendUserVerification(user)}>Resend</button>
+                            <button className="rounded bg-green-100 px-3 py-1 text-green-700" onClick={() => setManualVerifyUser(user)}>Verify</button>
+                          </>
+                        ) : null}
+                        <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editUser(user)}>Edit</button>
+                        <button className="rounded bg-red-100 px-3 py-1 text-red-700" onClick={() => void deleteUser(user.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1041,44 +1195,56 @@ export default function AdminManagementPage() {
       <div id="donors" className="card space-y-3">
         <h2 className="text-xl font-semibold">Donors</h2>
         <div className="max-h-[58vh] overflow-auto rounded-xl border border-slate-100">
-          <table className={`min-w-[900px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
+          <table className={`min-w-[980px] w-full text-left ${compactDensity ? 'text-xs' : 'text-sm'}`}>
             <thead className="sticky top-0 z-10 bg-slate-50">
               <tr className="border-b">
-                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Serial Number</th>
-                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Name</th>
-                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Email</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Donor</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Account Status</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Clinical Eligibility</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Blood Group</th>
-                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Location</th>
-                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Approval</th>
+                <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Availability</th>
                 <th className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredDonors.map((donor) => (
+              {filteredDonors.map((donor) => {
+                const clinicalStatus = getClinicalStatus(donor);
+                return (
                 <tr key={donor.id} className="border-b">
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.donorNumber ?? '-'}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.fullName}</td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.user.email}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="font-semibold text-slate-900">{donor.fullName}</div>
+                    <div className="text-xs text-slate-500">{donor.donorNumber ?? 'No donor number'} • {donor.user.email}</div>
+                    <div className="text-xs text-slate-500">{donor.location}</div>
+                  </td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <span className={`rounded px-2 py-1 text-xs font-semibold ${getAccountStatusClass(donor)}`}>
+                      {formatAccountStatus(donor)}
+                    </span>
+                  </td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <span className={`rounded px-2 py-1 text-xs font-semibold ${getClinicalStatusClass(clinicalStatus)}`}>
+                      {formatClinicalStatus(clinicalStatus)}
+                    </span>
+                  </td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                     {donor.bloodGroup === 'UNKNOWN' ? (
                       <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">Pending Confirmation</span>
                     ) : bloodGroupLabel[donor.bloodGroup] ?? donor.bloodGroup}
                   </td>
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{donor.location}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
-                    <span className={`rounded px-2 py-1 text-xs font-semibold ${donor.eligibilityStatus ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {donor.eligibilityStatus ? 'Approved' : 'Pending'}
+                    <span className={`rounded px-2 py-1 text-xs font-semibold ${donor.availabilityStatus ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>
+                      {donor.availabilityStatus ? 'Available' : 'Unavailable'}
                     </span>
                   </td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
                     <div className="flex flex-wrap gap-2">
-                      {donor.eligibilityStatus ? (
-                        <button className="rounded bg-amber-100 px-3 py-1 text-amber-700" onClick={() => void setDonorApproval(donor.id, false)}>
-                          Revoke
+                      {donor.user.isActive ? (
+                        <button className="rounded bg-amber-100 px-3 py-1 text-amber-700" onClick={() => void setDonorAccountStatus(donor.id, false)}>
+                          Suspend Account
                         </button>
                       ) : (
-                        <button className="rounded bg-green-100 px-3 py-1 text-green-700" onClick={() => void setDonorApproval(donor.id, true)}>
-                          Approve
+                        <button className="rounded bg-green-100 px-3 py-1 text-green-700" onClick={() => void setDonorAccountStatus(donor.id, true)}>
+                          Approve Account
                         </button>
                       )}
                       <button className="rounded bg-gray-100 px-3 py-1" onClick={() => void editDonor(donor)}>Edit</button>
@@ -1086,7 +1252,8 @@ export default function AdminManagementPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -1118,7 +1285,12 @@ export default function AdminManagementPage() {
             <tbody>
               {filteredHospitals.map((hospital) => (
                 <tr key={hospital.id} className="border-b">
-                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.hospitalName}</td>
+                  <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>
+                    <div className="flex items-center gap-2">
+                      <SmartAvatar name={hospital.hospitalName} src={hospital.logoUrl} size="xs" />
+                      <span>{hospital.hospitalName}</span>
+                    </div>
+                  </td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.user.email}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.registrationCode}</td>
                   <td className={compactDensity ? 'px-3 py-2' : 'px-3 py-3'}>{hospital.location}</td>
@@ -1370,13 +1542,64 @@ export default function AdminManagementPage() {
       ) : null}
 
       {activeSection === 'audit' ? (
-      <div id="audit" className="card space-y-2">
-        <h2 className="text-xl font-semibold">Audit Logs</h2>
-        <p className="text-sm text-muted">
-          Audit records are tracked in backend and available for extension in a dedicated admin audit table view.
-        </p>
+      <div id="audit" className="card space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold">Audit Logs</h2>
+          <p className="text-sm text-muted">
+            Review protected admin audit records from the same backend source used by the Admin Dashboard.
+          </p>
+        </div>
+        <AdminAuditLogTable mode="full" compactDensity={compactDensity} />
       </div>
       ) : null}
+
+      {activeSection === 'donor-communications' ? <DonorCommunicationsSection /> : null}
+      {activeSection === 'ai-intelligence' ? <AiIntelligencePanel mode="admin" /> : null}
+      {activeSection === 'assistant' ? <BloodSosAssistant /> : null}
+
+      <EditModal
+        open={Boolean(manualVerifyUser)}
+        title="Manual Email Verification"
+        description="Use only when the user has been verified through an approved alternative process."
+        onClose={() => setManualVerifyUser(null)}
+      >
+        <form className="grid gap-3" onSubmit={(event) => void submitManualVerification(event)}>
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+            This action verifies {manualVerifyUser?.email}. Record the method and reason for audit traceability.
+          </p>
+          <select
+            className="rounded border p-2"
+            value={manualVerifyForm.method}
+            onChange={(event) => setManualVerifyForm((current) => ({ ...current, method: event.target.value }))}
+          >
+            <option value="USER_CONFIRMED_IN_PERSON">User confirmed in person</option>
+            <option value="VERIFIED_BY_PHONE">Verified by phone</option>
+            <option value="VERIFIED_AT_HOSPITAL">Verified at hospital/blood bank</option>
+            <option value="EMAIL_PROVIDER_FAILURE">Email provider failure</option>
+            <option value="OTHER">Other approved reason</option>
+          </select>
+          <textarea
+            className="rounded border p-2"
+            minLength={10}
+            placeholder="Reason for manual verification *"
+            value={manualVerifyForm.reason}
+            onChange={(event) => setManualVerifyForm((current) => ({ ...current, reason: event.target.value }))}
+            required
+          />
+          <textarea
+            className="rounded border p-2"
+            placeholder="Optional note"
+            value={manualVerifyForm.note}
+            onChange={(event) => setManualVerifyForm((current) => ({ ...current, note: event.target.value }))}
+          />
+          <div className="flex justify-end gap-2">
+            <button className="rounded border px-3 py-2" type="button" onClick={() => setManualVerifyUser(null)}>Cancel</button>
+            <button className="btn-primary" disabled={savingModal} type="submit">
+              {savingModal ? 'Verifying...' : 'Verify Account'}
+            </button>
+          </div>
+        </form>
+      </EditModal>
 
       <EditModal
         open={Boolean(editingUser)}
@@ -1407,6 +1630,66 @@ export default function AdminManagementPage() {
         {editingDonor ? (
           <form className="grid gap-3" onSubmit={(event) => void handleDonorModalSubmit(event)}>
             <input className="rounded border bg-gray-100 p-2" value={editingDonor.donorNumber} readOnly />
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h3 className="text-sm font-bold text-slate-800">Account Information</h3>
+              <div className="mt-2 grid gap-2 text-sm md:grid-cols-2">
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Account Status</span>
+                  <span className={`mt-1 inline-flex rounded px-2 py-1 text-xs font-semibold ${getAccountStatusClass(editingDonor)}`}>
+                    {formatAccountStatus(editingDonor)}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Email Verified</span>
+                  <span>{editingDonor.user.emailVerified ? 'Yes' : 'No'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Phone Verified</span>
+                  <span>{editingDonor.phoneVerified ? 'Yes' : 'No'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Registration Date</span>
+                  <span>{formatDateTime(editingDonor.user.createdAt ?? editingDonor.createdAt)}</span>
+                </div>
+              </div>
+            </section>
+            <section className="rounded-xl border border-slate-200 bg-white p-3">
+              <h3 className="text-sm font-bold text-slate-800">Clinical Information</h3>
+              <div className="mt-2 grid gap-2 text-sm md:grid-cols-2">
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Health Form Status</span>
+                  <span>{editingClinicalRecord ? formatClinicalStatus(editingClinicalRecord.status) : 'Not Started'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Hospital Review Status</span>
+                  <span>{editingClinicalRecord?.hospitalReviewedAt ? 'Reviewed' : editingClinicalRecord?.submittedAt ? 'Awaiting Review' : 'Not Submitted'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Office Use Status</span>
+                  <span>{editingClinicalRecord?.officeCompletedAt ? 'Office Use Completed' : 'Not Completed'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Clinical Eligibility Decision</span>
+                  <span className={`inline-flex rounded px-2 py-1 text-xs font-semibold ${getClinicalStatusClass(editingClinicalStatus)}`}>
+                    {formatClinicalStatus(editingClinicalStatus)}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Deferral Status</span>
+                  <span>
+                    {editingClinicalStatus === 'TEMPORARILY_DEFERRED'
+                      ? `Temporarily Deferred${editingClinicalRecord?.clinicalReview?.temporaryDeferralDuration ? ` (${editingClinicalRecord.clinicalReview.temporaryDeferralDuration})` : ''}`
+                      : editingClinicalStatus === 'PERMANENTLY_DEFERRED'
+                        ? 'Permanently Deferred'
+                        : 'Not Deferred'}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold uppercase text-slate-500">Last Review Date</span>
+                  <span>{formatDateTime(editingClinicalRecord?.clinicalReview?.reviewedAt ?? editingClinicalRecord?.finalDecisionAt ?? editingClinicalRecord?.hospitalReviewedAt)}</span>
+                </div>
+              </div>
+            </section>
             <div className="grid gap-3 md:grid-cols-3">
               <input className="rounded border p-2" placeholder="First Name *" value={editingDonor.firstName} onChange={(e) => setEditingDonor((v) => (v ? { ...v, firstName: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} required />
               <input className="rounded border p-2" placeholder="Other Name(s)" value={editingDonor.otherNames} onChange={(e) => setEditingDonor((v) => (v ? { ...v, otherNames: e.target.value.replace(/[^A-Za-z\s'-]/g, '') } : v))} />

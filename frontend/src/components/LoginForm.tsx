@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import api from '../services/api';
 import { Role } from '../types/auth';
 import { getRoleLandingPath } from '../utils/role-redirect';
 import { AppIcon } from './ui/AppIcon';
@@ -20,18 +21,22 @@ export function LoginForm({
 }) {
   const { login, logout } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const prefilledEmail = new URLSearchParams(location.search).get('email') ?? '';
+  const [email, setEmail] = useState(prefilledEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const isVerificationError = error.toLowerCase().includes('verify') || error.toLowerCase().includes('verification');
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      setEmail('');
+      setEmail(prefilledEmail);
       setPassword('');
     }, 50);
     return () => clearTimeout(timeout);
-  }, []);
+  }, [prefilledEmail]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -51,7 +56,7 @@ export function LoginForm({
 
       if (expectedRole && nextRole !== expectedRole) {
         logout();
-        setError(`This login is for ${expectedRole === 'HOSPITAL_STAFF' ? 'Hospital' : expectedRole} accounts only.`);
+        setError(`This login is for ${expectedRole === 'HOSPITAL_ADMIN' ? 'Hospital' : expectedRole} accounts only.`);
         return;
       }
 
@@ -71,6 +76,35 @@ export function LoginForm({
     }
   };
 
+  const resendVerification = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address first, then request a verification code.');
+      return;
+    }
+
+    try {
+      setResendingVerification(true);
+      const response = await api.post('/auth/resend-verification', { email });
+      setError('');
+      const message = response.data?.data?.message ?? 'If verification is pending, a new code has been sent.';
+      alert(message);
+      navigate('/verify-email', {
+        state: {
+          email,
+          verificationMethod: response.data?.data?.verificationMethod ?? 'EMAIL',
+          maskedDestination: response.data?.data?.maskedDestination,
+          expiresInMinutes: response.data?.data?.expiresInMinutes ?? 5,
+        },
+      });
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Could not request a new verification code. Please try again or contact support.');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   return (
     <div className="flex min-h-[72vh] items-center justify-center px-4 py-8 sm:px-6">
       <form
@@ -84,6 +118,29 @@ export function LoginForm({
         </h1>
         {subtitle ? <p className="text-center text-sm text-muted">{subtitle}</p> : null}
         {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+        {isVerificationError ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-bold">Account verification is required before sign in.</p>
+            <p className="mt-1">If the code did not arrive, request a new code, switch delivery method on the verification page, or ask an administrator to verify your account after confirming your identity.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={resendingVerification}
+                onClick={resendVerification}
+                type="button"
+              >
+                {resendingVerification ? 'Sending...' : 'Resend Verification Code'}
+              </button>
+              <button
+                className="rounded-xl border border-amber-300 px-3 py-2 text-xs font-bold"
+                onClick={() => navigate('/verify-email', { state: { email } })}
+                type="button"
+              >
+                Enter Code
+              </button>
+            </div>
+          </div>
+        ) : null}
         <label className="block text-sm font-semibold">
           Email
           <input

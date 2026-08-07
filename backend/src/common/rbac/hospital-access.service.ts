@@ -31,7 +31,7 @@ export class HospitalAccessService {
   }
 
   async assertHospitalAccess(hospitalId: string, userId: string, role: Role) {
-    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
+    if (role === Role.ADMIN) {
       return;
     }
 
@@ -42,7 +42,7 @@ export class HospitalAccessService {
   }
 
   buildHospitalScope(userId: string, role: Role): Prisma.BloodRequestWhereInput | undefined {
-    if (role === Role.ADMIN || role === Role.SUPER_ADMIN) {
+    if (role === Role.ADMIN) {
       return undefined;
     }
 

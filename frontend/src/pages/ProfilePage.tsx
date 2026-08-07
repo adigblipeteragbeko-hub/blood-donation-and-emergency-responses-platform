@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { DragEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import api from '../services/api';
 import { bloodGroups } from '../constants/blood-groups';
 import { countryCodes } from '../constants/country-codes';
+import { SmartAvatar } from '../components/SmartAvatar';
 
 type DonorProfileForm = {
   fullName: string;
@@ -17,6 +18,7 @@ type DonorProfileForm = {
   location: string;
   postalAddress: string;
   preferredHospitalId: string;
+  profileImageUrl: string;
   passportPhotoUrl: string;
   emergencyContactName: string;
   emergencyContactCode: string;
@@ -55,6 +57,7 @@ type DonorProfilePayload = {
   lastDonationDate?: string | null;
   nextEligibilityDate?: string | null;
   donationHistory?: Array<{ id: string; donatedAt: string }>;
+  profileImageUrl?: string | null;
 };
 
 const emptyProfile: DonorProfileForm = {
@@ -71,6 +74,7 @@ const emptyProfile: DonorProfileForm = {
   location: '',
   postalAddress: '',
   preferredHospitalId: '',
+  profileImageUrl: '',
   passportPhotoUrl: '',
   emergencyContactName: '',
   emergencyContactCode: '+233',
@@ -92,10 +96,23 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState<DonorProfilePayload | null>(null);
   const [eligibilityStatus, setEligibilityStatus] = useState<EligibilityStatus | null>(null);
   const [hospitalOptions, setHospitalOptions] = useState<HospitalOption[]>([]);
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const formatStatus = (value?: string | null) => (value ? value.replace(/_/g, ' ') : 'Not started');
   const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : 'Not Recorded');
   const bloodGroupLabel = (value?: string | null) => bloodGroups.find((group) => group.value === value)?.label ?? value ?? 'Not Recorded';
+  const displayName = [profile.firstName, profile.otherNames, profile.surname].filter(Boolean).join(' ').trim() || profile.fullName || 'Donor';
+
+  const validateImage = (file: File) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      return 'Please upload a JPG, PNG, or WebP image.';
+    }
+    if (file.size > 1_200_000) {
+      return 'Profile image must be 1.2 MB or smaller.';
+    }
+    return '';
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -130,6 +147,7 @@ export default function ProfilePage() {
           location: data?.location ?? '',
           postalAddress: data?.postalAddress ?? '',
           preferredHospitalId: data?.preferredHospitalId ?? data?.preferredHospital?.id ?? '',
+          profileImageUrl: data?.profileImageUrl ?? '',
           passportPhotoUrl: data?.passportPhotoUrl ?? '',
           emergencyContactName: data?.emergencyContactName ?? '',
           emergencyContactCode: parsedPhone?.[1] ?? '+233',
@@ -202,6 +220,50 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   };
 
+  const uploadProfileImage = (file?: File) => {
+    if (!file) {
+      return;
+    }
+    const validation = validateImage(file);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const value = typeof reader.result === 'string' ? reader.result : '';
+      setProfile((prev) => ({ ...prev, profileImageUrl: value }));
+      try {
+        const response = await api.patch('/donors/profile/image', { profileImageUrl: value });
+        const updated = response.data?.data ?? response.data;
+        setProfileData(updated ?? profileData);
+        window.dispatchEvent(new CustomEvent('donor-profile-image-updated', { detail: updated ?? { profileImageUrl: value } }));
+        setSaved(true);
+      } catch (err: any) {
+        const apiError = err?.response?.data?.error;
+        const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+        setError(extracted ?? 'Unable to update profile image.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeProfileImage = async () => {
+    setError('');
+    setSaved(false);
+    setProfile((prev) => ({ ...prev, profileImageUrl: '' }));
+    try {
+      const response = await api.patch('/donors/profile/image', { profileImageUrl: '' });
+      setProfileData(response.data?.data ?? response.data ?? profileData);
+      window.dispatchEvent(new CustomEvent('donor-profile-image-updated', { detail: response.data?.data ?? response.data ?? { profileImageUrl: '' } }));
+      setSaved(true);
+    } catch (err: any) {
+      const apiError = err?.response?.data?.error;
+      const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
+      setError(extracted ?? 'Unable to remove profile image.');
+    }
+  };
+
   return (
     <section className="card space-y-3">
       <h1 className="text-2xl font-bold text-primary">My Profile</h1>
@@ -212,6 +274,38 @@ export default function ProfilePage() {
       {profile.bloodGroup === 'UNKNOWN' ? <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Blood Group Not Yet Confirmed. Hospital staff will confirm it during eligibility screening.</p> : null}
 
       <form className="space-y-5" onSubmit={submit} autoComplete="off">
+        <div
+          className="grid gap-4 rounded-2xl border border-slate-100 bg-white/70 p-4 transition hover:border-red-200 sm:grid-cols-[auto_1fr]"
+          onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()}
+          onDrop={(event: DragEvent<HTMLDivElement>) => {
+            event.preventDefault();
+            uploadProfileImage(event.dataTransfer.files?.[0]);
+          }}
+        >
+          <div className="flex items-center justify-center">
+            <SmartAvatar name={displayName} src={profile.profileImageUrl} size="xl" />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Profile Image</p>
+            <p className="mt-1 text-sm text-muted">Used as your donor profile avatar. This is separate from official passport photo records.</p>
+            <input
+              ref={profileImageInputRef}
+              className="legacy-input mt-3"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => uploadProfileImage(e.target.files?.[0])}
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="cursor-pointer rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-primary" type="button" onClick={() => profileImageInputRef.current?.click()}>
+                Change Photo
+              </button>
+              <button className="cursor-pointer rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700" type="button" onClick={removeProfileImage}>
+                Remove Photo
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-muted">Drop a JPG, PNG, or WebP here, or choose a file. Maximum size: 1.2 MB.</p>
+          </div>
+        </div>
         <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-600">Donor Status Summary</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

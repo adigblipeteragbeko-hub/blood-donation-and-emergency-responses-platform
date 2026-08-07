@@ -74,7 +74,7 @@ Implemented tracking schema in [backend/prisma/schema.prisma](backend/prisma/sch
 - token tables (`RefreshToken`, `PasswordResetToken`, `EmailVerificationToken`)
 
 Enums include:
-- `Role`: `SUPER_ADMIN`, `ADMIN`, `HOSPITAL_ADMIN`, `DONOR`, `HOSPITAL_STAFF`, `INVENTORY_OFFICER`, `DONOR_REVIEW_OFFICER`, `WEBSITE_CONTENT_ADMIN`, `AUDITOR`
+- `Role`: `ADMIN`, `ADMIN`, `HOSPITAL_ADMIN`, `DONOR`, `HOSPITAL_ADMIN`, `HOSPITAL_ADMIN`, `HOSPITAL_ADMIN`, `ADMIN`, `ADMIN`
 - `RequestStatus`, `RequestProgressStatus`
 - `DonorResponseStatus`
 - `AppointmentStatus`
@@ -226,8 +226,8 @@ Implemented in `backend/src/modules/auth` and guards/decorators:
   - Legacy role login links redirect into the same protected session flow.
 - Role redirects after login:
   - `DONOR` -> `/donor/dashboard`
-  - `HOSPITAL`, `HOSPITAL_ADMIN`, `HOSPITAL_STAFF`, `INVENTORY_OFFICER`, `DONOR_REVIEW_OFFICER` -> `/hospital/dashboard`
-  - `ADMIN`, `SUPER_ADMIN`, `WEBSITE_CONTENT_ADMIN`, `AUDITOR` -> `/admin/dashboard`
+  - `HOSPITAL`, `HOSPITAL_ADMIN`, `HOSPITAL_ADMIN`, `HOSPITAL_ADMIN`, `HOSPITAL_ADMIN` -> `/hospital/dashboard`
+  - `ADMIN`, `ADMIN`, `ADMIN`, `ADMIN` -> `/admin/dashboard`
 
 The public navigation does not expose an admin button.
 

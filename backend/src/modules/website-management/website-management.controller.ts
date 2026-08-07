@@ -32,7 +32,7 @@ import { UpdateFooterSettingsDto } from './dto/update-footer-settings.dto';
 
 @Controller('admin/website-management')
 @UseGuards(JwtAccessGuard, ActiveUserGuard, RolesGuard, PermissionsGuard)
-@Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.ADMIN)
+@Roles(Role.ADMIN)
 @Permissions([PermissionCode.WEBSITE_CONTENT_MANAGE])
 export class WebsiteManagementController {
   constructor(private readonly websiteManagementService: WebsiteManagementService) {}

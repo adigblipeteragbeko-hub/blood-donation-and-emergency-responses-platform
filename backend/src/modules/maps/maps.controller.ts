@@ -32,7 +32,7 @@ export class MapsController {
     return this.mapsService.updateOwnDonorLocation(user.id, dto, request.ip, String(request.headers['user-agent'] ?? ''));
   }
 
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
   @Get('nearby-donors')
   nearbyDonors(
     @CurrentUser() user: { id: string; role: Role },
@@ -42,13 +42,13 @@ export class MapsController {
     return this.mapsService.findNearbyEligibleDonors(user.id, user.role, query, request.ip, String(request.headers['user-agent'] ?? ''));
   }
 
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
   @Get('donor-coverage')
   donorCoverage(@CurrentUser() user: { id: string; role: Role }, @Req() request: Request) {
     return this.mapsService.getDonorCoverage(user.id, user.role, request.ip, String(request.headers['user-agent'] ?? ''));
   }
 
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
   @Get('operational-donors')
   operationalDonors(
     @CurrentUser() user: { id: string; role: Role },
@@ -58,7 +58,7 @@ export class MapsController {
     return this.mapsService.getOperationalDonors(user.id, user.role, query, request.ip, String(request.headers['user-agent'] ?? ''));
   }
 
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HOSPITAL_STAFF, Role.BLOOD_BANK_OFFICER)
+  @Roles(Role.ADMIN, Role.HOSPITAL_ADMIN)
   @Get('operations')
   operationsMap(@CurrentUser() user: { id: string; role: Role }, @Req() request: Request) {
     return this.mapsService.getOperationsMap(user.id, user.role, request.ip, String(request.headers['user-agent'] ?? ''));

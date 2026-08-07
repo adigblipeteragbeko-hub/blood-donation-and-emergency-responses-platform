@@ -6,12 +6,21 @@ import { AppCard } from '../components/AppCard';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../constants/colors';
-import { getNotifications, markNotificationDelivered, NotificationItem } from '../services/notifications';
+import {
+  getNotifications,
+  markNotificationDelivered,
+  NotificationItem,
+  respondToMobilizationCampaign,
+} from '../services/notifications';
 import { DonorTabsParamList } from '../types/navigation';
 import { formatDateTime } from '../utils/format';
 
 function isEmergency(item: NotificationItem) {
   return Boolean(item.bloodRequestId || item.type?.toLowerCase().includes('emergency') || item.title.toLowerCase().includes('urgent'));
+}
+
+function isProactiveDonation(item: NotificationItem) {
+  return item.type === 'PROACTIVE_DONATION' || Boolean(item.campaignId);
 }
 
 export function NotificationsScreen() {
@@ -47,6 +56,19 @@ export function NotificationsScreen() {
     }
   };
 
+  const respondToCampaign = async (item: NotificationItem, responseStatus: 'INTERESTED' | 'NOT_AVAILABLE') => {
+    if (!item.campaignId) {
+      return;
+    }
+    try {
+      const result = await respondToMobilizationCampaign({ campaignId: item.campaignId, responseStatus });
+      setMessage(result.message);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to submit your response right now.');
+    }
+  };
+
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
       <AppCard>
@@ -70,9 +92,20 @@ export function NotificationsScreen() {
             <StatusBadge label={item.delivered ? 'Read' : 'New'} tone={item.delivered ? 'muted' : 'primary'} />
           </View>
           {isEmergency(item) ? <StatusBadge label="Emergency Alert" tone="danger" /> : null}
+          {isProactiveDonation(item) ? <StatusBadge label="Donation Needed Soon" tone="warning" /> : null}
           {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
           <Text style={styles.muted}>{formatDateTime(item.createdAt)}</Text>
           {item.bloodRequestId ? <Text style={styles.link}>View Alert</Text> : null}
+          {isProactiveDonation(item) && item.campaignId ? (
+            <View style={styles.actionRow}>
+              <Pressable onPress={() => void respondToCampaign(item, 'INTERESTED')} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
+                <Text style={styles.primaryButtonText}>I'm Interested</Text>
+              </Pressable>
+              <Pressable onPress={() => void respondToCampaign(item, 'NOT_AVAILABLE')} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
+                <Text style={styles.secondaryButtonText}>Not Available</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </Pressable>
       ))}
     </Screen>
@@ -95,4 +128,9 @@ const styles = StyleSheet.create({
   cardTitle: { flex: 1, color: colors.ink, fontWeight: '900', fontSize: 17 },
   body: { color: colors.ink, lineHeight: 21 },
   link: { color: colors.primary, fontWeight: '900' },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  primaryButton: { borderRadius: 12, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 9 },
+  primaryButtonText: { color: '#fff', fontWeight: '900' },
+  secondaryButton: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 9 },
+  secondaryButtonText: { color: colors.ink, fontWeight: '900' },
 });

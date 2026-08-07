@@ -87,7 +87,7 @@ export default function AvailabilityStatusPage() {
           <p>Eligibility form: {status?.healthFormCompleted ? 'Approved' : status?.healthFormSubmitted ? 'Submitted' : 'Not completed'}</p>
           <p>Clinical status: {formatStatus(status?.reviewStatus)}</p>
           <p>Office use: {status?.officeUseCompleted ? 'Completed' : 'Pending'}</p>
-          <p>Blood group: {status?.bloodGroupConfirmed ? status?.bloodGroup : 'Pending confirmation'}</p>
+          <p>Blood Group: {status?.bloodGroupConfirmed ? status?.bloodGroup : 'Pending confirmation'}</p>
           <p>Final approval: {status?.adminApproved ? 'Approved' : 'Pending approval'}</p>
           <p>Email verification: {status?.emailVerified ? 'Verified' : 'Required'}</p>
           <p>Last donation: {formatDate(status?.lastDonationDate)}</p>

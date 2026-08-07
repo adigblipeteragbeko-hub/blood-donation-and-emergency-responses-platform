@@ -9,6 +9,7 @@ import { ADMIN_PORTAL_ROLES, HOSPITAL_PORTAL_ROLES } from './types/auth';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 const LandingPage = lazy(() => import('./pages/LandingPage'));
+const AssistantPage = lazy(() => import('./pages/AssistantPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const DonorRegisterPage = lazy(() => import('./pages/DonorRegisterPage'));
@@ -36,6 +37,7 @@ const RewardsPage = lazy(() => import('./pages/RewardsPage'));
 const HealthEligibilityFormPage = lazy(() => import('./pages/HealthEligibilityFormPage'));
 const SupportHelpPage = lazy(() => import('./pages/SupportHelpPage'));
 const HospitalDashboardPage = lazy(() => import('./pages/HospitalDashboardPage'));
+const HospitalStockIntelligencePage = lazy(() => import('./pages/HospitalStockIntelligencePage'));
 const HospitalInventoryPage = lazy(() => import('./pages/HospitalInventoryPage'));
 const HospitalRequestBloodPage = lazy(() => import('./pages/HospitalRequestBloodPage'));
 const HospitalActiveRequestsPage = lazy(() => import('./pages/HospitalActiveRequestsPage'));
@@ -48,6 +50,7 @@ const HospitalEmergencyRequestsPage = lazy(() => import('./pages/HospitalEmergen
 const HospitalProfilePage = lazy(() => import('./pages/HospitalProfilePage'));
 const HospitalSettingsPage = lazy(() => import('./pages/HospitalSettingsPage'));
 const HospitalSupportPage = lazy(() => import('./pages/HospitalSupportPage'));
+const HospitalAiIntelligencePage = lazy(() => import('./pages/HospitalAiIntelligencePage'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const PublicEligibilityPage = lazy(() => import('./pages/PublicEligibilityPage'));
 const PublicEmergencyRequestsPage = lazy(() => import('./pages/PublicEmergencyRequestsPage'));
@@ -93,8 +96,32 @@ function App() {
           </Route>
       </Route>
 
+      <Route element={<ProtectedRoute roles={HOSPITAL_PORTAL_ROLES} />}>
+          <Route path="/hospital" element={<HospitalPortalLayout />}>
+            <Route path="dashboard" element={<HospitalDashboardPage />} />
+            <Route path="assistant" element={<AssistantPage />} />
+            <Route path="stock-intelligence" element={<HospitalStockIntelligencePage />} />
+            <Route path="inventory" element={<HospitalInventoryPage />} />
+            <Route path="request-blood" element={<HospitalRequestBloodPage />} />
+            <Route path="active-requests" element={<HospitalActiveRequestsPage />} />
+            <Route path="request-history" element={<HospitalRequestHistoryPage />} />
+            <Route path="donor-search" element={<HospitalDonorSearchPage />} />
+            <Route path="donor-reviews" element={<DonorClinicalReviewQueuePage />} />
+            <Route path="live-map" element={<LiveMapPage />} />
+            <Route path="appointments" element={<HospitalAppointmentsPage />} />
+            <Route path="notifications" element={<HospitalNotificationsPage />} />
+            <Route path="reports" element={<HospitalReportsPage />} />
+            <Route path="ai-intelligence" element={<HospitalAiIntelligencePage />} />
+            <Route path="emergency-requests" element={<HospitalEmergencyRequestsPage />} />
+            <Route path="profile" element={<HospitalProfilePage />} />
+            <Route path="settings" element={<HospitalSettingsPage />} />
+            <Route path="support" element={<HospitalSupportPage />} />
+          </Route>
+      </Route>
+
       <Route element={<MainLayout />}>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/assistant" element={<AssistantPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/donor-register" element={<DonorRegisterPage />} />
         <Route path="/hospital-register" element={<HospitalRegisterPage />} />
@@ -122,6 +149,7 @@ function App() {
         <Route element={<ProtectedRoute roles={['DONOR']} />}>
           <Route path="/donor" element={<DonorPortalLayout />}>
             <Route path="dashboard" element={<DonorDashboardPage />} />
+            <Route path="assistant" element={<AssistantPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="card" element={<DonorCardPage />} />
             <Route path="eligibility" element={<EligibilityPage />} />
@@ -136,26 +164,6 @@ function App() {
             <Route path="health-form" element={<HealthEligibilityFormPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="support" element={<SupportHelpPage />} />
-          </Route>
-        </Route>
-
-        <Route element={<ProtectedRoute roles={HOSPITAL_PORTAL_ROLES} />}>
-          <Route path="/hospital" element={<HospitalPortalLayout />}>
-            <Route path="dashboard" element={<HospitalDashboardPage />} />
-            <Route path="inventory" element={<HospitalInventoryPage />} />
-            <Route path="request-blood" element={<HospitalRequestBloodPage />} />
-            <Route path="active-requests" element={<HospitalActiveRequestsPage />} />
-            <Route path="request-history" element={<HospitalRequestHistoryPage />} />
-            <Route path="donor-search" element={<HospitalDonorSearchPage />} />
-            <Route path="donor-reviews" element={<DonorClinicalReviewQueuePage />} />
-            <Route path="live-map" element={<LiveMapPage />} />
-            <Route path="appointments" element={<HospitalAppointmentsPage />} />
-            <Route path="notifications" element={<HospitalNotificationsPage />} />
-            <Route path="reports" element={<HospitalReportsPage />} />
-            <Route path="emergency-requests" element={<HospitalEmergencyRequestsPage />} />
-            <Route path="profile" element={<HospitalProfilePage />} />
-            <Route path="settings" element={<HospitalSettingsPage />} />
-            <Route path="support" element={<HospitalSupportPage />} />
           </Route>
         </Route>
 

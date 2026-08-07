@@ -1,6 +1,6 @@
 import { PropsWithChildren } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, ViewStyle } from 'react-native';
-import { colors } from '../constants/colors';
+import { useTheme } from '../hooks/useTheme';
 
 type Props = PropsWithChildren<{
   style?: ViewStyle;
@@ -9,9 +9,10 @@ type Props = PropsWithChildren<{
 }>;
 
 export function Screen({ children, style, refreshing = false, onRefresh }: Props) {
+  const { colors } = useTheme();
   return (
     <ScrollView
-      contentContainerStyle={[styles.content, style]}
+      contentContainerStyle={[styles.content, { backgroundColor: colors.background }, style]}
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
     >
       {children}
@@ -25,6 +26,5 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     paddingBottom: 120,
-    backgroundColor: colors.background,
   },
 });

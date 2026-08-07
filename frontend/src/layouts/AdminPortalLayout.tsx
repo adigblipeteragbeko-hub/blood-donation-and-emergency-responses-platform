@@ -1,8 +1,13 @@
+import { useEffect, useMemo } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { BrandLogo } from '../components/BrandLogo';
 import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner';
 import { AppIcon } from '../components/ui/AppIcon';
+import { AccountIdentityMenu } from '../components/AccountIdentityMenu';
+import { FloatingAssistantLauncher } from '../components/FloatingAssistantLauncher';
+import { buildAccountIdentity } from '../utils/account-identity';
+import { rememberAccount } from '../utils/remembered-accounts';
 
 type AdminLink = {
   to: string;
@@ -12,22 +17,30 @@ type AdminLink = {
 };
 
 const adminLinks: AdminLink[] = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
-  { to: '/admin/website-management', label: 'Website', icon: 'settings', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
-  { to: '/admin/live-map', label: 'Live Map', icon: 'map', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/donor-clinical-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=settings', label: 'Users', icon: 'users', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=donors', label: 'Donors', icon: 'heart', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=hospitals', label: 'Hospitals', icon: 'hospital', roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=request-tracking', label: 'Requests', icon: 'alert', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=inventory-tracking', label: 'Inventory', icon: 'inventory', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
-  { to: '/admin/management?section=audit', label: 'Audit', icon: 'reports', roles: ['SUPER_ADMIN', 'ADMIN', 'ADMIN'] },
+  { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['ADMIN'] },
+  { to: '/admin/website-management', label: 'Website', icon: 'settings', roles: ['ADMIN'] },
+  { to: '/admin/live-map', label: 'Live Map', icon: 'map', roles: ['ADMIN'] },
+  { to: '/admin/donor-clinical-reviews', label: 'Clinical Reviews', icon: 'form', roles: ['ADMIN'] },
+  { to: '/admin/management?section=settings', label: 'Users', icon: 'users', roles: ['ADMIN'] },
+  { to: '/admin/management?section=donors', label: 'Donors', icon: 'heart', roles: ['ADMIN'] },
+  { to: '/admin/management?section=donor-communications', label: 'Donor Communications', icon: 'notification', roles: ['ADMIN'] },
+  { to: '/admin/management?section=ai-intelligence', label: 'AI Intelligence', icon: 'reports', roles: ['ADMIN'] },
+  { to: '/admin/management?section=assistant', label: 'Assistant', icon: 'notification', roles: ['ADMIN'] },
+  { to: '/admin/management?section=hospitals', label: 'Hospitals', icon: 'hospital', roles: ['ADMIN'] },
+  { to: '/admin/management?section=request-tracking', label: 'Requests', icon: 'alert', roles: ['ADMIN'] },
+  { to: '/admin/management?section=inventory-tracking', label: 'Inventory', icon: 'inventory', roles: ['ADMIN'] },
+  { to: '/admin/management?section=audit', label: 'Audit', icon: 'reports', roles: ['ADMIN'] },
 ];
 
 export function AdminPortalLayout() {
   const { logout, user } = useAuth();
   const location = useLocation();
   const availableLinks = adminLinks.filter((item) => user?.role && item.roles.includes(user.role));
+  const identity = useMemo(() => buildAccountIdentity({ user }), [user]);
+
+  useEffect(() => {
+    if (identity) rememberAccount(identity);
+  }, [identity]);
 
   const isItemActive = (to: string) => {
     const [pathWithQuery] = to.split('#');
@@ -48,15 +61,8 @@ export function AdminPortalLayout() {
       <aside className="card h-fit space-y-2">
         <div className="flex items-center justify-between gap-3">
           <BrandLogo compact />
-          <button
-            className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-primary"
-            onClick={logout}
-            type="button"
-          >
-            <AppIcon name="logout" className="h-3.5 w-3.5" />
-            Logout
-          </button>
         </div>
+        <AccountIdentityMenu identity={identity} onLogout={logout} compact />
         <nav className="max-h-[75vh] space-y-1 overflow-y-auto pr-1">
           {availableLinks.map((item) => (
             <Link
@@ -71,10 +77,11 @@ export function AdminPortalLayout() {
         </nav>
       </aside>
 
-      <div className="min-w-0 space-y-5 pt-2 lg:pt-3">
+      <div className="page-content-safe-bottom min-w-0 space-y-5 pt-2 lg:pt-3">
         <LiveEmergencyAlertBanner />
         <Outlet />
       </div>
+      <FloatingAssistantLauncher />
     </section>
   );
 }

@@ -22,14 +22,13 @@ import {
   type DonorReviewItem,
   type DonorReviewStatus,
   type EmergencyRequestMonitorItem,
-  type HospitalPerformancePoint,
   type InboxNotification,
   type InventoryMonitorItem,
   type PriorityLevel,
-  type ReportPoint,
   type SecurityEventItem,
   type ValuePoint,
 } from '../services/admin-dashboard';
+import { useAuth } from '../hooks/useAuth';
 
 type Toast = { id: number; type: 'success' | 'error'; message: string };
 
@@ -108,19 +107,81 @@ async function settle<T>(request: Promise<T>, fallback: T, label: string, onErro
   return fallback;
 }
 
-function humanizeToken(value: string) {
-  return value.replace(/_/g, ' ');
+const asArray = <T,>(value: T[] | undefined | null): T[] => (Array.isArray(value) ? value : []);
+
+function humanizeToken(value?: string | null) {
+  return (value ?? 'UNKNOWN').replace(/_/g, ' ');
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString(undefined, {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function normalizeReports(payload: Awaited<ReturnType<typeof getAdminReports>> | null | undefined): Awaited<ReturnType<typeof getAdminReports>> {
+  const source = payload ?? emptyReports;
+  return {
+    donationsByMonth: asArray(source.donationsByMonth),
+    requestTrends: asArray(source.requestTrends),
+    mostRequestedBloodTypes: asArray(source.mostRequestedBloodTypes),
+    donorResponseRates: asArray(source.donorResponseRates),
+    hospitalPerformance: asArray(source.hospitalPerformance),
+    shortageTrends: asArray(source.shortageTrends),
+    proactiveMobilization: {
+      atRiskHospitals: asArray(source.proactiveMobilization?.atRiskHospitals),
+      campaigns: asArray(source.proactiveMobilization?.campaigns),
+    },
+  };
+}
+
+function normalizeSecurity(payload: Awaited<ReturnType<typeof getAdminSecurityMonitoring>> | null | undefined): Awaited<ReturnType<typeof getAdminSecurityMonitoring>> {
+  const source = payload ?? emptySecurity;
+  return {
+    recentAdminLogins: asArray(source.recentAdminLogins),
+    failedLoginAttempts: asArray(source.failedLoginAttempts),
+    suspiciousAccessAttempts: asArray(source.suspiciousAccessAttempts),
+    activeSessions: asArray(source.activeSessions),
+  };
+}
+
+function normalizeAuditLogEntry(entry: Partial<AuditLogItem>): AuditLogItem {
+  return {
+    id: String(entry.id ?? `audit-${Math.random()}`),
+    actorUserId: entry.actorUserId ?? null,
+    action: String(entry.action ?? 'UNKNOWN_ACTION'),
+    entityType: String(entry.entityType ?? 'UNKNOWN_ENTITY'),
+    entityId: entry.entityId ?? null,
+    description: typeof entry.description === 'string' ? entry.description : null,
+    ipAddress: entry.ipAddress ?? null,
+    metadata: entry.metadata ?? null,
+    module: entry.module ?? null,
+    oldValue: entry.oldValue ?? null,
+    newValue: entry.newValue ?? null,
+    createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
+    actor: entry.actor
+      ? {
+          id: String(entry.actor.id ?? ''),
+          email: String(entry.actor.email ?? 'Unknown user'),
+          role: String(entry.actor.role ?? 'UNKNOWN_ROLE'),
+        }
+      : null,
+  };
+}
+
+function normalizeAuditData(payload: { total?: number; items?: Partial<AuditLogItem>[]; users?: Array<{ id?: string; email?: string }> } | null | undefined) {
+  return {
+    total: Number(payload?.total ?? 0),
+    items: asArray(payload?.items).map(normalizeAuditLogEntry),
+    users: asArray(payload?.users).map((user) => ({ id: String(user.id ?? ''), email: String(user.email ?? 'Unknown user') })),
+  };
 }
 
 function relativeTime(value?: string | null) {
@@ -133,6 +194,13 @@ function relativeTime(value?: string | null) {
   const days = Math.round(hours / 24);
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
+
+const adminGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
 
 function toneClasses(tone: string) {
   switch (tone) {
@@ -290,6 +358,7 @@ function DonutChart({ data }: { data: ValuePoint[] }) {
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [initialLoading, setInitialLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -321,14 +390,7 @@ export default function AdminDashboardPage() {
     items: [],
     users: [],
   });
-  const [reports, setReports] = useState<{
-    donationsByMonth: ReportPoint[];
-    requestTrends: ReportPoint[];
-    mostRequestedBloodTypes: Array<{ bloodType: string; value: number }>;
-    donorResponseRates: ValuePoint[];
-    hospitalPerformance: HospitalPerformancePoint[];
-    shortageTrends: InventoryMonitorItem[];
-  } | null>(null);
+  const [reports, setReports] = useState<Awaited<ReturnType<typeof getAdminReports>> | null>(null);
   const [security, setSecurity] = useState<{
     recentAdminLogins: SecurityEventItem[];
     failedLoginAttempts: SecurityEventItem[];
@@ -397,9 +459,9 @@ export default function AdminDashboardPage() {
     setActivityData(activityFeedData);
     setNotificationData(notificationsData);
     setReviewData(reviewsData);
-    setAuditData(auditLogsData);
-    setReports(reportsData);
-    setSecurity(securityData);
+    setAuditData(normalizeAuditData(auditLogsData));
+    setReports(normalizeReports(reportsData));
+    setSecurity(normalizeSecurity(securityData));
   };
 
   useEffect(() => {
@@ -444,13 +506,6 @@ export default function AdminDashboardPage() {
       .then(setReviewData)
       .catch((error: any) => pushToast('error', error?.response?.data?.error?.message ?? 'Could not refresh donor reviews.'));
   }, [reviewFilters]);
-
-  useEffect(() => {
-    if (initialLoading) return;
-    getAdminAuditLogs(auditFilters)
-      .then(setAuditData)
-      .catch((error: any) => pushToast('error', error?.response?.data?.error?.message ?? 'Could not refresh audit logs.'));
-  }, [auditFilters]);
 
   const lowStockSummary = useMemo(
     () => inventory.filter((item) => item.status !== 'stable').sort((a, b) => a.availableUnits - b.availableUnits),
@@ -505,7 +560,7 @@ export default function AdminDashboardPage() {
       setReviewModal(null);
       setReviewData(await getAdminDonorReviews(reviewFilters));
       setActivityData(await getAdminActivityFeed({ take: 12 }));
-      setAuditData(await getAdminAuditLogs(auditFilters));
+      setAuditData(normalizeAuditData(await getAdminAuditLogs(auditFilters)));
       setOverview(await getAdminDashboardOverview());
     } catch (error: any) {
       pushToast('error', error?.response?.data?.error?.message ?? 'Could not update donor review.');
@@ -612,6 +667,9 @@ export default function AdminDashboardPage() {
             <div className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-primary">
               Hospital command center
             </div>
+            <p className="mt-4 text-sm font-black uppercase tracking-wide text-slate-500">
+              {adminGreeting()}, Admin
+            </p>
             <h1 className="mt-4 text-3xl font-black text-slate-950 md:text-4xl">Admin operations dashboard</h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
               A compact command view for donor readiness, emergency requests, blood stock, website signals, and security health.
@@ -717,7 +775,7 @@ export default function AdminDashboardPage() {
               <article key={item.bloodGroup} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Blood group</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Blood Group</p>
                   <h3 className="mt-2 text-3xl font-black text-slate-950">{bloodGroupLabel[item.bloodGroup] ?? item.bloodGroup}</h3>
                 </div>
                 <StatusBadge label={item.status} toneKey={item.status} />
@@ -1075,6 +1133,37 @@ export default function AdminDashboardPage() {
               <PanelCard title="Donor response rates">
                 <DonutChart data={reports.donorResponseRates} />
               </PanelCard>
+              <PanelCard title="Proactive donor mobilization">
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl bg-red-50 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-red-600">At-risk hospitals</p>
+                      <p className="mt-1 text-2xl font-black text-slate-950">{asArray(reports.proactiveMobilization?.atRiskHospitals).length}</p>
+                    </div>
+                    <div className="rounded-2xl bg-blue-50 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-blue-700">Campaigns</p>
+                      <p className="mt-1 text-2xl font-black text-slate-950">{asArray(reports.proactiveMobilization?.campaigns).length}</p>
+                    </div>
+                    <div className="rounded-2xl bg-green-50 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-green-700">Responses</p>
+                      <p className="mt-1 text-2xl font-black text-slate-950">
+                        {asArray(reports.proactiveMobilization?.campaigns).reduce((sum, item) => sum + Number(item.responseCount ?? 0), 0)}
+                      </p>
+                    </div>
+                  </div>
+                  {asArray(reports.proactiveMobilization?.campaigns).slice(0, 4).map((campaign) => (
+                    <div key={campaign.id} className="rounded-2xl border border-slate-100 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-bold text-slate-900">{campaign.hospitalName ?? 'Unknown hospital'}</p>
+                        <StatusBadge label={`${Number(campaign.responseRate ?? 0)}% response`} toneKey={Number(campaign.responseRate ?? 0) >= 40 ? 'stable' : Number(campaign.responseRate ?? 0) > 0 ? 'low' : 'critical'} />
+                      </div>
+                      <p className="mt-1 text-slate-500">
+                        {campaign.bloodGroup ? bloodGroupLabel[campaign.bloodGroup] ?? campaign.bloodGroup : 'Unknown blood group'}: {Number(campaign.donorsNotified ?? 0)} notified, {Number(campaign.positiveResponses ?? 0)} positive
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </PanelCard>
             </div>
             <div className="space-y-6">
               <PanelCard title="Most requested blood types">
@@ -1144,6 +1233,11 @@ export default function AdminDashboardPage() {
           title="Audit log visibility"
           description="Track who changed what, when, and from which module with old/new value support for safe governance."
         >
+          <div className="mb-4 flex justify-end">
+            <Link className="rounded-full border border-red-200 px-4 py-2 text-sm font-black text-primary transition hover:bg-red-50" to="/admin/management?section=audit">
+              View All Audit Logs
+            </Link>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <input
               value={auditFilters.action}

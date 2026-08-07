@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { getHospitalProfile, upsertHospitalProfile } from '../services/hospital-portal';
+import { getHospitalProfile, updateHospitalLogo, upsertHospitalProfile } from '../services/hospital-portal';
 import { HospitalLocationPicker } from '../components/ui/HospitalLocationPicker';
+import { SmartAvatar } from '../components/SmartAvatar';
 
 const initialForm = {
   hospitalName: '',
@@ -18,6 +19,9 @@ const initialForm = {
 export default function HospitalProfilePage() {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoMessage, setLogoMessage] = useState('');
+  const [logoSaving, setLogoSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [capturingLocation, setCapturingLocation] = useState(false);
   const [mapStatus, setMapStatus] = useState<'Map Ready' | 'Coordinates Missing' | 'Geocoding Failed' | 'Pending Approval'>('Pending Approval');
@@ -38,6 +42,7 @@ export default function HospitalProfilePage() {
           contactName: profile.contactName ?? '',
           contactPhone: profile.contactPhone ?? '',
         });
+        setLogoUrl(profile.logoUrl ?? null);
         const approved = profile.isApproved ?? false;
         const hasCoordinates = typeof profile.latitude === 'number' && typeof profile.longitude === 'number';
         if (!approved) {
@@ -130,6 +135,39 @@ export default function HospitalProfilePage() {
     );
   };
 
+  const saveLogo = async (nextLogoUrl: string) => {
+    setLogoSaving(true);
+    setLogoMessage('');
+    try {
+      const updated = await updateHospitalLogo(nextLogoUrl);
+      setLogoUrl(updated.logoUrl ?? null);
+      window.dispatchEvent(new CustomEvent('hospital-logo-updated', { detail: updated }));
+      setLogoMessage(nextLogoUrl ? 'Hospital logo updated.' : 'Hospital logo removed.');
+    } catch (error: any) {
+      setLogoMessage(error?.response?.data?.message ?? 'Unable to update hospital logo.');
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
+  const uploadLogo = (file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setLogoMessage('Use a JPG, PNG, or WebP logo.');
+      return;
+    }
+    if (file.size > 1_200_000) {
+      setLogoMessage('Use a logo image smaller than 1.2 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === 'string' ? reader.result : '';
+      void saveLogo(value);
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <section className="space-y-5">
       <div className="card">
@@ -152,6 +190,37 @@ export default function HospitalProfilePage() {
       </div>
 
       <form className="card grid gap-3 md:grid-cols-2" onSubmit={submit}>
+        <div className="rounded-2xl border border-slate-100 bg-white/70 p-4 md:col-span-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <SmartAvatar name={form.hospitalName || 'Hospital'} src={logoUrl} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Hospital Logo</p>
+              <p className="mt-1 text-sm text-muted">Used for facility identity on the hospital dashboard, hospital profile, and account menu. This is separate from personal profile photos.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-primary">
+                  {logoSaving ? 'Saving...' : logoUrl ? 'Replace Logo' : 'Upload Logo'}
+                  <input
+                    className="sr-only"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={logoSaving}
+                    onChange={(event) => uploadLogo(event.target.files?.[0])}
+                  />
+                </label>
+                <button
+                  className="cursor-pointer rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={logoSaving || !logoUrl}
+                  type="button"
+                  onClick={() => void saveLogo('')}
+                >
+                  Remove Logo
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">Accepted: JPG, PNG, WebP. Maximum size: 1.2 MB.</p>
+              {logoMessage ? <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs font-semibold text-slate-700">{logoMessage}</p> : null}
+            </div>
+          </div>
+        </div>
         <label className="text-sm font-semibold">
           Hospital Name
           <input

@@ -277,7 +277,7 @@ export async function getAdminAuditLogs(params: Record<string, string | number |
   return unwrap<{
     total: number;
     items: AuditLogItem[];
-    users: { id: string; email: string }[];
+    users: { id: string; email: string; role?: string }[];
   }>(await api.get('/admin/dashboard/audit-logs', { params: cleanParams(params) }));
 }
 
@@ -289,6 +289,27 @@ export async function getAdminReports() {
     donorResponseRates: ValuePoint[];
     hospitalPerformance: HospitalPerformancePoint[];
     shortageTrends: InventoryMonitorItem[];
+    proactiveMobilization?: {
+      atRiskHospitals?: Array<{
+        hospitalName: string;
+        bloodGroup: string;
+        level: string;
+        currentUnits: number;
+        createdAt: string;
+      }>;
+      campaigns?: Array<{
+        id: string;
+        hospitalName?: string | null;
+        bloodGroup?: string | null;
+        warningLevel?: string | null;
+        targetDonorCount?: number | null;
+        donorsNotified?: number | null;
+        responseCount?: number | null;
+        responseRate?: number | null;
+        positiveResponses?: number | null;
+        createdAt?: string | null;
+      }>;
+    };
   }>(await api.get('/admin/dashboard/reports'));
 }
 
