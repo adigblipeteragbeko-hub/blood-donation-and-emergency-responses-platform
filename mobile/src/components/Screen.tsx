@@ -1,6 +1,8 @@
 import { PropsWithChildren } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import { spacing } from '../theme/design';
 
 type Props = PropsWithChildren<{
   style?: ViewStyle;
@@ -11,20 +13,28 @@ type Props = PropsWithChildren<{
 export function Screen({ children, style, refreshing = false, onRefresh }: Props) {
   const { colors } = useTheme();
   return (
-    <ScrollView
-      contentContainerStyle={[styles.content, { backgroundColor: colors.background }, style]}
-      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
-    >
-      {children}
-    </ScrollView>
+    <SafeAreaView edges={['left', 'right']} style={[styles.safe, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.content, style]}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
+      >
+        {children}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
   content: {
     flexGrow: 1,
-    gap: 14,
-    padding: 16,
-    paddingBottom: 120,
+    gap: spacing.lg,
+    padding: spacing.lg,
+    paddingBottom: 128,
   },
 });

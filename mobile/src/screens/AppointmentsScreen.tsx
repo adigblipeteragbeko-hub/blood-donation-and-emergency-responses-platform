@@ -2,11 +2,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
+import { EmptyState } from '../components/EmptyState';
+import { FeedbackMessage } from '../components/FeedbackMessage';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../constants/colors';
 import { Appointment, getAppointments } from '../services/appointments';
 import { formatDateTime } from '../utils/format';
+import { spacing, typography } from '../theme/design';
 
 function statusTone(status: string): 'success' | 'warning' | 'danger' | 'muted' | 'primary' {
   if (status === 'COMPLETED') return 'success';
@@ -47,8 +50,8 @@ export function AppointmentsScreen() {
         <Text style={styles.title}>Appointments</Text>
         <Text style={styles.muted}>Your hospital screening and donation schedule.</Text>
       </AppCard>
-      {message ? <Text style={styles.error}>{message}</Text> : null}
-      {!loading && items.length === 0 ? <AppCard><Text style={styles.muted}>No appointments scheduled yet.</Text></AppCard> : null}
+      <FeedbackMessage message={message} tone="danger" />
+      {!loading && items.length === 0 ? <EmptyState icon="calendar-outline" title="No Appointments Yet" message="No appointment has been scheduled for this donor account yet." /> : null}
 
       {upcoming.length > 0 ? <Text style={styles.section}>Upcoming</Text> : null}
       {upcoming.map((item) => <AppointmentCard key={item.id} item={item} />)}
@@ -77,11 +80,10 @@ function AppointmentCard({ item }: { item: Appointment }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  error: { borderRadius: 12, backgroundColor: '#fef2f2', color: colors.danger, padding: 10, fontWeight: '800' },
-  section: { color: colors.ink, fontSize: 18, fontWeight: '900', marginTop: 4 },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  section: { color: colors.ink, ...typography.sectionTitle, marginTop: spacing.xs },
   ref: { color: colors.primaryDark, fontSize: 18, fontWeight: '900', flex: 1 },
-  detail: { color: colors.ink, lineHeight: 22 },
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  detail: { color: colors.ink, ...typography.body },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
 });

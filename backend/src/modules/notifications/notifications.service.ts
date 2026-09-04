@@ -28,7 +28,7 @@ export class NotificationsService {
   markAsDelivered(userId: string, notificationId: string, delivered: boolean) {
     return this.prisma.notification.updateMany({
       where: { id: notificationId, userId },
-      data: { delivered },
+      data: { delivered, isRead: delivered },
     });
   }
 
@@ -51,7 +51,8 @@ export class NotificationsService {
         body: payload.body,
         channel: payload.channel,
         type: payload.type ?? 'SYSTEM',
-        delivered: payload.delivered ?? false,
+        delivered: false,
+        isRead: false,
       },
     });
 
@@ -142,7 +143,7 @@ export class NotificationsService {
 
     await this.prisma.notification.updateMany({
       where: { userId, campaignId: campaign.id },
-      data: { delivered: true },
+      data: { delivered: true, isRead: true },
     });
 
     await this.audit.log('DONOR_MOBILIZATION_RESPONSE', 'DONOR_MOBILIZATION', userId, response.id, {

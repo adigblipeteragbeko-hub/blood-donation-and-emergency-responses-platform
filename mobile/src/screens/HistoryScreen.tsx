@@ -2,12 +2,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AppCard } from '../components/AppCard';
+import { EmptyState } from '../components/EmptyState';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatBloodGroup } from '../constants/bloodGroups';
 import { colors } from '../constants/colors';
 import { DonationEntry, getDonorProfile } from '../services/donor';
 import { formatDate } from '../utils/format';
+import { spacing, typography } from '../theme/design';
 
 function statusTone(status?: string | null): 'success' | 'warning' | 'danger' | 'muted' {
   if (!status || status === 'COMPLETED' || status === 'POSTED') return 'success';
@@ -38,7 +40,7 @@ export function HistoryScreen() {
         <Text style={styles.title}>Donation History</Text>
         <Text style={styles.muted}>Completed donations posted by hospitals.</Text>
       </AppCard>
-      {!loading && items.length === 0 ? <AppCard><Text style={styles.muted}>No completed donations recorded yet.</Text></AppCard> : null}
+      {!loading && items.length === 0 ? <EmptyState icon="time-outline" title="No Donations Recorded" message="Completed donations posted by hospitals will appear here." /> : null}
       {items.map((item) => (
         <AppCard key={item.id}>
           <View style={styles.rowBetween}>
@@ -57,9 +59,9 @@ export function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
   ref: { color: colors.primaryDark, fontSize: 18, fontWeight: '900', flex: 1 },
-  detail: { color: colors.ink, lineHeight: 22 },
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  detail: { color: colors.ink, ...typography.body },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
 });

@@ -3,6 +3,7 @@ import {
   BloodGroup,
   DonorClinicalStatus,
   DonorResponseStatus,
+  EmergencyNotificationStatus,
   HospitalBloodTransferStatus,
   HospitalRequestResponseStatus,
   HospitalRequestResponseType,
@@ -40,6 +41,8 @@ import { SmsService } from '../sms/sms.service';
 
 @Injectable()
 export class BloodRequestsService {
+  private readonly defaultEmergencyNotificationDurationMinutes = 120;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -49,6 +52,11 @@ export class BloodRequestsService {
     private readonly notifications: NotificationsService,
     private readonly smsService: SmsService,
   ) {}
+
+  private formatBloodGroup(value?: BloodGroup | null) {
+    if (!value) return 'blood';
+    return value.replace('_POS', '+').replace('_NEG', '-');
+  }
 
   private mapStatusToTracking(status: RequestStatus): RequestProgressStatus {
     const statusMap: Record<RequestStatus, RequestProgressStatus> = {
@@ -79,6 +87,39 @@ export class BloodRequestsService {
 
   private isActiveRequestStatus(status: RequestStatus) {
     return status === RequestStatus.OPEN || status === RequestStatus.MATCHING;
+  }
+
+  private getEmergencyNotificationDurationMinutes(dto: CreateBloodRequestDto) {
+    if (dto.type !== 'EMERGENCY') return null;
+    return dto.emergencyNotificationDurationMinutes ?? this.defaultEmergencyNotificationDurationMinutes;
+  }
+
+  private getEmergencyNotificationExpiresAt(createdAt: Date, durationMinutes: number | null) {
+    if (!durationMinutes) return null;
+    return new Date(createdAt.getTime() + durationMinutes * 60 * 1000);
+  }
+
+  private async expireEmergencyNotifications(now = new Date()) {
+    await this.prisma.bloodRequest.updateMany({
+      where: {
+        type: 'EMERGENCY',
+        emergencyNotificationStatus: EmergencyNotificationStatus.ACTIVE,
+        emergencyNotificationExpiresAt: { lte: now },
+      },
+      data: {
+        emergencyNotificationStatus: EmergencyNotificationStatus.EXPIRED,
+      },
+    });
+
+  }
+
+  private activeEmergencyNotificationWhere(now = new Date()): Prisma.BloodRequestWhereInput {
+    return {
+      type: 'EMERGENCY',
+      status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
+      emergencyNotificationStatus: EmergencyNotificationStatus.ACTIVE,
+      emergencyNotificationExpiresAt: { gt: now },
+    };
   }
 
   private sanitizeHospitalActiveRequest<T extends { hospitalId: string; donorResponses?: unknown[] }>(
@@ -231,6 +272,12 @@ export class BloodRequestsService {
     const normalizedLocation = dto.location.trim();
     const requiredByDate = new Date(dto.requiredBy);
     const radiusKm = dto.radiusKm ?? 10;
+    const createdAt = new Date();
+    const emergencyNotificationDurationMinutes = this.getEmergencyNotificationDurationMinutes(dto);
+    const emergencyNotificationExpiresAt = this.getEmergencyNotificationExpiresAt(
+      createdAt,
+      emergencyNotificationDurationMinutes,
+    );
 
     if (!normalizedLocation) {
       throw new BadRequestException('location is required');
@@ -362,6 +409,7 @@ export class BloodRequestsService {
             id: true,
             hospitalName: true,
             userId: true,
+            contactPhone: true,
             latitude: true,
             longitude: true,
             inventoryItems: {
@@ -439,6 +487,9 @@ export class BloodRequestsService {
             notes: dto.notes,
             status: RequestStatus.MATCHING,
             trackingStatus: RequestProgressStatus.PENDING,
+            emergencyNotificationStatus: dto.type === 'EMERGENCY' ? EmergencyNotificationStatus.ACTIVE : null,
+            emergencyNotificationDurationMinutes,
+            emergencyNotificationExpiresAt,
             matchedDonors: { connect: matchedDonors.map((d) => ({ id: d.id })) },
           },
           include: { matchedDonors: true },
@@ -469,6 +520,8 @@ export class BloodRequestsService {
         city: dto.city ?? null,
         region: dto.region ?? null,
         ward: dto.ward ?? null,
+        expiresAt: emergencyNotificationExpiresAt?.toISOString() ?? null,
+        durationMinutes: emergencyNotificationDurationMinutes,
       });
     }
 
@@ -479,6 +532,8 @@ export class BloodRequestsService {
       requestSource,
       requestReference: request.requestReference,
       hospitalPatientReference,
+      emergencyNotificationExpiresAt: emergencyNotificationExpiresAt?.toISOString() ?? null,
+      emergencyNotificationDurationMinutes,
     });
 
     await this.prisma.bloodRequestUpdate.create({
@@ -503,55 +558,84 @@ export class BloodRequestsService {
     }
 
     if (shouldTargetDonors) {
+      const bloodGroupLabel = this.formatBloodGroup(dto.bloodGroup);
       await Promise.all(
         matchedDonors.map((donor) =>
           this.notifications.createAndBroadcastNotification({
             userId: donor.userId,
             bloodRequestId: request.id,
-            title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} ${dto.bloodGroup} blood request`,
+            title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} ${bloodGroupLabel} blood request`,
             body: [
-              `Blood Request ${request.requestReference} requires ${dto.bloodGroup} blood.`,
+              `Blood Request ${request.requestReference} requires ${bloodGroupLabel} blood.`,
               `${hospital.hospitalName} needs ${dto.unitsNeeded} units.`,
               `Urgency: ${dto.priority}.`,
               `Required by: ${requiredByDate.toLocaleString()}.`,
               donor.distanceKm !== null ? `Distance: ${donor.distanceKm.toFixed(1)} km.` : null,
-              `Request source: ${requestSource}.`,
               `Respond now: /donor/emergency-requests?requestId=${request.id}`,
             ]
               .filter(Boolean)
               .join(' '),
             channel: 'IN_APP',
             type: NotificationType.EMERGENCY_REQUEST,
-            delivered: true,
           }),
         ),
       );
     }
 
     if (shouldTargetHospitals) {
+      const bloodGroupLabel = this.formatBloodGroup(dto.bloodGroup);
       await Promise.all(
         matchedHospitalTargets.map((target) =>
           this.notifications.createAndBroadcastNotification({
             userId: target.userId,
             bloodRequestId: request.id,
-            title: `${dto.priority === 'CRITICAL' ? 'Critical' : 'Urgent'} hospital blood coordination request`,
+            title: 'New Blood Transfer Request',
             body: [
-              `Blood Request ${request.requestReference} requires ${dto.bloodGroup} blood.`,
-              `${hospital.hospitalName} requests ${dto.unitsNeeded} units.`,
-              `Your available ${dto.bloodGroup} units: ${target.availableUnits}.`,
+              `${hospital.hospitalName} has requested ${dto.unitsNeeded} unit(s) of ${bloodGroupLabel} blood.`,
+              `Open transfer request ${request.requestReference} to review it.`,
+              `Your available ${bloodGroupLabel} units: ${target.availableUnits}.`,
               `Urgency: ${dto.priority}.`,
               `Required by: ${requiredByDate.toLocaleString()}.`,
               target.distanceKm !== null ? `Distance: ${target.distanceKm.toFixed(1)} km.` : null,
-              `Request source: ${requestSource}.`,
             ]
               .filter(Boolean)
               .join(' '),
             channel: 'IN_APP',
             type: NotificationType.EMERGENCY_REQUEST,
-            delivered: true,
           }),
         ),
       );
+    }
+
+    if (shouldTargetHospitals && matchedHospitalTargets.length > 0) {
+      const smsRecipients = matchedHospitalTargets.map((target) => target.contactPhone);
+      const bloodGroupLabel = this.formatBloodGroup(dto.bloodGroup);
+      const smsResult = await this.smsService.sendEmergencyDonorAlert({
+        recipients: smsRecipients,
+        message: `BloodSOS: ${hospital.hospitalName} has requested ${dto.unitsNeeded} unit(s) of ${bloodGroupLabel} blood from your facility. Please review the transfer request in the platform.`,
+        hospitalId: hospital.id,
+        triggeredByUserId: userId,
+        relatedEntityType: 'HOSPITAL_TRANSFER_REQUEST',
+        relatedEntityId: request.id,
+        idempotencyKey: this.smsService.buildEventIdempotencyKey(
+          SmsPurpose.EMERGENCY_REQUEST,
+          'HOSPITAL_TRANSFER_REQUEST',
+          request.id,
+          request.requestReference,
+          smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+        ),
+      });
+      await this.audit.log(smsResult.success ? 'HOSPITAL_TRANSFER_REQUEST_SMS_SENT' : 'HOSPITAL_TRANSFER_REQUEST_SMS_FAILED', 'SMS', userId, smsResult.smsLogId ?? request.id, {
+        requestId: request.id,
+        requestReference: request.requestReference,
+        targetHospitalCount: matchedHospitalTargets.length,
+        smsEligibleRecipients: smsResult.validRecipients,
+        smsSent: smsResult.sentCount,
+        smsRejected: smsResult.rejectedCount,
+        skippedInvalidRecipients: smsResult.skippedInvalidRecipients,
+        smsStatus: smsResult.status,
+        errorCode: smsResult.errorCode ?? null,
+      });
     }
 
     if (shouldTargetDonors && matchedDonors.length > 0) {
@@ -560,7 +644,7 @@ export class BloodRequestsService {
         .map((donor) => donor.phone ?? donor.alternativePhoneNumber);
       const smsResult = await this.smsService.sendEmergencyDonorAlert({
         recipients: smsRecipients,
-        message: `BloodSOS URGENT: ${hospital.hospitalName} needs ${dto.bloodGroup} blood, ${dto.unitsNeeded} unit(s). Open the BloodSOS platform to respond. Ref: ${request.requestReference}`,
+        message: `BloodSOS Emergency: ${this.formatBloodGroup(dto.bloodGroup)} blood is urgently needed at ${hospital.hospitalName}. Please open the BloodSOS app if you are available to donate.`,
         hospitalId: hospital.id,
         triggeredByUserId: userId,
         relatedEntityType: 'BLOOD_REQUEST',
@@ -623,6 +707,9 @@ export class BloodRequestsService {
       latitude: request.latitude,
       longitude: request.longitude,
       hospitalId: request.hospitalId,
+      emergencyNotificationStatus: request.emergencyNotificationStatus,
+      emergencyNotificationExpiresAt: request.emergencyNotificationExpiresAt,
+      emergencyNotificationDurationMinutes: request.emergencyNotificationDurationMinutes,
       matchedDonorCount: matchedDonors.length,
       matchedHospitalCount: matchedHospitalTargets.length,
     }, {
@@ -691,13 +778,12 @@ export class BloodRequestsService {
   async listPublicEmergencyRequests(query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = Math.min(query.take ?? 25, 100);
+    const now = new Date();
+    await this.expireEmergencyNotifications(now);
 
     const requests = await this.prisma.bloodRequest.findMany({
       where: {
-        type: 'EMERGENCY',
-        status: {
-          in: [RequestStatus.OPEN, RequestStatus.MATCHING],
-        },
+        ...this.activeEmergencyNotificationWhere(now),
       },
       include: {
         hospital: {
@@ -734,6 +820,9 @@ export class BloodRequestsService {
         priority: request.priority,
         status: request.status,
         trackingStatus: request.trackingStatus,
+        emergencyNotificationStatus: request.emergencyNotificationStatus,
+        emergencyNotificationExpiresAt: request.emergencyNotificationExpiresAt,
+        emergencyNotificationDurationMinutes: request.emergencyNotificationDurationMinutes,
         requestDate: request.createdAt,
         neededBy: request.requiredBy,
         lastUpdated: request.updatedAt,
@@ -829,13 +918,14 @@ export class BloodRequestsService {
   async listDonorEmergencyRequests(userId: string, query: PaginationQueryDto) {
     const skip = query.skip ?? 0;
     const take = Math.min(query.take ?? 25, 100);
+    const now = new Date();
+    await this.expireEmergencyNotifications(now);
     const donor = await this.getDonorForEmergencyAccess(userId);
 
     const requests = await this.prisma.bloodRequest.findMany({
       where: {
+        ...this.activeEmergencyNotificationWhere(now),
         matchedDonors: { some: { id: donor.id } },
-        type: 'EMERGENCY',
-        status: { in: [RequestStatus.OPEN, RequestStatus.MATCHING] },
         requestSource: { in: [RequestSource.DONORS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
       },
       include: this.donorEmergencyInclude(donor.id),
@@ -848,10 +938,13 @@ export class BloodRequestsService {
   }
 
   async getDonorEmergencyRequestById(id: string, userId: string) {
+    const now = new Date();
+    await this.expireEmergencyNotifications(now);
     const donor = await this.getDonorForEmergencyAccess(userId);
 
     const request = await this.prisma.bloodRequest.findFirst({
       where: {
+        ...this.activeEmergencyNotificationWhere(now),
         id,
         matchedDonors: { some: { id: donor.id } },
         requestSource: { in: [RequestSource.DONORS_ONLY, RequestSource.DONORS_AND_HOSPITALS] },
@@ -1234,6 +1327,11 @@ export class BloodRequestsService {
         data: {
           status: RequestStatus.CANCELLED,
           trackingStatus: RequestProgressStatus.CANCELLED,
+          ...(request.type === 'EMERGENCY'
+            ? {
+                emergencyNotificationStatus: EmergencyNotificationStatus.CANCELLED,
+              }
+            : {}),
         },
       });
       await tx.bloodRequestUpdate.create({
@@ -1282,12 +1380,27 @@ export class BloodRequestsService {
     await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
 
     const mappedTrackingStatus = this.mapStatusToTracking(dto.status);
+    const emergencyNotificationUpdate =
+      request.type === 'EMERGENCY'
+        ? dto.status === RequestStatus.CANCELLED
+          ? {
+              emergencyNotificationStatus: EmergencyNotificationStatus.CANCELLED,
+            }
+          : dto.status === RequestStatus.FULFILLED
+            ? {
+                emergencyNotificationStatus: EmergencyNotificationStatus.RESOLVED,
+                emergencyNotificationResolvedAt: new Date(),
+                emergencyNotificationResolvedBy: { connect: { id: userId } },
+              }
+            : {}
+        : {};
     const updated = await this.prisma.$transaction(async (tx) => {
       const nextRequest = await tx.bloodRequest.update({
         where: { id },
         data: {
           status: dto.status,
           trackingStatus: mappedTrackingStatus,
+          ...emergencyNotificationUpdate,
         },
       });
 
@@ -1328,11 +1441,64 @@ export class BloodRequestsService {
     return updated;
   }
 
+  async resolveEmergencyNotification(id: string, userId: string, role: Role) {
+    const request = await this.prisma.bloodRequest.findUnique({ where: { id } });
+    if (!request) {
+      throw new NotFoundException('Blood request not found');
+    }
+
+    await this.hospitalAccess.assertHospitalAccess(request.hospitalId, userId, role);
+
+    if (request.type !== 'EMERGENCY') {
+      throw new BadRequestException('Only emergency request notifications can be resolved.');
+    }
+
+    if (
+      request.emergencyNotificationStatus === EmergencyNotificationStatus.RESOLVED ||
+      request.emergencyNotificationStatus === EmergencyNotificationStatus.CANCELLED
+    ) {
+      return request;
+    }
+
+    const updated = await this.prisma.bloodRequest.update({
+      where: { id },
+      data: {
+        emergencyNotificationStatus: EmergencyNotificationStatus.RESOLVED,
+        emergencyNotificationResolvedAt: new Date(),
+        emergencyNotificationResolvedBy: { connect: { id: userId } },
+      },
+    });
+
+    await this.audit.log('EMERGENCY_NOTIFICATION_RESOLVED', 'BLOOD_REQUEST', userId, id, {
+      requestReference: request.requestReference,
+      previousNotificationStatus: request.emergencyNotificationStatus,
+    });
+
+    await this.realtime.broadcastEmergencyRequest(
+      {
+        requestId: id,
+        requestReference: request.requestReference,
+        status: updated.status,
+        trackingStatus: updated.trackingStatus,
+        emergencyNotificationStatus: updated.emergencyNotificationStatus,
+        emergencyNotificationResolvedAt: updated.emergencyNotificationResolvedAt,
+        hospitalId: request.hospitalId,
+      },
+      {
+        requestId: id,
+        hospitalId: request.hospitalId,
+        isPublicEmergency: true,
+      },
+    );
+
+    return updated;
+  }
+
   async respondAsHospital(id: string, userId: string, role: Role, dto: RespondToHospitalRequestDto) {
     const hospital = await this.hospitalAccess.getHospitalForUser(userId);
     const request = await this.prisma.bloodRequest.findUnique({
       where: { id },
-      include: { hospital: { select: { id: true, hospitalName: true, userId: true } } },
+      include: { hospital: { select: { id: true, hospitalName: true, userId: true, contactPhone: true } } },
     });
     if (!request) {
       throw new NotFoundException('Blood request not found');
@@ -1416,12 +1582,39 @@ export class BloodRequestsService {
           : `${hospital.hospitalName} cannot fulfill request`,
       body:
         responseType === HospitalRequestResponseType.OFFERED
-          ? `${hospital.hospitalName} offered ${response.unitsOffered} unit(s) of ${request.bloodGroup} for ${request.requestReference}.`
+          ? `${hospital.hospitalName} offered ${response.unitsOffered} unit(s) of ${this.formatBloodGroup(request.bloodGroup)} for ${request.requestReference}.`
           : `${hospital.hospitalName} marked ${request.requestReference} as cannot fulfill.`,
       channel: 'IN_APP',
       type: NotificationType.EMERGENCY_REQUEST,
-      delivered: true,
     });
+
+    if (responseType === HospitalRequestResponseType.CANNOT_FULFILL) {
+      const smsRecipients = [request.hospital.contactPhone];
+      const smsResult = await this.smsService.sendEmergencyDonorAlert({
+        recipients: smsRecipients,
+        message: `BloodSOS: ${hospital.hospitalName} could not fulfill your request for ${request.unitsNeeded} unit(s) of ${this.formatBloodGroup(request.bloodGroup)} blood. Check the platform for details.`,
+        hospitalId: request.hospitalId,
+        triggeredByUserId: userId,
+        relatedEntityType: 'HOSPITAL_TRANSFER_RESPONSE',
+        relatedEntityId: response.id,
+        idempotencyKey: this.smsService.buildEventIdempotencyKey(
+          SmsPurpose.EMERGENCY_REQUEST,
+          'HOSPITAL_TRANSFER_RESPONSE',
+          response.id,
+          'CANNOT_FULFILL',
+          smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+        ),
+      });
+      await this.audit.log(smsResult.success ? 'HOSPITAL_TRANSFER_REJECT_SMS_SENT' : 'HOSPITAL_TRANSFER_REJECT_SMS_FAILED', 'SMS', userId, smsResult.smsLogId ?? response.id, {
+        requestId: request.id,
+        requestReference: request.requestReference,
+        responseId: response.id,
+        smsStatus: smsResult.status,
+        smsSent: smsResult.sentCount,
+        skippedInvalidRecipients: smsResult.skippedInvalidRecipients,
+        errorCode: smsResult.errorCode ?? null,
+      });
+    }
 
     await this.realtime.broadcastEmergencyRequest(
       {
@@ -1452,8 +1645,8 @@ export class BloodRequestsService {
     const response = await this.prisma.hospitalBloodRequestResponse.findUnique({
       where: { id: responseId },
       include: {
-        request: { include: { hospital: { select: { id: true, userId: true, hospitalName: true } } } },
-        respondingHospital: { select: { id: true, userId: true, hospitalName: true } },
+        request: { include: { hospital: { select: { id: true, userId: true, hospitalName: true, contactPhone: true } } } },
+        respondingHospital: { select: { id: true, userId: true, hospitalName: true, contactPhone: true } },
       },
     });
     if (!response || response.requestId !== id) {
@@ -1531,15 +1724,46 @@ export class BloodRequestsService {
     await this.notifications.createAndBroadcastNotification({
       userId: response.respondingHospital.userId,
       bloodRequestId: id,
-      title: dto.status === HospitalRequestResponseStatus.ACCEPTED ? 'Offer accepted - dispatch requested' : `Hospital offer ${dto.status.toLowerCase()}`,
+      title: dto.status === HospitalRequestResponseStatus.ACCEPTED ? 'Transfer Request Accepted' : `Transfer Request ${dto.status.toLowerCase()}`,
       body:
         dto.status === HospitalRequestResponseStatus.ACCEPTED
-          ? `Your offer for ${response.request.requestReference} was accepted. Please dispatch blood.`
-          : `${response.request.hospital.hospitalName} ${dto.status.toLowerCase()} your response for ${response.request.requestReference}.`,
+          ? `${response.request.hospital.hospitalName} accepted your offer of ${response.unitsOffered ?? 0} unit(s) of ${this.formatBloodGroup(response.bloodGroupOffered ?? response.request.bloodGroup)} blood. Please dispatch blood for ${response.request.requestReference}.`
+          : `${response.request.hospital.hospitalName} ${dto.status.toLowerCase()} your offer for ${response.request.requestReference}.`,
       channel: 'IN_APP',
       type: NotificationType.EMERGENCY_REQUEST,
-      delivered: true,
     });
+
+    if (dto.status === HospitalRequestResponseStatus.ACCEPTED || dto.status === HospitalRequestResponseStatus.REJECTED) {
+      const smsRecipients = [response.respondingHospital.contactPhone];
+      const bloodGroupLabel = this.formatBloodGroup(response.bloodGroupOffered ?? response.request.bloodGroup);
+      const smsResult = await this.smsService.sendEmergencyDonorAlert({
+        recipients: smsRecipients,
+        message: dto.status === HospitalRequestResponseStatus.ACCEPTED
+          ? `BloodSOS: Your offer of ${response.unitsOffered ?? 0} unit(s) of ${bloodGroupLabel} blood has been accepted by ${response.request.hospital.hospitalName}. Check the platform for dispatch details.`
+          : `BloodSOS: ${response.request.hospital.hospitalName} could not accept your offer of ${response.unitsOffered ?? 0} unit(s) of ${bloodGroupLabel} blood. Check the platform for details.`,
+        hospitalId: response.request.hospitalId,
+        triggeredByUserId: userId,
+        relatedEntityType: 'HOSPITAL_TRANSFER_DECISION',
+        relatedEntityId: response.id,
+        idempotencyKey: this.smsService.buildEventIdempotencyKey(
+          SmsPurpose.EMERGENCY_REQUEST,
+          'HOSPITAL_TRANSFER_DECISION',
+          response.id,
+          dto.status,
+          smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
+        ),
+      });
+      await this.audit.log(smsResult.success ? 'HOSPITAL_TRANSFER_DECISION_SMS_SENT' : 'HOSPITAL_TRANSFER_DECISION_SMS_FAILED', 'SMS', userId, smsResult.smsLogId ?? response.id, {
+        requestId: response.request.id,
+        requestReference: response.request.requestReference,
+        responseId,
+        status: dto.status,
+        smsStatus: smsResult.status,
+        smsSent: smsResult.sentCount,
+        skippedInvalidRecipients: smsResult.skippedInvalidRecipients,
+        errorCode: smsResult.errorCode ?? null,
+      });
+    }
 
     await this.realtime.broadcastEmergencyRequest(
       {
@@ -1671,7 +1895,6 @@ export class BloodRequestsService {
       body: `Blood dispatched by ${transfer.supplyingHospital.hospitalName} for ${transfer.request.requestReference}.`,
       channel: 'IN_APP',
       type: NotificationType.EMERGENCY_REQUEST,
-      delivered: true,
     });
 
     this.realtime.broadcastInventoryUpdate({
@@ -1826,7 +2049,6 @@ export class BloodRequestsService {
       body: `${transfer.receivingHospital.hospitalName} confirmed receipt for ${transfer.request.requestReference}.`,
       channel: 'IN_APP',
       type: NotificationType.EMERGENCY_REQUEST,
-      delivered: true,
     });
 
     this.realtime.broadcastInventoryUpdate({
@@ -1907,6 +2129,20 @@ export class BloodRequestsService {
 
     const oldTrackingStatus = request.trackingStatus;
     const mappedTrackingStatus = this.mapStatusToTracking(dto.status);
+    const emergencyNotificationUpdate =
+      request.type === 'EMERGENCY'
+        ? dto.status === RequestStatus.CANCELLED
+          ? {
+              emergencyNotificationStatus: EmergencyNotificationStatus.CANCELLED,
+            }
+          : dto.status === RequestStatus.FULFILLED
+            ? {
+                emergencyNotificationStatus: EmergencyNotificationStatus.RESOLVED,
+                emergencyNotificationResolvedAt: new Date(),
+                emergencyNotificationResolvedBy: { connect: { id: userId } },
+              }
+            : {}
+        : {};
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const nextRequest = await tx.bloodRequest.update({
@@ -1914,6 +2150,7 @@ export class BloodRequestsService {
         data: {
           status: dto.status,
           trackingStatus: mappedTrackingStatus,
+          ...emergencyNotificationUpdate,
         },
       });
 
@@ -2212,7 +2449,10 @@ export class BloodRequestsService {
 
     const request = await this.prisma.bloodRequest.findUnique({
       where: { id },
-      include: { matchedDonors: { select: { id: true } } },
+      include: {
+        matchedDonors: { select: { id: true } },
+        hospital: { select: { userId: true, hospitalName: true } },
+      },
     });
     if (!request) {
       throw new NotFoundException('Blood request not found');
@@ -2313,6 +2553,15 @@ export class BloodRequestsService {
     await this.audit.log('DONOR_RESPONSE_SUBMITTED', 'DONOR_RESPONSE', userId, response.id, {
       bloodRequestId: id,
       responseStatus: dto.responseStatus,
+    });
+
+    await this.notifications.createAndBroadcastNotification({
+      userId: request.hospital.userId,
+      bloodRequestId: id,
+      title: 'Donor Response Submitted',
+      body: `${donor.fullName} responded ${dto.responseStatus.replace(/_/g, ' ').toLowerCase()} to ${this.formatBloodGroup(request.bloodGroup)} request ${request.requestReference}. Hospital staff can review the response immediately.`,
+      channel: 'IN_APP',
+      type: NotificationType.EMERGENCY_REQUEST,
     });
 
     this.realtime.broadcastDonorResponse({

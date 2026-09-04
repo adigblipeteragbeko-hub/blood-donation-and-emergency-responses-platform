@@ -1,9 +1,10 @@
 import { ForbiddenException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DonorClinicalStatus, Prisma, Role, SmsPurpose } from '@prisma/client';
+import { DonorClinicalStatus, NotificationType, Prisma, Role, SmsPurpose } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../prisma.service';
 import { SmsService } from '../sms/sms.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export const SIX_MONTH_REMINDER_TYPE = 'SIX_MONTH_DONATION_ENCOURAGEMENT';
 export const SIX_MONTH_TEST_REMINDER_TYPE = 'SIX_MONTH_DONATION_ENCOURAGEMENT_TEST';
@@ -11,6 +12,9 @@ export const SIX_MONTH_REMINDER_MESSAGE =
   "BloodSOS: It's been about 6 months since your last donation. Your next donation could save a life. Log in to review your status and book a donation if you're available.";
 export const SIX_MONTH_TEST_REMINDER_MESSAGE =
   "BloodSOS TEST: It's been about 6 months since your last donation. Your next donation could save a life. Log in to review your status and book a donation if you're available.";
+export const SIX_MONTH_IN_APP_NOTIFICATION_TITLE = 'You Can Donate Again ❤️';
+export const SIX_MONTH_IN_APP_NOTIFICATION_BODY =
+  'Thank you for your previous donation. You are now eligible to donate blood again. Your next donation could help save another life. Find a nearby blood centre or book an appointment when you are ready.';
 
 type ReminderDonor = Prisma.DonorGetPayload<{
   include: {
@@ -37,6 +41,7 @@ export class DonorSixMonthRemindersService implements OnModuleInit, OnModuleDest
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly smsService: SmsService,
+    private readonly notificationsService: NotificationsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -156,6 +161,7 @@ export class DonorSixMonthRemindersService implements OnModuleInit, OnModuleDest
       });
       if (result.success) {
         sent += 1;
+        await this.createDonationCycleNotification(recipient);
         await this.prisma.donorReminderLog.update({
           where: { id: log.id },
           data: {
@@ -180,6 +186,7 @@ export class DonorSixMonthRemindersService implements OnModuleInit, OnModuleDest
         donorId: recipient.donor.id,
         dueDate: recipient.dueDate.toISOString(),
         smsLogId: result.smsLogId ?? null,
+        notificationCreated: result.success,
         errorCode: result.errorCode ?? null,
       }, 'Six-month donor encouragement reminder processed.', { module: 'DONOR_REMINDERS' });
     }
@@ -276,6 +283,17 @@ export class DonorSixMonthRemindersService implements OnModuleInit, OnModuleDest
       if (this.isUniqueViolation(error)) return null;
       throw error;
     }
+  }
+
+  private createDonationCycleNotification(recipient: ResolvedReminderRecipient) {
+    return this.notificationsService.createAndBroadcastNotification({
+      userId: recipient.donor.user.id,
+      title: SIX_MONTH_IN_APP_NOTIFICATION_TITLE,
+      body: SIX_MONTH_IN_APP_NOTIFICATION_BODY,
+      channel: 'IN_APP',
+      type: NotificationType.PROACTIVE_DONATION,
+      delivered: false,
+    });
   }
 
   private normalizeDonorPhone(donor: Pick<ReminderDonor, 'id' | 'phone' | 'alternativePhoneNumber'> & Record<string, unknown>) {

@@ -5,8 +5,10 @@ import {
   markNotificationDelivered,
 } from '../services/hospital-portal';
 import { FilterBox, Pager } from '../components/TableControls';
+import { useToast } from '../components/ui/ToastProvider';
 
 export default function HospitalNotificationsPage() {
+  const toast = useToast();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -51,10 +53,12 @@ export default function HospitalNotificationsPage() {
     setMessage('');
     try {
       await markNotificationDelivered(notificationId, true);
-      setMessage('Notification marked as delivered.');
+      toast.success('Notification marked as read.');
       await load();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Failed to update notification.');
+      const text = error?.response?.data?.error?.message ?? 'Failed to update notification.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -71,7 +75,7 @@ export default function HospitalNotificationsPage() {
         onChange={setSearchInput}
       />
 
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
+      {message ? <p className="text-sm font-semibold text-primary">{message}</p> : null}
 
       <div className="card space-y-3">
         {loading ? <p className="text-sm text-muted">Loading notifications...</p> : null}
@@ -86,11 +90,11 @@ export default function HospitalNotificationsPage() {
               <p className="mt-1 text-sm text-gray-700">{item.body}</p>
               <div className="mt-3 flex items-center gap-2">
                 <span className={`rounded px-2 py-1 text-xs font-semibold ${item.delivered ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {item.delivered ? 'Delivered' : 'Pending'}
+                  {item.delivered ? 'Read' : 'Unread'}
                 </span>
                 {!item.delivered ? (
                   <button className="rounded border border-primary px-3 py-1 text-xs font-semibold text-primary" onClick={() => void markDelivered(item.id)} type="button">
-                    Mark Delivered
+                    Mark as read
                   </button>
                 ) : null}
               </div>

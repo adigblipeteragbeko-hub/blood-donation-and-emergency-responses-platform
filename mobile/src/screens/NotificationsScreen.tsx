@@ -2,7 +2,10 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppButton } from '../components/AppButton';
 import { AppCard } from '../components/AppCard';
+import { EmptyState } from '../components/EmptyState';
+import { FeedbackMessage } from '../components/FeedbackMessage';
 import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../constants/colors';
@@ -14,6 +17,7 @@ import {
 } from '../services/notifications';
 import { DonorTabsParamList } from '../types/navigation';
 import { formatDateTime } from '../utils/format';
+import { radius, spacing, typography } from '../theme/design';
 
 function isEmergency(item: NotificationItem) {
   return Boolean(item.bloodRequestId || item.type?.toLowerCase().includes('emergency') || item.title.toLowerCase().includes('urgent'));
@@ -82,9 +86,11 @@ export function NotificationsScreen() {
         <AppCard style={styles.summaryCard}><Text style={styles.summaryValue}>{emergencyCount}</Text><Text style={styles.summaryLabel}>Emergency</Text></AppCard>
       </View>
 
-      {message ? <Text style={styles.error}>{message}</Text> : null}
+      <FeedbackMessage message={message} tone={message.includes('Unable') ? 'danger' : 'success'} />
       {loading ? <Text style={styles.muted}>Loading notifications...</Text> : null}
-      {!loading && items.length === 0 ? <AppCard><Text style={styles.muted}>No notifications yet. Emergency alerts and appointment updates will appear here.</Text></AppCard> : null}
+      {!loading && items.length === 0 ? (
+        <EmptyState icon="notifications-outline" title="No Notifications Yet" message="Emergency alerts and appointment updates will appear here." />
+      ) : null}
       {items.map((item) => (
         <Pressable key={item.id} onPress={() => void openNotification(item)} style={({ pressed }) => [styles.card, isEmergency(item) && styles.emergencyCard, !item.delivered && styles.unreadCard, pressed && styles.pressed]}>
           <View style={styles.rowBetween}>
@@ -98,12 +104,8 @@ export function NotificationsScreen() {
           {item.bloodRequestId ? <Text style={styles.link}>View Alert</Text> : null}
           {isProactiveDonation(item) && item.campaignId ? (
             <View style={styles.actionRow}>
-              <Pressable onPress={() => void respondToCampaign(item, 'INTERESTED')} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
-                <Text style={styles.primaryButtonText}>I'm Interested</Text>
-              </Pressable>
-              <Pressable onPress={() => void respondToCampaign(item, 'NOT_AVAILABLE')} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-                <Text style={styles.secondaryButtonText}>Not Available</Text>
-              </Pressable>
+              <AppButton title="I'm Interested" icon="heart-outline" onPress={() => void respondToCampaign(item, 'INTERESTED')} style={styles.actionButton} />
+              <AppButton title="Not Available" variant="outline" onPress={() => void respondToCampaign(item, 'NOT_AVAILABLE')} style={styles.actionButton} />
             </View>
           ) : null}
         </Pressable>
@@ -113,24 +115,20 @@ export function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  error: { borderRadius: 12, backgroundColor: '#fef2f2', color: colors.danger, padding: 10, fontWeight: '800' },
-  summaryRow: { flexDirection: 'row', gap: 10 },
-  summaryCard: { flex: 1, minHeight: 88 },
-  summaryValue: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  summaryLabel: { color: colors.muted, fontWeight: '800' },
-  card: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: '#fff', padding: 14 },
-  emergencyCard: { borderColor: '#fecaca', backgroundColor: '#fff7f7' },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  summaryRow: { flexDirection: 'row', gap: spacing.sm },
+  summaryCard: { flex: 1, minHeight: 88, alignItems: 'center' },
+  summaryValue: { color: colors.primaryDark, ...typography.stat },
+  summaryLabel: { color: colors.muted, fontWeight: '800', fontSize: 12 },
+  card: { gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.elevated, padding: spacing.lg },
+  emergencyCard: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   unreadCard: { borderColor: colors.primary },
   pressed: { opacity: 0.86 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  cardTitle: { flex: 1, color: colors.ink, fontWeight: '900', fontSize: 17 },
-  body: { color: colors.ink, lineHeight: 21 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
+  cardTitle: { flex: 1, color: colors.ink, ...typography.cardTitle },
+  body: { color: colors.ink, ...typography.body },
   link: { color: colors.primary, fontWeight: '900' },
-  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  primaryButton: { borderRadius: 12, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 9 },
-  primaryButtonText: { color: '#fff', fontWeight: '900' },
-  secondaryButton: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 9 },
-  secondaryButtonText: { color: colors.ink, fontWeight: '900' },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  actionButton: { flexGrow: 1, minHeight: 44 },
 });

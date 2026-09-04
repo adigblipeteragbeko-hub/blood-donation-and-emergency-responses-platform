@@ -6,6 +6,7 @@ import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../constants/colors';
 import { DonorProfile, EligibilityStatus, getDonorEligibilityStatus, getDonorProfile } from '../services/donor';
+import { typography } from '../theme/design';
 
 function formatDate(value?: string | null) { if (!value) return 'Not available'; const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString(); }
 
@@ -17,4 +18,8 @@ export function EligibilityScreen() {
   return <Screen><AppCard><Text style={styles.title}>Eligibility</Text><Text style={styles.muted}>Your current donation readiness.</Text></AppCard><AppCard><StatusBadge label={approved ? 'Eligible' : 'Not eligible yet'} tone={approved ? 'success' : 'warning'} /><Text style={styles.detail}>Availability: {profile?.availabilityStatus ? 'Available' : 'Not available'}</Text><Text style={styles.detail}>Last donation: {formatDate(profile?.lastDonationDate ?? eligibility?.lastDonationDate)}</Text><Text style={styles.detail}>Next eligible: {formatDate(profile?.nextEligibilityDate ?? eligibility?.nextEligibilityDate)}</Text><Text style={styles.muted}>{eligibility?.message ?? 'Complete hospital screening before emergency matching becomes active.'}</Text></AppCard></Screen>;
 }
 
-const styles = StyleSheet.create({ title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' }, muted: { color: colors.muted, lineHeight: 20 }, detail: { color: colors.ink, fontSize: 15, lineHeight: 24 } });
+const styles = StyleSheet.create({
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  detail: { color: colors.ink, fontSize: 15, lineHeight: 24 },
+});

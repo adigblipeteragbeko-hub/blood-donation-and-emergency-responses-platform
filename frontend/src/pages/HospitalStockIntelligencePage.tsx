@@ -171,6 +171,11 @@ const getWarningLevelLabel = (level: StockWarningLevel) => {
   return 'Healthy';
 };
 
+const formatStatusLabel = (value?: string | null) => {
+  if (!value) return 'Not available';
+  return value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
 const getWarningLevelClassName = (level: StockWarningLevel) => {
   if (level === 'CRITICAL') return 'bg-red-100 text-red-800 border-red-200';
   if (level === 'LIKELY_SHORTAGE') return 'bg-orange-100 text-orange-800 border-orange-200';
@@ -189,7 +194,7 @@ function getRuleTriggers(item: BloodStockWarningItem) {
   if (currentUnits < activeDemand) {
     triggers.push('Inventory < Emergency Demand');
   }
-  if (currentUnits <= 5 || item.level === 'CRITICAL') {
+  if (currentUnits <= Number(item.criticalStockLevel ?? 0) || item.level === 'CRITICAL') {
     triggers.push('Inventory <= Critical Threshold');
   }
   if (expiringUnits > Math.max(0, currentUnits - activeDemand)) {
@@ -501,7 +506,7 @@ export default function HospitalStockIntelligencePage() {
           .slice(0, 2)
           .map((item) => ({
             id: `appointment-${item.id}`,
-            title: `${item.appointmentReference}: appointment ${item.status.toLowerCase()} for ${item.donor?.fullName ?? 'donor'}`,
+            title: `${item.appointmentReference}: appointment ${formatStatusLabel(item.status)} for ${item.donor?.fullName ?? 'donor'}`,
             timestamp: item.completedAt ?? item.scheduledAt,
           }));
         const completedAppointmentActivity = appointments
@@ -521,7 +526,7 @@ export default function HospitalStockIntelligencePage() {
             const donationNumber = item.donationNumber ? ` (${item.donationNumber})` : '';
             return {
               id: `donation-${item.id}`,
-              title: `Donation posted${donationNumber}: +${units} ${item.donor?.bloodGroup ?? 'blood'} from ${donor}`,
+              title: `Donation posted${donationNumber}: +${units} ${item.donor?.bloodGroup ? formatBloodGroup(item.donor.bloodGroup) : 'blood'} from ${donor}`,
               timestamp: item.donationPostedAt ?? item.completedAt,
             };
           });
@@ -529,12 +534,12 @@ export default function HospitalStockIntelligencePage() {
           .slice(0, 2)
           .map((item) => ({
             id: `inventory-${item.id}`,
-            title: `Inventory updated: ${item.inventory.bloodGroup} ${item.previousUnits} to ${item.newUnits}${item.reason ? ` (${item.reason})` : ''}`,
+            title: `Inventory updated: ${formatBloodGroup(item.inventory.bloodGroup)} ${item.previousUnits} to ${item.newUnits}${item.reason ? ` (${item.reason})` : ''}`,
             timestamp: item.createdAt,
           }));
         const requestActivity = requests.slice(0, 4).map((item) => ({
           id: `request-${item.id}`,
-          title: `${item.requestReference}: ${item.bloodGroup} request, ${item.unitsNeeded} units (${item.status}, ${item.requestSource})`,
+          title: `${item.requestReference}: ${formatBloodGroup(item.bloodGroup)} request, ${item.unitsNeeded} units (${formatStatusLabel(item.status)}, ${formatStatusLabel(item.requestSource)})`,
           timestamp: item.createdAt,
         }));
         const transferActivity = requestHistory.flatMap((item) =>
@@ -543,7 +548,7 @@ export default function HospitalStockIntelligencePage() {
             if (response.status === 'ACCEPTED' || response.status === 'REJECTED') {
               entries.push({
                 id: `offer-${response.id}`,
-                title: `Hospital offer ${response.status.toLowerCase()}: ${item.requestReference}`,
+                title: `Hospital offer ${formatStatusLabel(response.status)}: ${item.requestReference}`,
                 timestamp: response.updatedAt ?? response.createdAt,
               });
             }
@@ -569,7 +574,7 @@ export default function HospitalStockIntelligencePage() {
           .slice(0, 4)
           .map((item) => ({
             id: `history-${item.id}`,
-            title: `Emergency request ${item.status.toLowerCase()}: ${item.requestReference}`,
+            title: `Emergency request ${formatStatusLabel(item.status)}: ${item.requestReference}`,
             timestamp: item.updates?.[0]?.createdAt ?? item.createdAt,
           }));
         setRecentActivity([
@@ -599,11 +604,13 @@ export default function HospitalStockIntelligencePage() {
     socket.on('emergency.request.updated', refreshDashboard);
     socket.on('notification.created', refreshDashboard);
     socket.on('inventory.updated', refreshDashboard);
+    socket.on('donor.mobilization.response.updated', refreshDashboard);
 
     return () => {
       socket.off('emergency.request.updated', refreshDashboard);
       socket.off('notification.created', refreshDashboard);
       socket.off('inventory.updated', refreshDashboard);
+      socket.off('donor.mobilization.response.updated', refreshDashboard);
       socket.disconnect();
     };
   }, []);
@@ -1197,7 +1204,7 @@ export default function HospitalStockIntelligencePage() {
                   Launch campaign for {campaignRequest.requestReference}
                 </h2>
                 <p className="mt-1 text-sm font-semibold text-muted">
-                  {formatBloodGroup(campaignRequest.bloodGroup)} - {campaignRequest.unitsNeeded} unit(s) - {campaignRequest.priority}
+                {formatBloodGroup(campaignRequest.bloodGroup)} - {campaignRequest.unitsNeeded} unit(s) - {formatStatusLabel(campaignRequest.priority)}
                 </p>
               </div>
               <button
@@ -1309,7 +1316,15 @@ export default function HospitalStockIntelligencePage() {
                 <strong>Usable units:</strong> {getWarningUsableUnits(warningCampaign)}
               </p>
               <p>
-                <strong>Risk level:</strong> {getWarningLevelLabel(warningCampaign.level)}
+                <strong>Stock status:</strong> {getWarningLevelLabel(warningCampaign.level)}
+              </p>
+              <p>
+                <strong>Forecasted available:</strong>{' '}
+                {warningCampaign.forecastedAvailableUnits ?? getWarningUsableUnits(warningCampaign)}
+              </p>
+              <p>
+                <strong>Mobilizable donors:</strong>{' '}
+                {warningCampaign.exactAvailableDonors ?? 0} exact / {warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0} compatible
               </p>
               <p>
                 <strong>Recommended action:</strong>{' '}
@@ -1365,11 +1380,20 @@ export default function HospitalStockIntelligencePage() {
               <button
                 aria-label={`Launch campaign for ${formatBloodGroup(warningCampaign.bloodGroup)} compatible donors`}
                 className="btn-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={warningCampaignSending || !warningCampaignMessage.trim() || Boolean(warningCampaignSuccess)}
+                disabled={
+                  warningCampaignSending ||
+                  !warningCampaignMessage.trim() ||
+                  Boolean(warningCampaignSuccess) ||
+                  (warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0) <= 0
+                }
                 onClick={() => void launchWarningCampaign()}
                 type="button"
               >
-                {warningCampaignSending ? 'Launching...' : 'Confirm and Launch Campaign'}
+                {(warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0) <= 0
+                  ? 'No Mobilizable Donors'
+                  : warningCampaignSending
+                    ? 'Launching...'
+                    : 'Confirm and Launch Campaign'}
               </button>
             </div>
           </div>
@@ -1612,9 +1636,10 @@ export default function HospitalStockIntelligencePage() {
                     <span>Average Daily Usage: <strong>{typeof item.averageDailyUsage === 'number' ? item.averageDailyUsage.toFixed(1) : 'No recent usage'}</strong></span>
                     <span>Blood Expiring Soon: <strong>{item.expiringUnits}</strong></span>
                     <span>Emergency Demand: <strong>{item.activeDemandUnits}</strong></span>
-                    <span>Appointments Scheduled: <strong>{item.scheduledDonationUnits}</strong></span>
-                    <span>Incoming Donations: <strong>{item.incomingTransferUnits}</strong></span>
-                    <span>Available Donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
+                    <span>Expected Donations: <strong>{item.scheduledDonationUnits}</strong></span>
+                    <span>Incoming Transfers: <strong>{item.incomingTransferUnits}</strong></span>
+                    <span>Forecasted Available: <strong>{item.forecastedAvailableUnits ?? getWarningUsableUnits(item)}</strong></span>
+                    <span>Mobilizable Donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
                     {detailRow ? <span>Risk Score: <strong>{detailRow.riskScore}/100 - {detailRow.riskLabel}</strong></span> : null}
                   </div>
                   <p className="mt-3 text-sm font-semibold text-slate-700">{item.explanation}</p>
@@ -1642,11 +1667,13 @@ export default function HospitalStockIntelligencePage() {
                         <span>Average Daily Usage: <strong>{typeof item.averageDailyUsage === 'number' ? item.averageDailyUsage.toFixed(1) : 'No recent usage'}</strong></span>
                         <span>Emergency Requests: <strong>{item.activeDemandUnits}</strong></span>
                         <span>Blood Expiring Soon: <strong>{item.expiringUnits}</strong></span>
-                        <span>Scheduled Donations: <strong>{item.scheduledDonationUnits}</strong></span>
+                        <span>Expected Donations: <strong>{item.scheduledDonationUnits}</strong></span>
                         <span>Incoming Blood Transfers: <strong>{item.incomingTransferUnits}</strong></span>
-                        <span>Available Approved Donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
+                        <span>Forecasted Available: <strong>{item.forecastedAvailableUnits ?? getWarningUsableUnits(item)}</strong></span>
+                        <span>Forecast Status: <strong>{formatStatusLabel(item.forecastStatus)}</strong></span>
+                        <span>Mobilizable Approved Donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
                         {detailRow ? <span>Risk Score: <strong>{detailRow.riskScore}/100 ({detailRow.riskLabel})</strong></span> : null}
-                        {detailRow ? <span>Status: <strong>{detailRow.status}</strong></span> : null}
+                        {detailRow ? <span>Stock Status: <strong>{detailRow.status}</strong></span> : null}
                       </div>
                       {detailRow ? (
                         <div className="mt-3 rounded-xl bg-red-50 p-3">
@@ -1782,7 +1809,7 @@ export default function HospitalStockIntelligencePage() {
                 <YAxis allowDecimals />
                 <Tooltip />
                 <Bar dataKey="riskScore" name="Risk Score" fill="#f97316" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="eligibleDonors" name="Available Donors" fill="#16a34a" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="eligibleDonors" name="Mobilizable Donors" fill="#16a34a" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1849,7 +1876,7 @@ export default function HospitalStockIntelligencePage() {
                   tabIndex={-1}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-bold text-slate-900">{item.bloodGroup}</p>
+                    <p className="font-bold text-slate-900">{formatBloodGroup(item.bloodGroup)}</p>
                     <span className={`rounded-full px-2 py-1 text-xs font-bold ${
                       item.level === 'CRITICAL'
                         ? 'bg-red-100 text-red-700'
@@ -1859,7 +1886,7 @@ export default function HospitalStockIntelligencePage() {
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-green-100 text-green-700'
                     }`}>
-                      {item.level.replace('_', ' ')}
+                      {getWarningLevelLabel(item.level)}
                     </span>
                   </div>
                   <div className="mt-2 grid gap-2 rounded-xl bg-slate-50 p-2 text-xs text-slate-700 sm:grid-cols-2">
@@ -1868,9 +1895,10 @@ export default function HospitalStockIntelligencePage() {
                     <span>Demand: <strong>{item.activeDemandUnits}</strong></span>
                     <span>Daily usage: <strong>{typeof item.averageDailyUsage === 'number' ? `${item.averageDailyUsage.toFixed(1)} units/day` : 'No recent usage'}</strong></span>
                     <span>Expiring: <strong>{item.expiringUnits}</strong></span>
-                    <span>Incoming: <strong>{item.incomingTransferUnits}</strong></span>
+                    <span>Incoming Transfers: <strong>{item.incomingTransferUnits}</strong></span>
                     <span>Appointments: <strong>{item.scheduledDonationUnits}</strong></span>
-                    <span>Eligible donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
+                    <span>Forecasted Available: <strong>{item.forecastedAvailableUnits ?? getWarningUsableUnits(item)}</strong></span>
+                    <span>Mobilizable donors: <strong>{item.exactAvailableDonors ?? 0} exact / {item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0} compatible</strong></span>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">{item.recommendedAction ?? item.explanation}</p>
                   <p className="mt-2 rounded-lg bg-white px-2 py-1 text-xs font-black text-primary">
@@ -1901,11 +1929,11 @@ export default function HospitalStockIntelligencePage() {
                       <button
                         aria-label={`Launch donor mobilization campaign for ${formatBloodGroup(item.bloodGroup)} early warning`}
                         className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-100"
-                        disabled={warningCampaignSending}
+                        disabled={warningCampaignSending || (item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0) <= 0}
                         onClick={() => openWarningCampaign(item)}
                         type="button"
                       >
-                        Launch Campaign
+                        {(item.compatibleAvailableDonors ?? item.eligibleDonorCount ?? 0) <= 0 ? 'No Mobilizable Donors' : 'Launch Campaign'}
                       </button>
                     </div>
                   ) : null}
@@ -1925,7 +1953,7 @@ export default function HospitalStockIntelligencePage() {
                     ['Campaign', 'Blood Group', 'Donors Notified', 'Interested', 'Appointments', 'Donations', 'Response Rate', 'Donation Success Rate'],
                     ...campaigns.map((campaign) => [
                       campaign.campaignName,
-                      campaign.bloodGroup,
+                      formatBloodGroup(campaign.bloodGroup),
                       String(campaign.donorsNotified),
                       String(campaign.interestedDonors),
                       String(campaign.appointmentRequests),
@@ -1987,7 +2015,7 @@ export default function HospitalStockIntelligencePage() {
                             <div>
                               <p className="font-bold text-slate-900">{response.donor.fullName}</p>
                               <p className="text-xs text-slate-600">
-                                {response.donor.donorNumber ?? 'No donor ref'} - {response.donor.bloodGroup} - {response.responseStatus.replace('_', ' ')}
+                                {response.donor.donorNumber ?? 'No donor ref'} - {formatBloodGroup(response.donor.bloodGroup)} - {formatStatusLabel(response.responseStatus)}
                               </p>
                             </div>
                             <Link
@@ -2017,7 +2045,7 @@ export default function HospitalStockIntelligencePage() {
                 return (
                   <div key={trend.bloodGroup} className="rounded-2xl border border-slate-100 p-3">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-black text-slate-900">{trend.bloodGroup}</p>
+                      <p className="font-black text-slate-900">{formatBloodGroup(trend.bloodGroup)}</p>
                       <p className="text-xs font-bold text-slate-500">{latest?.units ?? 0} latest units</p>
                     </div>
                     <div className="mt-2 flex h-12 items-end gap-1">

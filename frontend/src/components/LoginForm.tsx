@@ -38,6 +38,32 @@ export function LoginForm({
     return () => clearTimeout(timeout);
   }, [prefilledEmail]);
 
+  const getDonorLandingPath = async () => {
+    try {
+      const response = await api.get('/donor-clinical-records/me');
+      const workspace = response.data?.data ?? response.data;
+      const latest = workspace?.latest as { status?: string } | null | undefined;
+      const nextEligibilityDate = workspace?.donorProfile?.nextEligibilityDate
+        ? new Date(workspace.donorProfile.nextEligibilityDate)
+        : null;
+      const canReassessAfterDeferral =
+        latest?.status === 'TEMPORARILY_DEFERRED' &&
+        nextEligibilityDate &&
+        !Number.isNaN(nextEligibilityDate.getTime()) &&
+        nextEligibilityDate <= new Date();
+
+      if (!latest || latest.status === 'DRAFT' || canReassessAfterDeferral) {
+        return '/donor/health-form?required=1';
+      }
+      if (latest.status !== 'APPROVED') {
+        return '/donor/eligibility';
+      }
+    } catch {
+      return '/donor/dashboard';
+    }
+    return '/donor/dashboard';
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -66,7 +92,7 @@ export function LoginForm({
         return;
       }
 
-      navigate(getRoleLandingPath(nextRole as Role));
+      navigate(nextRole === 'DONOR' ? await getDonorLandingPath() : getRoleLandingPath(nextRole as Role));
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
@@ -148,6 +174,7 @@ export function LoginForm({
             type="email"
             name={`manual_email_${title.replace(/\s+/g, '_').toLowerCase()}`}
             autoComplete="off"
+            placeholder="Email address"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
@@ -160,6 +187,7 @@ export function LoginForm({
             type="password"
             name={`manual_password_${title.replace(/\s+/g, '_').toLowerCase()}`}
             autoComplete="new-password"
+            placeholder="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required

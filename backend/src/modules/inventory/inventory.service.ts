@@ -5,6 +5,7 @@ import {
   DonorClinicalStatus,
   HospitalBloodTransferStatus,
   InventoryChangeType,
+  MobilizationCampaignStatus,
   MobilizationResponseStatus,
   NotificationType,
   PriorityLevel,
@@ -38,6 +39,7 @@ const CORE_BLOOD_GROUPS = [
 const USAGE_HISTORY_WINDOW_DAYS = 60;
 const EXPIRY_WINDOW_DAYS = 14;
 const INVENTORY_STALE_HOURS = 24;
+const MOBILIZATION_DUPLICATE_WINDOW_MINUTES = 30;
 
 @Injectable()
 export class InventoryService {
@@ -98,6 +100,14 @@ export class InventoryService {
     return String(value).replace('_POS', '+').replace('_NEG', '-');
   }
 
+  private formatWarningLevel(value: StockWarningLevel | string) {
+    return String(value)
+      .toLowerCase()
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
   private clampScore(value: number) {
     return Math.max(0, Math.min(100, Math.round(value)));
   }
@@ -124,7 +134,11 @@ export class InventoryService {
     const activeDemand = Math.max(0, Number(args.activeRequestedUnits) || 0);
     const urgentDemand = Math.max(0, Number(args.urgentRequestedUnits) || 0);
     const expiringSoon = Math.max(0, Number(args.unitsExpiringSoon) || 0);
+    const incomingSupply =
+      Math.max(0, Number(args.incomingTransferUnits) || 0) +
+      Math.max(0, Number(args.scheduledDonationUnits) || 0);
     const usableUnits = Math.max(0, currentUnits - expiringSoon - activeDemand);
+    const forecastedAvailableUnits = Math.max(0, usableUnits + incomingSupply);
     const demandRatio = currentUnits > 0 ? activeDemand / currentUnits : activeDemand > 0 ? Number.POSITIVE_INFINITY : 0;
     const expiryRatio = currentUnits > 0 ? expiringSoon / currentUnits : expiringSoon > 0 ? 1 : 0;
     const urgentDemandUncovered = urgentDemand > usableUnits;
@@ -144,6 +158,15 @@ export class InventoryService {
       status = 'Low Stock';
     } else if (demandRatio >= 0.5 || expiryRatio >= 0.25 || args.compatibleAvailableDonors === 0 || args.recentOutgoingUnits > args.recentIncomingUnits * 2) {
       status = 'Monitor';
+    }
+
+    let forecastStatus = 'Healthy';
+    if (forecastedAvailableUnits <= 0 || forecastedAvailableUnits <= args.criticalStockLevel) {
+      forecastStatus = 'Critical';
+    } else if (forecastedAvailableUnits < args.minimumStockLevel) {
+      forecastStatus = 'Low Stock';
+    } else if (demandRatio >= 0.5 || expiryRatio >= 0.25 || args.compatibleAvailableDonors === 0) {
+      forecastStatus = 'Monitor';
     }
 
     let stockRisk = 0;
@@ -178,12 +201,17 @@ export class InventoryService {
       activeDemand > 0 ? `${activeDemand} active demand unit${activeDemand === 1 ? '' : 's'} is included as expected demand` : 'no active demand is currently counted',
       urgentDemand > 0 ? `${urgentDemand} urgent unit${urgentDemand === 1 ? '' : 's'} require immediate cover` : null,
       expiringSoon > 0 ? `${expiringSoon} unit${expiringSoon === 1 ? '' : 's'} expire within ${EXPIRY_WINDOW_DAYS} days` : 'expiry risk is low',
+      incomingSupply > 0
+        ? `forecasted available stock is ${forecastedAvailableUnits} after ${args.incomingTransferUnits} incoming transfer unit${args.incomingTransferUnits === 1 ? '' : 's'} and ${args.scheduledDonationUnits} expected donation unit${args.scheduledDonationUnits === 1 ? '' : 's'}`
+        : 'no reliable incoming supply is currently counted',
       `${args.exactAvailableDonors} exact and ${args.compatibleAvailableDonors} compatible available donor${args.compatibleAvailableDonors === 1 ? '' : 's'} found`,
       stale ? 'inventory data is stale' : 'inventory data is fresh',
     ].filter(Boolean);
 
     return {
       usableUnits,
+      forecastedAvailableUnits,
+      forecastStatus,
       riskScore,
       riskLevel,
       status,
@@ -195,6 +223,7 @@ export class InventoryService {
         `Demand risk: ${demandRisk}/25`,
         `Expiry risk: ${expiryRisk}/15`,
         `Donor availability risk: ${donorRisk}/15`,
+        `Forecasted available stock after reliable incoming supply: ${forecastedAvailableUnits}`,
       ],
     };
   }
@@ -255,6 +284,72 @@ export class InventoryService {
       .filter((donor) => donor.distanceKm === null || donor.distanceKm <= radiusKm)
       .sort((a, b) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY))
       .slice(0, 100);
+  }
+
+  private async recordMeaningfulWarningTransitions(warnings: Array<{
+    hospitalId: string;
+    bloodGroup: BloodGroup;
+    level: StockWarningLevel;
+    currentUnits: number;
+    activeDemandUnits: number;
+    expiringUnits: number;
+    incomingTransferUnits: number;
+    scheduledDonationUnits: number;
+    explanation: string;
+    recommendedAction?: string | null;
+  }>) {
+    const scopedWarnings = warnings.filter((warning) => warning.hospitalId !== 'unscoped');
+    const writes = [];
+
+    for (const warning of scopedWarnings) {
+      const latest = await this.prisma.bloodStockWarning.findFirst({
+        where: { hospitalId: warning.hospitalId, bloodGroup: warning.bloodGroup },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          level: true,
+          currentUnits: true,
+          activeDemandUnits: true,
+          expiringUnits: true,
+          incomingTransferUnits: true,
+          scheduledDonationUnits: true,
+        },
+      });
+
+      const changed =
+        !latest ||
+        latest.level !== warning.level ||
+        latest.currentUnits !== warning.currentUnits ||
+        latest.activeDemandUnits !== warning.activeDemandUnits ||
+        latest.expiringUnits !== warning.expiringUnits ||
+        latest.incomingTransferUnits !== warning.incomingTransferUnits ||
+        latest.scheduledDonationUnits !== warning.scheduledDonationUnits;
+
+      if (!changed) {
+        continue;
+      }
+
+      writes.push(
+        this.prisma.bloodStockWarning.create({
+          data: {
+            hospitalId: warning.hospitalId,
+            bloodGroup: warning.bloodGroup,
+            level: warning.level,
+            currentUnits: warning.currentUnits,
+            estimatedDaysOfCover: null,
+            activeDemandUnits: warning.activeDemandUnits,
+            expiringUnits: warning.expiringUnits,
+            incomingTransferUnits: warning.incomingTransferUnits,
+            scheduledDonationUnits: warning.scheduledDonationUnits,
+            explanation: warning.explanation,
+            recommendedAction: warning.recommendedAction,
+          },
+        }),
+      );
+    }
+
+    if (writes.length > 0) {
+      await this.prisma.$transaction(writes);
+    }
   }
 
   private async selectMobilizationDonors(
@@ -404,34 +499,34 @@ export class InventoryService {
     if (args.level === StockWarningLevel.STABLE) {
       return {
         action: 'No Immediate Action Required',
-        reason: `${args.bloodGroup} stock is stable against current operating thresholds.`,
+        reason: `${this.formatBloodGroup(args.bloodGroup)} stock is stable against current operating thresholds.`,
       };
     }
 
     if (args.eligibleDonorCount > 0 && args.incomingTransferUnits === 0) {
       return {
         action: 'Launch Proactive Donor Campaign',
-        reason: `${args.bloodGroup} stock needs attention. We recommend launching a proactive donor campaign because there are ${args.eligibleDonorCount} eligible donor${args.eligibleDonorCount === 1 ? '' : 's'} within the configured radius and no confirmed incoming blood transfers.`,
+        reason: `${this.formatBloodGroup(args.bloodGroup)} stock needs attention. We recommend launching a proactive donor campaign because there are ${args.eligibleDonorCount} mobilizable donor${args.eligibleDonorCount === 1 ? '' : 's'} within the configured radius and no confirmed incoming blood transfers.`,
       };
     }
 
     if (args.incomingTransferUnits > 0 && args.usableUnits > 0) {
       return {
         action: 'Monitor Inventory',
-        reason: `${args.bloodGroup} has ${args.incomingTransferUnits} incoming transfer unit${args.incomingTransferUnits === 1 ? '' : 's'} expected. Monitor receipt and expiry before launching a new campaign.`,
+        reason: `${this.formatBloodGroup(args.bloodGroup)} has ${args.incomingTransferUnits} incoming transfer unit${args.incomingTransferUnits === 1 ? '' : 's'} expected. Monitor receipt and expiry before launching a new campaign.`,
       };
     }
 
     if (args.scheduledDonationUnits > 0) {
       return {
         action: 'Increase Donation Appointments',
-        reason: `${args.bloodGroup} has scheduled donation appointments, but current usable stock remains low. Confirm attendance and add more appointments if needed.`,
+        reason: `${this.formatBloodGroup(args.bloodGroup)} has scheduled donation appointments, but current usable stock remains low. Confirm attendance and add more appointments if needed.`,
       };
     }
 
     return {
       action: 'Request Blood Transfer',
-      reason: `${args.bloodGroup} stock is at risk and no eligible nearby donors or incoming transfers are currently available.`,
+      reason: `${this.formatBloodGroup(args.bloodGroup)} stock is at risk and no eligible nearby donors or incoming transfers are currently available.`,
     };
   }
 
@@ -691,8 +786,9 @@ export class InventoryService {
     const where = hospital ? { hospitalId: hospital.id } : {};
     const forecastPeriodHours = 48;
     const usageSince = new Date(Date.now() - USAGE_HISTORY_WINDOW_DAYS * 86_400_000);
-    const expiryBefore = new Date(Date.now() + EXPIRY_WINDOW_DAYS * 86_400_000);
-    const [inventory, activeRequests, usageLogs, incomingTransfers, scheduledAppointments, donors] = await Promise.all([
+    const now = new Date();
+    const forecastWindowEnd = new Date(now.getTime() + forecastPeriodHours * 60 * 60_000);
+    const [inventory, activeRequests, usageLogs, incomingTransfers, scheduledAppointments] = await Promise.all([
       this.prisma.inventoryItem.findMany({
         where,
         include: { hospital: { select: { id: true, hospitalName: true, city: true, region: true, latitude: true, longitude: true } } },
@@ -721,28 +817,23 @@ export class InventoryService {
           ...(hospital ? { receivingHospitalId: hospital.id } : {}),
           status: { in: [HospitalBloodTransferStatus.ACCEPTED, HospitalBloodTransferStatus.DISPATCHED] },
         },
-        select: { bloodGroup: true, units: true, receivedUnits: true },
+        select: { bloodGroup: true, units: true, dispatchedUnits: true, receivedUnits: true, status: true },
       }),
       this.prisma.appointment.findMany({
         where: {
           ...(hospital ? { hospitalId: hospital.id } : {}),
           status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-          scheduledAt: { lte: new Date(Date.now() + forecastPeriodHours * 60 * 60_000) },
-          donor: { bloodGroup: { not: BloodGroup.UNKNOWN } },
+          scheduledAt: { gte: now, lte: forecastWindowEnd },
+          donor: {
+            bloodGroup: { not: BloodGroup.UNKNOWN },
+            eligibilityStatus: true,
+            availabilityStatus: true,
+            user: { isActive: true, emailVerified: true },
+            clinicalRecords: { some: { status: DonorClinicalStatus.APPROVED } },
+            OR: [{ nextEligibilityDate: null }, { nextEligibilityDate: { lte: now } }],
+          },
         },
         select: { donor: { select: { bloodGroup: true } }, unitsCollected: true },
-      }),
-      this.prisma.donor.findMany({
-        where: {
-          bloodGroup: { in: CORE_BLOOD_GROUPS as unknown as BloodGroup[] },
-          NOT: { bloodGroup: BloodGroup.UNKNOWN },
-          eligibilityStatus: true,
-          availabilityStatus: true,
-          user: { isActive: true, emailVerified: true },
-          clinicalRecords: { some: { status: DonorClinicalStatus.APPROVED } },
-          OR: [{ nextEligibilityDate: null }, { nextEligibilityDate: { lte: new Date() } }],
-        },
-        select: { bloodGroup: true, preferredHospitalId: true },
       }),
     ]);
 
@@ -780,14 +871,12 @@ export class InventoryService {
         acc[log.inventory.bloodGroup] = (acc[log.inventory.bloodGroup] ?? 0) + Math.abs(log.unitsChanged);
         return acc;
       }, {});
-    const loggedExpiryByGroup = usageLogs
-      .filter((log) => log.changeType === InventoryChangeType.EXPIRED && log.createdAt <= expiryBefore)
-      .reduce<Record<string, number>>((acc, log) => {
-        acc[log.inventory.bloodGroup] = (acc[log.inventory.bloodGroup] ?? 0) + Math.abs(log.unitsChanged);
-      return acc;
-    }, {});
     const incomingByGroup = incomingTransfers.reduce<Record<string, number>>((acc, transfer) => {
-      acc[transfer.bloodGroup] = (acc[transfer.bloodGroup] ?? 0) + Math.max(0, transfer.units - Number(transfer.receivedUnits ?? 0));
+      const committedUnits =
+        transfer.status === HospitalBloodTransferStatus.DISPATCHED
+          ? Number(transfer.dispatchedUnits ?? transfer.units)
+          : Number(transfer.units);
+      acc[transfer.bloodGroup] = (acc[transfer.bloodGroup] ?? 0) + Math.max(0, committedUnits - Number(transfer.receivedUnits ?? 0));
       return acc;
     }, {});
     const scheduledByGroup = scheduledAppointments.reduce<Record<string, number>>((acc, appointment) => {
@@ -799,7 +888,7 @@ export class InventoryService {
     const inventoryByGroup = new Map(inventory.filter((item) => item.bloodGroup !== BloodGroup.UNKNOWN).map((item) => [item.bloodGroup, item]));
     const fallbackHospital = hospital ?? inventory[0]?.hospital ?? null;
 
-    const warnings = CORE_BLOOD_GROUPS.map((bloodGroup) => {
+    const warnings = await Promise.all(CORE_BLOOD_GROUPS.map(async (bloodGroup) => {
       const item = inventoryByGroup.get(bloodGroup);
       const hospitalContext = hospital ?? item?.hospital ?? fallbackHospital;
       const currentUnits = Math.max(0, Number(item?.availableUnits ?? 0));
@@ -808,17 +897,17 @@ export class InventoryService {
       const activeDemandUnits = demandByGroup[bloodGroup] ?? 0;
       const urgentRequestedUnits = urgentDemandByGroup[bloodGroup] ?? 0;
       const inventoryExpiringUnits = Math.max(0, Number(item?.expiringUnits ?? 0));
-      const expiringUnits = Math.max(inventoryExpiringUnits, loggedExpiryByGroup[bloodGroup] ?? 0);
+      const expiringUnits = inventoryExpiringUnits;
       const incomingTransferUnits = incomingByGroup[bloodGroup] ?? 0;
       const scheduledDonationUnits = scheduledByGroup[bloodGroup] ?? 0;
       const usageHistoryCount = usageHistoryCountByGroup[bloodGroup] ?? 0;
       const totalUsage = usageByGroup[bloodGroup] ?? 0;
       const averageDailyUsage = usageHistoryCount > 0 ? Number((totalUsage / USAGE_HISTORY_WINDOW_DAYS).toFixed(2)) : null;
-      const exactAvailableDonors = donors.filter((donor) => donor.bloodGroup === bloodGroup && (!hospital || !donor.preferredHospitalId || donor.preferredHospitalId === hospital.id)).length;
-      const compatibleGroups = getCompatibleDonorGroups(bloodGroup);
-      const compatibleAvailableDonors = donors.filter((donor) =>
-        compatibleGroups.includes(donor.bloodGroup) && (!hospital || !donor.preferredHospitalId || donor.preferredHospitalId === hospital.id),
-      ).length;
+      const mobilizableDonors = hospitalContext
+        ? (await this.selectMobilizationDonors(hospitalContext, bloodGroup, 25)).donors
+        : [];
+      const exactAvailableDonors = mobilizableDonors.filter((donor) => donor.bloodGroup === bloodGroup).length;
+      const compatibleAvailableDonors = mobilizableDonors.length;
       const health = this.calculateInventoryHealth({
         bloodGroup,
         currentUnits,
@@ -882,28 +971,12 @@ export class InventoryService {
         explanation: health.explanation,
         recommendedAction: recommendation.reason,
         riskFactors: health.riskFactors,
+        forecastedAvailableUnits: health.forecastedAvailableUnits,
+        forecastStatus: health.forecastStatus,
       };
-    });
+    }));
 
-    await this.prisma.$transaction(
-      warnings.filter((warning) => warning.hospitalId !== 'unscoped').map((warning) =>
-        this.prisma.bloodStockWarning.create({
-          data: {
-            hospitalId: warning.hospitalId,
-            bloodGroup: warning.bloodGroup,
-            level: warning.level,
-            currentUnits: warning.currentUnits,
-            estimatedDaysOfCover: null,
-            activeDemandUnits: warning.activeDemandUnits,
-            expiringUnits: warning.expiringUnits,
-            incomingTransferUnits: warning.incomingTransferUnits,
-            scheduledDonationUnits: warning.scheduledDonationUnits,
-            explanation: warning.explanation,
-            recommendedAction: warning.recommendedAction,
-          },
-        }),
-      ),
-    );
+    await this.recordMeaningfulWarningTransitions(warnings);
 
     return warnings;
   }
@@ -922,10 +995,43 @@ export class InventoryService {
 
     const radiusKm = dto.radiusKm ?? 25;
     const forecastPeriodHours = dto.forecastPeriodHours ?? 48;
+    const duplicateSince = new Date(Date.now() - MOBILIZATION_DUPLICATE_WINDOW_MINUTES * 60_000);
+    const recentCampaign = await this.prisma.donorMobilizationCampaign.findFirst({
+      where: {
+        hospitalId: hospital.id,
+        bloodGroup: dto.bloodGroup,
+        status: MobilizationCampaignStatus.SENT,
+        createdAt: { gte: duplicateSince },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, targetDonorCount: true, sentAt: true, createdAt: true },
+    });
+    const createdAt = new Date();
+
+    if (recentCampaign) {
+      return {
+        success: false,
+        bloodGroup: dto.bloodGroup,
+        exactMatchCount: 0,
+        compatibleMatchCount: 0,
+        targetDonorCount: recentCampaign.targetDonorCount,
+        targetedDonorCount: recentCampaign.targetDonorCount,
+        notificationsCreated: 0,
+        notificationsSkipped: 0,
+        skippedReasons: {},
+        auditLogCreated: false,
+        hospitalActivityCreated: false,
+        campaignReference: recentCampaign.id,
+        duplicateCampaign: true,
+        duplicateWindowMinutes: MOBILIZATION_DUPLICATE_WINDOW_MINUTES,
+        createdAt: (recentCampaign.sentAt ?? recentCampaign.createdAt).toISOString(),
+        message: `A mobilization campaign for ${this.formatBloodGroup(dto.bloodGroup)} was launched recently. No duplicate notifications or SMS were sent.`,
+      };
+    }
+
     const { donors, skippedReasons, compatibleGroups } = await this.selectMobilizationDonors(hospital, dto.bloodGroup, radiusKm);
     const exactMatchCount = donors.filter((donor) => donor.bloodGroup === dto.bloodGroup).length;
     const compatibleMatchCount = donors.length - exactMatchCount;
-    const createdAt = new Date();
 
     const message =
       dto.message?.trim() ||
@@ -945,7 +1051,7 @@ export class InventoryService {
         hospitalActivityCreated: false,
         campaignReference: null,
         createdAt: createdAt.toISOString(),
-        message: 'No eligible compatible donors matched the current campaign criteria.',
+        message: 'No currently eligible and available donors were found for mobilization.',
       };
     }
 
@@ -955,7 +1061,7 @@ export class InventoryService {
           hospitalId: hospital.id,
           bloodGroup: dto.bloodGroup,
           warningLevel: dto.warningLevel ?? StockWarningLevel.WATCH,
-          status: 'SENT',
+          status: MobilizationCampaignStatus.SENT,
           forecastPeriodHours,
           radiusKm,
           warningReason: `Forecast window ${forecastPeriodHours} hours; donor search radius ${radiusKm} km.`,
@@ -1195,7 +1301,7 @@ export class InventoryService {
       previewNote:
         donors.length > 0
           ? `${donors.length} approved available donor${donors.length === 1 ? '' : 's'} can receive a non-emergency donation invitation.`
-          : 'No approved available donors matched this blood group and radius.',
+          : 'No currently eligible and available donors were found for mobilization.',
     };
   }
 

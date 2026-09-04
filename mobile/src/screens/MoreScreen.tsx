@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth';
 import { DonorProfile, getDonorProfile } from '../services/donor';
 import { MoreStackParamList } from '../types/navigation';
 import { donorDisplayName, donorEmail } from '../utils/donorIdentity';
+import { radius, spacing, typography } from '../theme/design';
 
 type Item = { route: keyof MoreStackParamList; label: string; description: string; icon: keyof typeof Ionicons.glyphMap };
 
@@ -53,21 +54,21 @@ export function MoreScreen() {
 
   return (
     <Screen>
-      <AppCard style={styles.identityCard}>
+      <AppCard variant="soft" style={styles.identityCard}>
         <View style={styles.identityRow}>
           <SmartAvatar name={name} email={email} src={profile?.profileImageUrl} size="lg" />
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>Current Donor Account</Text>
-            <Text style={styles.title}>{name}</Text>
+            <Text style={styles.title} numberOfLines={2}>{name}</Text>
             <Text style={styles.muted}>{email}</Text>
             <Text style={styles.reference}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
           </View>
         </View>
         <View style={styles.accountActions}>
-          <Pressable style={styles.accountButton} onPress={() => void logout()}>
+          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.accountButton, pressed && styles.pressed]} onPress={() => void logout()}>
             <Text style={styles.accountButtonText}>Add another account</Text>
           </Pressable>
-          <Pressable style={[styles.accountButton, styles.dangerButton]} onPress={() => void logout()}>
+          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.accountButton, styles.dangerButton, pressed && styles.pressed]} onPress={() => void logout()}>
             <Text style={[styles.accountButtonText, styles.dangerText]}>Sign out</Text>
           </Pressable>
         </View>
@@ -80,7 +81,7 @@ export function MoreScreen() {
       </AppCard>
 
       {items.map((item) => (
-        <Pressable key={item.route} style={styles.item} onPress={() => navigation.navigate(item.route)}>
+        <Pressable accessibilityRole="button" key={item.route} style={({ pressed }) => [styles.item, pressed && styles.pressed]} onPress={() => navigation.navigate(item.route)}>
           <View style={styles.iconWrap}><Ionicons name={item.icon} size={22} color={colors.primary} /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.itemTitle}>{item.label}</Text>
@@ -90,7 +91,7 @@ export function MoreScreen() {
         </Pressable>
       ))}
 
-      <Pressable style={[styles.item, styles.logout]} onPress={() => void logout()}>
+      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.item, styles.logout, pressed && styles.pressed]} onPress={() => void logout()}>
         <View style={styles.iconWrap}><Ionicons name="log-out-outline" size={22} color={colors.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.itemTitle}>Logout</Text>
@@ -102,20 +103,21 @@ export function MoreScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  sectionTitle: { color: colors.primaryDark, fontSize: 22, fontWeight: '900' },
-  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontSize: 12 },
-  muted: { color: colors.muted, lineHeight: 20 },
-  identityCard: { borderColor: '#fecaca', backgroundColor: colors.primarySoft },
-  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  reference: { color: colors.primaryDark, fontWeight: '900', marginTop: 4 },
-  accountActions: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' },
-  accountButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff' },
+  title: { color: colors.ink, ...typography.screenTitle },
+  sectionTitle: { color: colors.ink, ...typography.sectionTitle },
+  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 12 },
+  muted: { color: colors.muted, ...typography.body },
+  identityCard: { padding: spacing.xl },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  reference: { color: colors.primaryDark, fontWeight: '900', marginTop: spacing.xs },
+  accountActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg, flexWrap: 'wrap' },
+  accountButton: { minHeight: 44, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.elevated, justifyContent: 'center' },
   accountButtonText: { color: colors.ink, fontWeight: '900' },
-  dangerButton: { borderColor: '#fecaca' },
+  dangerButton: { borderColor: colors.primary },
   dangerText: { color: colors.primary },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: '#fff', padding: 14 },
+  item: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.elevated, padding: spacing.lg },
   logout: { borderColor: '#fecaca', backgroundColor: colors.primarySoft },
-  iconWrap: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
-  itemTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' },
+  iconWrap: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  itemTitle: { color: colors.ink, ...typography.cardTitle },
+  pressed: { opacity: 0.84 },
 });

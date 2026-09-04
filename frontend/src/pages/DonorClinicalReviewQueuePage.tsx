@@ -50,14 +50,15 @@ const passFail = ['', 'PASSED', 'FAILED'];
 const yesNo = ['', 'YES', 'NO'];
 const screeningOutcomes = ['', 'QUALIFIED', 'TEMPORARILY_DEFERRED', 'PERMANENTLY_DEFERRED', 'REJECTED'];
 const finalStatuses = new Set(['APPROVED', 'REJECTED', 'TEMPORARILY_DEFERRED', 'PERMANENTLY_DEFERRED']);
-const riskQuestionKeys = new Set(['q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22']);
+const riskYesQuestionKeys = new Set(['q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22']);
+const riskNoQuestionKeys = new Set(['q1']);
 
 const questionGroups = [
-  { title: 'General Health', keys: ['q1', 'q2', 'q3', 'q4', 'q5', 'q7', 'q8', 'q11'] },
-  { title: 'Recent Medical Procedures', keys: ['q6', 'q10', 'q12', 'q13', 'q14'] },
-  { title: 'Risk Assessment', keys: ['q9', 'q16', 'q17', 'q18', 'q19'] },
-  { title: "Women's Health", keys: ['q22'] },
-  { title: 'Other Safety Questions', keys: ['q15', 'q20', 'q21'] },
+  { title: 'Current Health', keys: ['q1'] },
+  { title: 'Previous Blood Donations', keys: ['q2'] },
+  { title: 'Short Health Pre-Screening', keys: ['q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9'] },
+  { title: 'Legacy General Health', keys: ['q10', 'q11', 'q12', 'q13', 'q14', 'q15'] },
+  { title: 'Legacy Risk Assessment', keys: ['q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22'] },
 ];
 
 function maskDocumentNumber(value?: string | null) {
@@ -316,8 +317,9 @@ function Questionnaire({ record }: { record: DonorClinicalRecord }) {
 }
 
 function QuestionAnswer({ answer }: { answer: NonNullable<DonorClinicalRecord['healthAnswers']>[number] }) {
-  const riskyYes = answer.answer && riskQuestionKeys.has(answer.questionKey);
-  return <div className={`rounded-xl border p-3 ${riskyYes ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-white'}`}><div className="flex flex-wrap items-start justify-between gap-2"><p className="max-w-4xl text-sm font-semibold text-navy">{answer.questionKey}. {answer.questionText}</p><span className={`rounded-full px-3 py-1 text-xs font-black ${riskyYes ? 'bg-amber-100 text-amber-900' : answer.answer ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{answer.answer ? 'YES' : 'NO'}{riskyYes ? ' - REVIEW' : ''}</span></div>{answer.details ? <p className="mt-2 text-sm text-muted">{answer.details}</p> : null}</div>;
+  const riskAnswer = (answer.answer && riskYesQuestionKeys.has(answer.questionKey)) || (!answer.answer && riskNoQuestionKeys.has(answer.questionKey));
+  const displayAnswer = answer.details === 'Not Applicable' ? 'NOT APPLICABLE' : answer.answer ? 'YES' : 'NO';
+  return <div className={`rounded-xl border p-3 ${riskAnswer ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-white'}`}><div className="flex flex-wrap items-start justify-between gap-2"><p className="max-w-4xl text-sm font-semibold text-navy">{answer.questionKey}. {answer.questionText}</p><span className={`rounded-full px-3 py-1 text-xs font-black ${riskAnswer ? 'bg-amber-100 text-amber-900' : answer.answer ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{displayAnswer}{riskAnswer ? ' - REVIEW' : ''}</span></div>{answer.details && answer.details !== 'Not Applicable' ? <p className="mt-2 text-sm text-muted">{answer.details}</p> : null}</div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

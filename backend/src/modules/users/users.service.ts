@@ -6,6 +6,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { CreateUserAdminDto } from './dto/admin/create-user-admin.dto';
 import * as argon2 from 'argon2';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { normalizeEmail } from '../../common/utils/email-normalization';
 
 @Injectable()
 export class UsersService {
@@ -55,8 +56,23 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const updated = await this.prisma.user.update({ where: { id }, data: dto });
-    await this.audit.log('USER_UPDATED', 'USER', actorUserId, id, dto);
+    const normalizedEmail = dto.email === undefined ? undefined : normalizeEmail(dto.email);
+    if (normalizedEmail) {
+      const existing = await this.prisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: 'insensitive' }, id: { not: id } },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestException('Email already exists');
+      }
+    }
+
+    const data = {
+      ...dto,
+      email: normalizedEmail,
+    };
+    const updated = await this.prisma.user.update({ where: { id }, data });
+    await this.audit.log('USER_UPDATED', 'USER', actorUserId, id, data);
     return {
       id: updated.id,
       email: updated.email,
@@ -69,14 +85,18 @@ export class UsersService {
   }
 
   async create(dto: CreateUserAdminDto, actorUserId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const email = normalizeEmail(dto.email);
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
     if (existing) {
       throw new BadRequestException('Email already exists');
     }
 
     const created = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        email,
         passwordHash: await argon2.hash(dto.password),
         role: dto.role,
         emailVerified: true,
@@ -84,7 +104,7 @@ export class UsersService {
       },
     });
 
-    await this.audit.log('USER_CREATED', 'USER', actorUserId, created.id, { email: dto.email, role: dto.role });
+    await this.audit.log('USER_CREATED', 'USER', actorUserId, created.id, { email, role: dto.role });
 
     return {
       id: created.id,

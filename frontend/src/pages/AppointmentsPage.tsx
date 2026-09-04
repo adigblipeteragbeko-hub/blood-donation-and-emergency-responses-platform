@@ -9,6 +9,7 @@ import {
   type AppointmentStatus,
   type AppointmentType,
 } from '../services/hospital-portal';
+import { useToast } from '../components/ui/ToastProvider';
 
 type HospitalOption = {
   id: string;
@@ -65,12 +66,12 @@ const formatTime = (value: string) =>
 const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : '-');
 
 export default function AppointmentsPage() {
+  const toast = useToast();
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [hospitalInput, setHospitalInput] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [hospitalOptions, setHospitalOptions] = useState<HospitalOption[]>([]);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [actingId, setActingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [rescheduleItem, setRescheduleItem] = useState<AppointmentItem | null>(null);
@@ -109,16 +110,17 @@ export default function AppointmentsPage() {
 
   const runAction = async (id: string, action: () => Promise<AppointmentItem>, success: string) => {
     setError('');
-    setMessage('');
     setActingId(id);
     try {
       await action();
-      setMessage(success);
+      toast.success(success);
       await loadData();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Could not update appointment.');
+      const text = extracted ?? 'Could not update appointment.';
+      setError(text);
+      toast.error(text);
     } finally {
       setActingId(null);
     }
@@ -127,7 +129,6 @@ export default function AppointmentsPage() {
   const book = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    setMessage('');
 
     if (!selectedHospital) {
       setError('Hospital is not available. Please select a hospital from the list.');
@@ -139,14 +140,16 @@ export default function AppointmentsPage() {
         hospitalId: selectedHospital.id,
         scheduledAt: new Date(scheduledAt).toISOString(),
       });
-      setMessage(`Appointment booked successfully. Reference: ${response.data?.data?.appointmentReference ?? 'Pending'}.`);
+      toast.success(`Appointment booked successfully. Reference: ${response.data?.data?.appointmentReference ?? 'Pending'}.`);
       setHospitalInput('');
       setScheduledAt('');
       await loadData();
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
-      setError(extracted ?? 'Could not book appointment.');
+      const text = extracted ?? 'Could not book appointment.';
+      setError(text);
+      toast.error(text);
     }
   };
 
@@ -211,7 +214,6 @@ export default function AppointmentsPage() {
         <h1 className="text-2xl font-bold text-primary">Appointments</h1>
         <p className="text-sm text-gray-600">Book, view, reschedule, or cancel donation appointments.</p>
         {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
-        {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
         <form className="grid gap-2 sm:grid-cols-3" onSubmit={book} autoComplete="off">
           <div className="space-y-1">
             <input

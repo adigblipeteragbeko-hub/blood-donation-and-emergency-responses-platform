@@ -15,6 +15,7 @@ import {
 import { bloodGroups } from '../constants/blood-groups';
 import { FilterBox, Pager } from '../components/TableControls';
 import { TODAY_APPOINTMENT_STATUSES_INCLUDED, getTodayAppointmentQuery } from '../utils/appointment-date-filter';
+import { useToast } from '../components/ui/ToastProvider';
 
 const statusOptions: AppointmentStatus[] = [
   'SCHEDULED',
@@ -68,6 +69,7 @@ function defaultScheduledAt() {
 }
 
 export default function HospitalAppointmentsPage() {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const preselectedDonorId = searchParams.get('donorId') ?? '';
   const preselectedRequestId = searchParams.get('requestId') ?? '';
@@ -187,14 +189,16 @@ export default function HospitalAppointmentsPage() {
         bloodRequestId: preselectedRequestId || undefined,
         notes,
       });
-      setMessage(`Appointment scheduled and donor notified. Reference: ${appointment.appointmentReference}`);
+      toast.success(`Appointment scheduled successfully. Reference: ${appointment.appointmentReference}.`);
       setDonorId('');
       setScheduledAt(defaultScheduledAt());
       setAppointmentType('BLOOD_DONATION');
       setNotes('');
       await load();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Failed to schedule appointment.');
+      const text = error?.response?.data?.error?.message ?? 'Failed to schedule appointment.';
+      setMessage(text);
+      toast.error(text);
     } finally {
       setSaving(false);
     }
@@ -203,10 +207,18 @@ export default function HospitalAppointmentsPage() {
   const updateStatus = async (id: string, status: AppointmentStatus) => {
     try {
       await updateHospitalAppointmentStatus(id, status);
-      setMessage('Appointment status updated.');
+      if (status === 'CANCELLED') {
+        toast.success('Appointment cancelled successfully.');
+      } else if (status === 'RESCHEDULED') {
+        toast.success('Appointment rescheduled successfully.');
+      } else {
+        toast.success('Appointment status updated.');
+      }
       await load();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Failed to update appointment.');
+      const text = error?.response?.data?.error?.message ?? 'Failed to update appointment.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -246,10 +258,12 @@ export default function HospitalAppointmentsPage() {
         volumeCollectedMl: Number(draft.volumeCollectedMl || 450),
         donationNotes: draft.donationNotes || undefined,
       });
-      setMessage(item.donationPostedAt ? 'Donation already posted to inventory.' : `Donation posted to inventory for ${item.appointmentReference}.`);
+      toast.success(item.donationPostedAt ? 'Donation already posted to inventory.' : `Donation posted to inventory for ${item.appointmentReference}.`);
       await load();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Failed to complete donation workflow.');
+      const text = error?.response?.data?.error?.message ?? 'Failed to complete donation workflow.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 

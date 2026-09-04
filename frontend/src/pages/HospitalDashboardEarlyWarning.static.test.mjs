@@ -73,7 +73,9 @@ test('launch campaign opens a real confirmation modal with prefilled warning dat
     'Launch campaign for',
     'Current units',
     'Usable units',
-    'Risk level',
+    'Stock status',
+    'Forecasted available',
+    'Mobilizable donors',
     'Recommended action',
     'Campaign message',
     'Urgent blood donation appeal',
@@ -83,8 +85,20 @@ test('launch campaign opens a real confirmation modal with prefilled warning dat
 test('campaign submission calls the backend and prevents duplicate submissions', () => {
   assert.match(stockIntelligenceSource, /mobilizeCompatibleDonors\(\{/);
   assert.match(stockIntelligenceSource, /if \(!warningCampaign \|\| warningCampaignSending\) return/);
-  assert.match(stockIntelligenceSource, /disabled=\{warningCampaignSending \|\| !warningCampaignMessage\.trim\(\) \|\| Boolean\(warningCampaignSuccess\)\}/);
+  assert.match(stockIntelligenceSource, /No Mobilizable Donors/);
+  assert.match(stockIntelligenceSource, /compatibleAvailableDonors \?\? warningCampaign\.eligibleDonorCount/);
   assert.match(stockIntelligenceSource, /window\.confirm/);
+});
+
+test('stock intelligence uses defense-safe labels and realtime mobilization response refresh', () => {
+  assert.match(stockIntelligenceSource, /donor\.mobilization\.response\.updated/);
+  assert.match(stockIntelligenceSource, /formatBloodGroup\(item\.bloodGroup\)/);
+  assert.match(stockIntelligenceSource, /formatBloodGroup\(campaign\.bloodGroup\)/);
+  assert.match(stockIntelligenceSource, /formatBloodGroup\(response\.donor\.bloodGroup\)/);
+  assert.match(stockIntelligenceSource, /getWarningLevelLabel\(item\.level\)/);
+  assert.match(stockIntelligenceSource, /formatStatusLabel\(response\.responseStatus\)/);
+  assert.match(stockIntelligenceSource, /Mobilizable Donors/);
+  assert.match(stockIntelligenceSource, /Forecasted Available/);
 });
 
 test('campaign modal renders success and failure states', () => {

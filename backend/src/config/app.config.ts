@@ -2,6 +2,7 @@ export default () => ({
   app: {
     port: parseInt(process.env.PORT ?? '4000', 10),
     env: process.env.NODE_ENV ?? 'development',
+    frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   },
   cors: {
     origins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
@@ -18,6 +19,8 @@ export default () => ({
     verificationResendCooldownSeconds: parseInt(process.env.AUTH_VERIFICATION_RESEND_COOLDOWN_SECONDS ?? '45', 10),
     verificationMaxResendsPerHour: parseInt(process.env.AUTH_VERIFICATION_MAX_RESENDS_PER_HOUR ?? '5', 10),
     verificationMaxAttemptsPerCode: parseInt(process.env.AUTH_VERIFICATION_MAX_ATTEMPTS_PER_CODE ?? '5', 10),
+    loginFailedAttemptThreshold: parseInt(process.env.AUTH_FAILED_LOGIN_THRESHOLD ?? '5', 10),
+    loginLockoutMinutes: parseInt(process.env.AUTH_LOGIN_LOCKOUT_MINUTES ?? '15', 10),
   },
   smtp: {
     host: process.env.SMTP_HOST ?? '',

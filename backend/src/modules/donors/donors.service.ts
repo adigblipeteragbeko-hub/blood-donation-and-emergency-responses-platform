@@ -13,6 +13,7 @@ import { ActivityService } from '../../common/activity/activity.service';
 import { generateDonorReference } from '../../common/utils/donor-reference';
 import { UpdateDonorSettingsDto } from './dto/update-donor-settings.dto';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { normalizeEmail } from '../../common/utils/email-normalization';
 
 @Injectable()
 export class DonorsService {
@@ -556,7 +557,11 @@ export class DonorsService {
   }
 
   async createByAdmin(dto: CreateDonorAdminDto, actorUserId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const email = normalizeEmail(dto.email);
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
     if (existing) {
       throw new BadRequestException('Email already exists');
     }
@@ -564,7 +569,7 @@ export class DonorsService {
     const created = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: dto.email,
+          email,
           passwordHash: await argon2.hash(dto.password),
           role: Role.DONOR,
           emailVerified: true,
@@ -605,7 +610,7 @@ export class DonorsService {
       return donor;
     });
 
-    await this.audit.log('DONOR_CREATED_BY_ADMIN', 'DONOR', actorUserId, created.id, { email: dto.email });
+    await this.audit.log('DONOR_CREATED_BY_ADMIN', 'DONOR', actorUserId, created.id, { email });
     return created;
   }
 

@@ -1,106 +1,34 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../hooks/useAuth';
 import { BrandLogo } from '../components/BrandLogo';
 import { FloatingAssistantLauncher } from '../components/FloatingAssistantLauncher';
-import {
-  getPublicAnnouncements,
-  getPublicWebsiteContent,
-  getUserAnnouncements,
-  markAllAnnouncementsRead,
-  markAnnouncementRead,
-  WebsiteAnnouncementItem,
-  WebsiteFooterSettingsItem,
-} from '../services/website-management';
+import { PwaInstallPrompt } from '../components/PwaInstallPrompt';
+import { getPublicWebsiteContent, WebsiteFooterSettingsItem } from '../services/website-management';
+import { getHospitalNotifications, NotificationItem } from '../services/hospital-portal';
 
-const ANNOUNCEMENT_READ_STORAGE_KEY = 'public-announcements-read-state';
-const ANNOUNCEMENT_MUTE_STORAGE_KEY = 'public-announcements-muted';
-
-type AnnouncementItem = {
+type HeaderNotificationItem = {
   id: string;
-  type: 'alert' | 'awareness' | 'system';
-  title: string;
-  message: string;
-  createdAt: string;
-  updatedAt: string;
-  href: string;
-  priority: 'normal' | 'high' | 'critical';
-  badge?: string | null;
-  isRead: boolean;
+  type?: string | null;
+  delivered: boolean;
 };
 
-type AnnouncementFilter = 'ALL' | 'ALERT' | 'AWARENESS' | 'SYSTEM';
-
-const formatAnnouncementTime = (value: string) =>
-  new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-
-const formatRelativeTime = (value: string) => {
-  const diffMinutes = Math.round((new Date(value).getTime() - Date.now()) / 60000);
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-
-  if (Math.abs(diffMinutes) < 60) {
-    return rtf.format(diffMinutes, 'minute');
-  }
-
-  const diffHours = Math.round(diffMinutes / 60);
-  if (Math.abs(diffHours) < 24) {
-    return rtf.format(diffHours, 'hour');
-  }
-
-  return rtf.format(Math.round(diffHours / 24), 'day');
-};
-
-const trimAnnouncementMessage = (message: string) =>
-  message.length > 110 ? `${message.slice(0, 107)}...` : message;
-
-const mapPriority = (priority: WebsiteAnnouncementItem['priority']): AnnouncementItem['priority'] => {
-  if (priority === 'CRITICAL') return 'critical';
-  if (priority === 'HIGH') return 'high';
-  return 'normal';
-};
-
-const mapType = (type: WebsiteAnnouncementItem['type']): AnnouncementItem['type'] => {
-  if (type === 'ALERT') return 'alert';
-  if (type === 'AWARENESS') return 'awareness';
-  return 'system';
-};
-
-const mapAnnouncementItem = (
-  item: WebsiteAnnouncementItem,
-  isAuthenticated: boolean,
-  guestReadAnnouncements: Record<string, number>,
-): AnnouncementItem => ({
+const mapHeaderNotification = (item: NotificationItem): HeaderNotificationItem => ({
   id: item.id,
-  type: mapType(item.type),
-  title: item.title,
-  message: item.type === 'AWARENESS' ? trimAnnouncementMessage(item.message) : item.message,
-  createdAt: item.createdAt,
-  updatedAt: item.updatedAt,
-  href: item.href,
-  priority: mapPriority(item.priority),
-  badge: item.badge,
-  isRead: isAuthenticated ? Boolean(item.isRead) : Boolean(guestReadAnnouncements[item.id]),
+  type: item.type,
+  delivered: Boolean(item.delivered),
 });
 
 const resolveRealtimeBaseUrl = () => import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 export function MainLayout() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const isAuthenticated = Boolean(user && localStorage.getItem('accessToken'));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [announcementsOpen, setAnnouncementsOpen] = useState(false);
-  const [announcementFilter, setAnnouncementFilter] = useState<AnnouncementFilter>('ALL');
   const [footerSettings, setFooterSettings] = useState<WebsiteFooterSettingsItem | null>(null);
-  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
-  const [guestReadAnnouncements, setGuestReadAnnouncements] = useState<Record<string, number>>({});
-  const [announcementsMuted, setAnnouncementsMuted] = useState(false);
-  const [lastAnnouncementSyncAt, setLastAnnouncementSyncAt] = useState<string | null>(null);
-  const announcementPanelRef = useRef<HTMLDivElement | null>(null);
-  const latestCriticalAnnouncementIdRef = useRef<string | null>(null);
+  const [headerNotifications, setHeaderNotifications] = useState<HeaderNotificationItem[]>([]);
 
   const publicNavItems = [
     ['/', 'Home'],
@@ -138,62 +66,28 @@ export function MainLayout() {
 
   const desktopNavItems = isAuthenticated ? authNavItems : publicNavItems;
 
-  useEffect(() => {
-    try {
-      const storedReadState = window.localStorage.getItem(ANNOUNCEMENT_READ_STORAGE_KEY);
-      const storedMutedState = window.localStorage.getItem(ANNOUNCEMENT_MUTE_STORAGE_KEY);
-
-      if (storedReadState) {
-        setGuestReadAnnouncements(JSON.parse(storedReadState) as Record<string, number>);
-      }
-
-      if (storedMutedState) {
-        setAnnouncementsMuted(storedMutedState === 'true');
-      }
-    } catch {
-      // Local storage is optional here.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(ANNOUNCEMENT_READ_STORAGE_KEY, JSON.stringify(guestReadAnnouncements));
-    } catch {
-      // Ignore storage write errors.
-    }
-  }, [guestReadAnnouncements, isAuthenticated]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(ANNOUNCEMENT_MUTE_STORAGE_KEY, announcementsMuted ? 'true' : 'false');
-    } catch {
-      // Ignore storage write errors.
-    }
-  }, [announcementsMuted]);
-
   const loadWebsiteChrome = useCallback(async () => {
     const websiteContent = await getPublicWebsiteContent();
     setFooterSettings(websiteContent.footerSettings);
   }, []);
 
-  const loadAnnouncements = useCallback(async () => {
-    const feed = isAuthenticated ? await getUserAnnouncements() : await getPublicAnnouncements();
-    setAnnouncements(feed.map((item) => mapAnnouncementItem(item, isAuthenticated, guestReadAnnouncements)));
-    setLastAnnouncementSyncAt(new Date().toISOString());
-  }, [guestReadAnnouncements, isAuthenticated]);
+  const loadHeaderNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setHeaderNotifications([]);
+      return;
+    }
+    const feed = await getHospitalNotifications({ take: 100 });
+    setHeaderNotifications(feed.map(mapHeaderNotification));
+  }, [isAuthenticated]);
 
   useEffect(() => {
     let isMounted = true;
 
     const bootstrap = async () => {
       try {
-        const [websiteContent, feed] = await Promise.all([
+        const [websiteContent, notifications] = await Promise.all([
           getPublicWebsiteContent(),
-          isAuthenticated ? getUserAnnouncements() : getPublicAnnouncements(),
+          isAuthenticated ? getHospitalNotifications({ take: 100 }) : Promise.resolve([]),
         ]);
 
         if (!isMounted) {
@@ -201,14 +95,13 @@ export function MainLayout() {
         }
 
         setFooterSettings(websiteContent.footerSettings);
-        setAnnouncements(feed.map((item) => mapAnnouncementItem(item, isAuthenticated, guestReadAnnouncements)));
-        setLastAnnouncementSyncAt(new Date().toISOString());
+        setHeaderNotifications(notifications.map(mapHeaderNotification));
       } catch {
         if (!isMounted) {
           return;
         }
 
-        setAnnouncements([]);
+        setHeaderNotifications([]);
       }
     };
 
@@ -217,7 +110,7 @@ export function MainLayout() {
     return () => {
       isMounted = false;
     };
-  }, [guestReadAnnouncements, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const socket = io(`${resolveRealtimeBaseUrl()}/realtime`, {
@@ -225,150 +118,37 @@ export function MainLayout() {
       withCredentials: true,
     });
 
-    const handleAnnouncementUpdate = () => {
-      void Promise.all([loadWebsiteChrome(), loadAnnouncements()]);
+    const handleWebsiteUpdate = () => {
+      void loadWebsiteChrome();
+    };
+    const handleNotificationUpdate = () => {
+      void loadHeaderNotifications();
     };
 
-    socket.on('website.announcement.updated', handleAnnouncementUpdate);
+    socket.on('website.announcement.updated', handleWebsiteUpdate);
+    socket.on('notification.created', handleNotificationUpdate);
+    window.addEventListener('notifications:changed', handleNotificationUpdate);
 
     return () => {
-      socket.off('website.announcement.updated', handleAnnouncementUpdate);
+      socket.off('website.announcement.updated', handleWebsiteUpdate);
+      socket.off('notification.created', handleNotificationUpdate);
+      window.removeEventListener('notifications:changed', handleNotificationUpdate);
       socket.disconnect();
     };
-  }, [loadAnnouncements, loadWebsiteChrome]);
+  }, [loadHeaderNotifications, loadWebsiteChrome]);
 
-  useEffect(() => {
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (!announcementPanelRef.current?.contains(event.target as Node)) {
-        setAnnouncementsOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setAnnouncementsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, []);
-
-  useEffect(() => {
-    const latestCritical = announcements.find((announcement) => announcement.priority === 'critical');
-
-    if (!latestCritical) {
-      latestCriticalAnnouncementIdRef.current = null;
-      return;
-    }
-
-    const isNewCritical = latestCriticalAnnouncementIdRef.current !== latestCritical.id;
-    latestCriticalAnnouncementIdRef.current = latestCritical.id;
-
-    if (!isNewCritical || announcementsMuted) {
-      return;
-    }
-
-    try {
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 880;
-      gainNode.gain.value = 0.0001;
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      const now = audioContext.currentTime;
-      gainNode.gain.exponentialRampToValueAtTime(0.03, now + 0.02);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-      oscillator.start(now);
-      oscillator.stop(now + 0.24);
-    } catch {
-      // Browsers can block sound before user interaction; the visual pulse still works.
-    }
-  }, [announcements, announcementsMuted]);
-
-  const unreadAnnouncements = announcements.filter((announcement) => !announcement.isRead).length;
-  const recentAnnouncements = announcements.filter(
-    (announcement) => Date.now() - new Date(announcement.updatedAt).getTime() < 1000 * 60 * 60 * 12,
-  ).length;
-  const hasUnreadCritical = announcements.some(
-    (announcement) => announcement.priority === 'critical' && !announcement.isRead,
+  const unreadNotifications = headerNotifications.filter((notification) => !notification.delivered).length;
+  const hasUnreadCritical = headerNotifications.some(
+    (notification) => notification.type === 'EMERGENCY_REQUEST' && !notification.delivered,
   );
-
-  const filteredAnnouncements = announcements.filter((announcement) => {
-    if (announcementFilter === 'ALL') return true;
-    if (announcementFilter === 'ALERT') return announcement.type === 'alert';
-    if (announcementFilter === 'AWARENESS') return announcement.type === 'awareness';
-    return announcement.type === 'system';
-  });
-
-  const announcementFilters: { value: AnnouncementFilter; label: string }[] = [
-    { value: 'ALL', label: 'All' },
-    { value: 'ALERT', label: 'Alerts' },
-    { value: 'AWARENESS', label: 'News' },
-    { value: 'SYSTEM', label: 'System' },
-  ];
-
-  const markAnnouncementAsReadAndClose = async (announcementId: string) => {
-    if (isAuthenticated) {
-      setAnnouncements((current) =>
-        current.map((announcement) =>
-          announcement.id === announcementId ? { ...announcement, isRead: true } : announcement,
-        ),
-      );
-
-      try {
-        await markAnnouncementRead(announcementId);
-      } catch {
-        // Keep the optimistic UI state; the next live sync will reconcile if needed.
-      }
-    } else {
-      setGuestReadAnnouncements((current) => ({ ...current, [announcementId]: Date.now() }));
-      setAnnouncements((current) =>
-        current.map((announcement) =>
-          announcement.id === announcementId ? { ...announcement, isRead: true } : announcement,
-        ),
-      );
-    }
-
-    setAnnouncementsOpen(false);
-  };
-
-  const markAllAsRead = async () => {
-    setAnnouncements((current) => current.map((announcement) => ({ ...announcement, isRead: true })));
-
-    if (isAuthenticated) {
-      try {
-        await markAllAnnouncementsRead();
-      } catch {
-        // Keep optimistic state and let the next refresh reconcile if needed.
-      }
-      return;
-    }
-
-    const now = Date.now();
-    const nextGuestState = announcements.reduce<Record<string, number>>((accumulator, announcement) => {
-      accumulator[announcement.id] = now;
-      return accumulator;
-    }, {});
-
-    setGuestReadAnnouncements((current) => ({ ...current, ...nextGuestState }));
-  };
-
-  const toggleAnnouncements = () => {
-    setAnnouncementsOpen((current) => {
-      const next = !current;
-      if (next) {
-        setAnnouncementFilter('ALL');
-      }
-      return next;
-    });
+  const notificationPath = user?.role === 'DONOR'
+    ? '/donor/notifications'
+    : user?.role === 'HOSPITAL_ADMIN'
+      ? '/hospital/notifications'
+      : '/notifications';
+  const openNotifications = () => {
+    navigate(notificationPath);
+    setMobileMenuOpen(false);
   };
 
   return (
@@ -416,16 +196,14 @@ export function MainLayout() {
               ) : null}
             </nav>
 
-            <div className="relative" ref={announcementPanelRef}>
+            {isAuthenticated ? (
               <button
-                aria-expanded={announcementsOpen}
-                aria-haspopup="dialog"
-                aria-label="Open announcements"
+                aria-label="Open notifications"
                 className={`announcement-bell group ${hasUnreadCritical ? 'announcement-bell-urgent' : ''}`}
-                onClick={toggleAnnouncements}
+                onClick={openNotifications}
                 type="button"
               >
-                <span className="sr-only">Announcements</span>
+                <span className="sr-only">Notifications</span>
                 <svg aria-hidden="true" className="h-5 w-5 transition group-hover:scale-105" fill="none" viewBox="0 0 24 24">
                   <path
                     d="M14.857 17H9.143a2 2 0 0 0 3.714 0ZM18 17V11a6 6 0 1 0-12 0v6l-2 2v1h16v-1l-2-2Z"
@@ -435,235 +213,15 @@ export function MainLayout() {
                     strokeWidth="1.8"
                   />
                 </svg>
-                {unreadAnnouncements > 0 ? (
-                  <span className="announcement-bell-badge">{Math.min(unreadAnnouncements, 9)}</span>
+                {unreadNotifications > 0 ? (
+                  <span className="announcement-bell-badge">{Math.min(unreadNotifications, 9)}</span>
                 ) : null}
               </button>
-
-              {announcementsOpen ? (
-                <div className="announcement-panel" role="dialog" aria-label="Announcements panel">
-                  <div className="announcement-panel-header">
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-900">Announcements</p>
-                      <p className="text-xs text-slate-500">
-                        {recentAnnouncements > 0
-                          ? `${recentAnnouncements} recent update${recentAnnouncements > 1 ? 's' : ''}`
-                          : 'All caught up'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition ${
-                          announcementsMuted
-                            ? 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                            : 'border-red-200 bg-red-50 text-primary hover:border-red-300 hover:bg-red-100'
-                        }`}
-                        onClick={() => setAnnouncementsMuted((current) => !current)}
-                        type="button"
-                      >
-                        {announcementsMuted ? 'Sound off' : 'Sound on'}
-                      </button>
-                      <span className="rounded-full bg-red-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-primary">
-                        Live feed
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      {announcementFilters.map((filter) => (
-                        <button
-                          key={filter.value}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
-                            announcementFilter === filter.value
-                              ? 'border-primary bg-primary text-white'
-                              : 'border-red-100 bg-white text-slate-600 hover:border-red-200 hover:text-primary'
-                          }`}
-                          onClick={() => setAnnouncementFilter(filter.value)}
-                          type="button"
-                        >
-                          {filter.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs text-slate-500">
-                      <span>{lastAnnouncementSyncAt ? `Synced ${formatRelativeTime(lastAnnouncementSyncAt)}` : 'Syncing...'}</span>
-                      <button className="font-bold text-primary transition hover:text-red-800" onClick={markAllAsRead} type="button">
-                        Mark all read
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="announcement-panel-list">
-                    {filteredAnnouncements.length ? (
-                      filteredAnnouncements.map((announcement) => (
-                        <Link
-                          key={announcement.id}
-                          className={`announcement-item announcement-item-${announcement.priority} ${
-                            announcement.isRead ? 'announcement-item-read' : 'announcement-item-unread'
-                          }`}
-                          onClick={() => {
-                            void markAnnouncementAsReadAndClose(announcement.id);
-                          }}
-                          title={formatAnnouncementTime(announcement.updatedAt)}
-                          to={announcement.href}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`announcement-pill announcement-pill-${announcement.type}`}>{announcement.type}</span>
-                                {announcement.badge ? (
-                                  <span className="announcement-pill announcement-pill-neutral">{announcement.badge}</span>
-                                ) : null}
-                                {!announcement.isRead ? <span className="announcement-pill announcement-pill-unread">New</span> : null}
-                              </div>
-                              <p className="text-sm font-bold text-slate-900">{announcement.title}</p>
-                              <p className="text-sm leading-6 text-slate-600">{announcement.message}</p>
-                            </div>
-                            <span className={`announcement-priority-dot announcement-priority-dot-${announcement.priority}`} />
-                          </div>
-                          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-                            <span>{formatAnnouncementTime(announcement.updatedAt)}</span>
-                            <div className="flex items-center gap-3">
-                              <span>{formatRelativeTime(announcement.updatedAt)}</span>
-                              <span className="font-semibold text-primary">
-                                {announcement.type === 'alert'
-                                  ? 'Open alert'
-                                  : announcement.type === 'awareness'
-                                    ? 'Read update'
-                                    : 'View details'}
-                              </span>
-                            </div>
-                          </div>
-                        </Link>
-                      ))
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-red-200 bg-rose-50/50 px-4 py-6 text-center text-sm text-slate-500">
-                        <p className="text-sm font-bold text-slate-700">
-                          No {announcementFilter === 'ALL' ? 'announcements' : announcementFilter.toLowerCase()} right now
-                        </p>
-                        <p className="mt-2 leading-6 text-slate-500">
-                          Fresh alerts, awareness posts, and response updates will appear here as soon as the system publishes
-                          them.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
 
         <div className={`${mobileMenuOpen ? 'block' : 'hidden'} border-t border-red-100 px-4 pb-4 lg:hidden`} id="mobile-public-nav">
-          <div className="mb-4 mt-4 rounded-3xl border border-red-100 bg-white p-4 shadow-sm">
-            <button
-              aria-expanded={announcementsOpen}
-              aria-haspopup="dialog"
-              className="flex w-full items-center justify-between rounded-2xl border border-red-100 bg-rose-50/60 px-4 py-3 text-left transition hover:border-red-200"
-              onClick={toggleAnnouncements}
-              type="button"
-            >
-              <span>
-                <span className="block text-sm font-extrabold text-slate-900">Announcements</span>
-                <span className="block text-xs text-slate-500">
-                  {unreadAnnouncements > 0
-                    ? `${unreadAnnouncements} unread update${unreadAnnouncements > 1 ? 's' : ''}`
-                    : 'Tap to review latest alerts'}
-                </span>
-              </span>
-              <span className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-red-200 bg-white text-primary shadow-sm">
-                <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <path
-                    d="M14.857 17H9.143a2 2 0 0 0 3.714 0ZM18 17V11a6 6 0 1 0-12 0v6l-2 2v1h16v-1l-2-2Z"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.8"
-                  />
-                </svg>
-                {unreadAnnouncements > 0 ? <span className="announcement-bell-badge">{Math.min(unreadAnnouncements, 9)}</span> : null}
-              </span>
-            </button>
-
-            {announcementsOpen ? (
-              <div className="mt-3 grid gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {announcementFilters.map((filter) => (
-                    <button
-                      key={filter.value}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition ${
-                        announcementFilter === filter.value
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-red-100 bg-white text-slate-600 hover:border-red-200 hover:text-primary'
-                      }`}
-                      onClick={() => setAnnouncementFilter(filter.value)}
-                      type="button"
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
-                  <button className="font-bold text-primary transition hover:text-red-800" onClick={markAllAsRead} type="button">
-                    Mark all read
-                  </button>
-                  <button
-                    className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition ${
-                      announcementsMuted
-                        ? 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                        : 'border-red-200 bg-red-50 text-primary hover:border-red-300 hover:bg-red-100'
-                    }`}
-                    onClick={() => setAnnouncementsMuted((current) => !current)}
-                    type="button"
-                  >
-                    {announcementsMuted ? 'Sound off' : 'Sound on'}
-                  </button>
-                </div>
-
-                {filteredAnnouncements.length ? (
-                  filteredAnnouncements.map((announcement) => (
-                    <Link
-                      key={announcement.id}
-                      className={`announcement-item announcement-item-${announcement.priority} ${
-                        announcement.isRead ? 'announcement-item-read' : 'announcement-item-unread'
-                      }`}
-                      onClick={() => {
-                        void markAnnouncementAsReadAndClose(announcement.id);
-                        setMobileMenuOpen(false);
-                      }}
-                      title={formatAnnouncementTime(announcement.updatedAt)}
-                      to={announcement.href}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`announcement-pill announcement-pill-${announcement.type}`}>{announcement.type}</span>
-                        {announcement.badge ? (
-                          <span className="announcement-pill announcement-pill-neutral">{announcement.badge}</span>
-                        ) : null}
-                        {!announcement.isRead ? <span className="announcement-pill announcement-pill-unread">New</span> : null}
-                      </div>
-                      <p className="mt-2 text-sm font-bold text-slate-900">{announcement.title}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-600">{announcement.message}</p>
-                      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-                        <span>{formatAnnouncementTime(announcement.updatedAt)}</span>
-                        <span>{formatRelativeTime(announcement.updatedAt)}</span>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-red-200 bg-rose-50/50 px-4 py-6 text-center text-sm text-slate-500">
-                    <p className="text-sm font-bold text-slate-700">
-                      No {announcementFilter === 'ALL' ? 'announcements' : announcementFilter.toLowerCase()} right now
-                    </p>
-                    <p className="mt-2 leading-6 text-slate-500">We will surface new alerts and updates here the moment they arrive.</p>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-
           <nav className="grid gap-2 pt-4 text-sm">
             {desktopNavItems.map(([path, label]) => (
               <NavLink
@@ -756,6 +314,7 @@ export function MainLayout() {
           </div>
         </div>
       </footer>
+      <PwaInstallPrompt />
       <FloatingAssistantLauncher />
     </div>
   );

@@ -91,6 +91,7 @@ export async function getMyClinicalRecords() {
       fullName?: string | null;
       email?: string | null;
       phone?: string | null;
+      nextEligibilityDate?: string | null;
     };
   }>(await api.get('/donor-clinical-records/me'));
 }

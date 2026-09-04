@@ -1,5 +1,7 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
+import { radius, spacing, typography } from '../theme/design';
+import { Ionicons } from '@expo/vector-icons';
 
 type Props = {
   title: string;
@@ -8,20 +10,21 @@ type Props = {
   loading?: boolean;
   variant?: 'primary' | 'outline' | 'danger' | 'muted';
   style?: ViewStyle;
+  icon?: keyof typeof Ionicons.glyphMap;
 };
 
-export function AppButton({ title, onPress, disabled, loading, variant = 'primary', style }: Props) {
+export function AppButton({ title, onPress, disabled, loading, variant = 'primary', style, icon }: Props) {
   const { colors } = useTheme();
   const variants = {
     primary: { backgroundColor: colors.primary, borderColor: colors.primary },
-    outline: { backgroundColor: colors.card, borderColor: '#fecaca' },
+    outline: { backgroundColor: colors.elevated ?? colors.card, borderColor: colors.border },
     danger: { backgroundColor: colors.danger, borderColor: colors.danger },
-    muted: { backgroundColor: colors.border, borderColor: colors.border },
+    muted: { backgroundColor: colors.cardMuted, borderColor: colors.border },
   };
   const textColor = {
-    primary: '#fff',
+    primary: colors.white ?? '#fff',
     outline: colors.primaryDark,
-    danger: '#fff',
+    danger: colors.white ?? '#fff',
     muted: colors.ink,
   }[variant];
   return (
@@ -37,7 +40,14 @@ export function AppButton({ title, onPress, disabled, loading, variant = 'primar
         style,
       ]}
     >
-      {loading ? <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#fff' : colors.primary} /> : <Text style={[styles.text, { color: textColor }]}>{title}</Text>}
+      {loading ? (
+        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? colors.white ?? '#fff' : colors.primary} />
+      ) : (
+        <View style={styles.content}>
+          {icon ? <Ionicons name={icon} size={18} color={textColor} /> : null}
+          <Text style={[styles.text, { color: textColor }]}>{title}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -45,14 +55,15 @@ export function AppButton({ title, onPress, disabled, loading, variant = 'primar
 const styles = StyleSheet.create({
   base: {
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderWidth: 1,
   },
   disabled: { opacity: 0.55 },
   pressed: { transform: [{ scale: 0.99 }] },
-  text: { fontWeight: '800', fontSize: 15 },
+  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  text: typography.button,
 });

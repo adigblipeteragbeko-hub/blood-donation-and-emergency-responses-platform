@@ -77,6 +77,7 @@ test('dashboard refreshes counts from related realtime events', () => {
     'appointment.updated',
     'donor.search.invalidated',
     'donor.response.updated',
+    'donor.mobilization.response.updated',
     'hospital.map.updated',
     'notification.created',
   ].forEach((event) => assert.match(dashboardSource, new RegExp(event.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));

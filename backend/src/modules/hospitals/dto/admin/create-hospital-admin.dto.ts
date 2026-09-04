@@ -1,7 +1,9 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEmail, IsLatitude, IsLongitude, IsNotEmpty, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { normalizeEmail } from '../../../../common/utils/email-normalization';
 
 export class CreateHospitalAdminDto {
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeEmail(value) : value))
   @IsEmail()
   email!: string;
 

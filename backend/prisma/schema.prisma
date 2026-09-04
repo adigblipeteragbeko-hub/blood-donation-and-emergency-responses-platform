@@ -106,6 +106,13 @@ enum RequestStatus {
   CANCELLED
 }
 
+enum EmergencyNotificationStatus {
+  ACTIVE
+  EXPIRED
+  RESOLVED
+  CANCELLED
+}
+
 enum PriorityLevel {
   LOW
   MEDIUM
@@ -394,6 +401,7 @@ model User {
   smsCampaignsCreated            SmsCampaign[]               @relation("SmsCampaignCreatedBy")
   donorReminderLogsTriggered     DonorReminderLog[]
   aiRecommendationsGenerated     AiRecommendation[]          @relation("AiRecommendationGeneratedFor")
+  emergencyNotificationsResolved BloodRequest[]              @relation("EmergencyNotificationResolvedBy")
 
   @@index([role])
   @@index([createdAt])
@@ -532,6 +540,11 @@ model BloodRequest {
   requestSource            RequestSource                  @default(DONORS_AND_HOSPITALS)
   status                   RequestStatus                  @default(OPEN)
   trackingStatus           RequestProgressStatus          @default(PENDING)
+  emergencyNotificationStatus EmergencyNotificationStatus?
+  emergencyNotificationExpiresAt DateTime?
+  emergencyNotificationDurationMinutes Int?
+  emergencyNotificationResolvedAt DateTime?
+  emergencyNotificationResolvedById String?
   location                 String
   emergencyLocation        String?
   city                     String?
@@ -545,6 +558,7 @@ model BloodRequest {
   createdAt                DateTime                       @default(now())
   updatedAt                DateTime                       @updatedAt
   hospital                 Hospital                       @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  emergencyNotificationResolvedBy User?                   @relation("EmergencyNotificationResolvedBy", fields: [emergencyNotificationResolvedById], references: [id], onDelete: SetNull)
   matchedDonors            Donor[]                        @relation("MatchedDonors")
   notificationDispatches   Notification[]
   updates                  BloodRequestUpdate[]
@@ -561,6 +575,9 @@ model BloodRequest {
   @@index([bloodGroup])
   @@index([priority])
   @@index([requestSource])
+  @@index([emergencyNotificationStatus])
+  @@index([emergencyNotificationExpiresAt])
+  @@index([emergencyNotificationResolvedById])
   @@index([city])
   @@index([region])
   @@index([latitude, longitude])

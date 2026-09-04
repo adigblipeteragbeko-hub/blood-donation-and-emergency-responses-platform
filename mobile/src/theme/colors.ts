@@ -23,11 +23,17 @@ export const lightColors = {
   background: '#f8fafc',
   focus: '#fb7185',
   disabled: '#94a3b8',
+  subtle: '#64748b',
+  elevated: '#ffffff',
+  white: '#ffffff',
+  textOnLight: '#111827',
+  mutedOnLight: '#64748b',
+  borderOnLight: '#e5e7eb',
 };
 
 export const darkColors = {
   primary: '#fb365b',
-  primaryDark: '#fecaca',
+  primaryDark: '#ffb4c0',
   primarySoft: '#3b111b',
   danger: '#fb7185',
   dangerSoft: '#3b111b',
@@ -45,6 +51,12 @@ export const darkColors = {
   background: '#111827',
   focus: '#fb7185',
   disabled: '#64748b',
+  subtle: '#94a3b8',
+  elevated: '#273449',
+  white: '#ffffff',
+  textOnLight: '#111827',
+  mutedOnLight: '#64748b',
+  borderOnLight: '#e5e7eb',
 };
 
 export function colorsForTheme(theme: ResolvedTheme) {

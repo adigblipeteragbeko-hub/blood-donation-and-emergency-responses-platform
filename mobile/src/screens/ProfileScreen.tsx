@@ -10,6 +10,7 @@ import { colors } from '../constants/colors';
 import { DonorProfile, getDonorProfile } from '../services/donor';
 import { donorAddress, donorDisplayName, donorEmail, hasValue } from '../utils/donorIdentity';
 import { formatDate } from '../utils/format';
+import { spacing, typography } from '../theme/design';
 
 const requiredFields: Array<{ label: string; isComplete: (profile: DonorProfile) => boolean }> = [
   { label: 'Full name', isComplete: (profile) => hasValue(donorDisplayName(profile)) },
@@ -44,12 +45,12 @@ export function ProfileScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
-      <AppCard style={styles.hero}>
+      <AppCard variant="soft" style={styles.hero}>
         <View style={styles.profileHero}>
           <SmartAvatar name={donorDisplayName(profile)} email={donorEmail(profile)} src={profile?.profileImageUrl} size="lg" />
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>Donor Profile</Text>
-            <Text style={styles.title}>{donorDisplayName(profile) || 'Loading donor...'}</Text>
+            <Text style={styles.title} numberOfLines={2}>{donorDisplayName(profile) || 'Loading donor...'}</Text>
             <Text style={styles.muted}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
           </View>
         </View>
@@ -97,13 +98,13 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { backgroundColor: colors.primarySoft, borderColor: '#fecaca' },
-  profileHero: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontSize: 12 },
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  section: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  hero: { padding: spacing.xl },
+  profileHero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 12 },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  section: { color: colors.ink, ...typography.sectionTitle },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   missing: { color: colors.warning, fontWeight: '800', lineHeight: 20 },
   detail: { color: colors.ink, fontSize: 15, lineHeight: 24 },
   detailLabel: { color: colors.muted, fontWeight: '900' },

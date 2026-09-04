@@ -5,6 +5,7 @@ import { LiveEmergencyAlertBanner } from '../components/LiveEmergencyAlertBanner
 import { AppIcon } from '../components/ui/AppIcon';
 import { AccountIdentityMenu } from '../components/AccountIdentityMenu';
 import { FloatingAssistantLauncher } from '../components/FloatingAssistantLauncher';
+import { PwaInstallPrompt } from '../components/PwaInstallPrompt';
 import { getHospitalProfile, type HospitalProfile } from '../services/hospital-portal';
 import { buildAccountIdentity } from '../utils/account-identity';
 import { rememberAccount } from '../utils/remembered-accounts';
@@ -116,6 +117,7 @@ export function HospitalPortalLayout() {
         <LiveEmergencyAlertBanner />
         <Outlet />
       </div>
+      <PwaInstallPrompt />
       <FloatingAssistantLauncher />
     </section>
   );

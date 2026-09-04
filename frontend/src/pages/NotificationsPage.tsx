@@ -8,6 +8,7 @@ import {
 } from '../services/hospital-portal';
 import { AppIcon } from '../components/ui/AppIcon';
 import { createRealtimeSocket } from '../services/live-map';
+import { useToast } from '../components/ui/ToastProvider';
 
 function extractRequestId(item: NotificationItem) {
   const match = item.body?.match(/requestId=([A-Za-z0-9_-]+)/);
@@ -31,6 +32,7 @@ function notificationLabel(item: NotificationItem) {
 }
 
 export default function NotificationsPage() {
+  const toast = useToast();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -74,18 +76,25 @@ export default function NotificationsPage() {
     try {
       await markNotificationDelivered(notificationId, true);
       await loadNotifications();
+      window.dispatchEvent(new Event('notifications:changed'));
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to update notification.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to update notification.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
   const respondToCampaign = async (campaignId: string, responseStatus: 'INTERESTED' | 'NOT_AVAILABLE') => {
     try {
       const result = await respondToMobilizationCampaign({ campaignId, responseStatus });
-      setMessage(result.message);
+      setMessage('');
+      toast.success(result.message);
       await loadNotifications();
+      window.dispatchEvent(new Event('notifications:changed'));
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit your response right now.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to submit your response right now.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 

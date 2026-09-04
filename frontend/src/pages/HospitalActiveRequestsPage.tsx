@@ -16,6 +16,7 @@ import {
 } from '../services/hospital-portal';
 import { bloodGroups } from '../constants/blood-groups';
 import { FilterBox, Pager } from '../components/TableControls';
+import { useToast } from '../components/ui/ToastProvider';
 
 const activeStatuses: RequestStatus[] = ['OPEN', 'MATCHING'];
 const responseStatusOptions: HospitalRequestResponseStatus[] = ['ACCEPTED', 'REJECTED', 'CANCELLED'];
@@ -124,6 +125,7 @@ function StatusBadge({ children, tone = 'slate' }: { children: string; tone?: 'r
 }
 
 export default function HospitalActiveRequestsPage() {
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const focusRequestId = searchParams.get('requestId') ?? '';
   const activeFilter = searchParams.get('filter') === 'active';
@@ -231,10 +233,12 @@ export default function HospitalActiveRequestsPage() {
         bloodGroupOffered: selectedRequest.bloodGroup,
         note: offerNote.trim() || undefined,
       });
-      setMessage('Offer submitted to requesting hospital.');
+      toast.success('Blood transfer request sent successfully.');
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit offer.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to submit offer.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -249,10 +253,12 @@ export default function HospitalActiveRequestsPage() {
         responseType: 'CANNOT_FULFILL',
         note: cannotFulfillNote.trim(),
       });
-      setMessage('Your hospital marked this request as unable to fulfil.');
+      toast.success('Transfer request rejected successfully.');
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to submit response.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to submit response.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -260,10 +266,18 @@ export default function HospitalActiveRequestsPage() {
     if (!selectedRequest) return;
     try {
       await updateHospitalActiveResponseStatus(selectedRequest.id, response.id, { status });
-      setMessage(`Hospital response ${status.toLowerCase()}.`);
+      toast.success(
+        status === 'ACCEPTED'
+          ? 'Transfer request accepted successfully.'
+          : status === 'REJECTED'
+            ? 'Transfer request rejected successfully.'
+            : 'Transfer request cancelled successfully.',
+      );
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to update hospital response.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to update hospital response.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -277,11 +291,13 @@ export default function HospitalActiveRequestsPage() {
           lastKnownUpdatedAt: selectedRequest.updatedAt,
         },
       );
-      setMessage('Request cancelled.');
+      toast.success('Emergency request cancelled successfully.');
       setEditDraft(null);
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to cancel request.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to cancel request.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -314,12 +330,14 @@ export default function HospitalActiveRequestsPage() {
         notes: editDraft.notes.trim() || undefined,
         lastKnownUpdatedAt: selectedRequest.updatedAt,
       });
-      setMessage(`Request ${updated.requestReference} updated successfully.`);
+      toast.success(`Request ${updated.requestReference} updated successfully.`);
       setSelectedRequest(updated);
       setEditDraft(null);
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to update request.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to update request.';
+      setMessage(text);
+      toast.error(text);
     } finally {
       setEditing(false);
     }
@@ -339,10 +357,12 @@ export default function HospitalActiveRequestsPage() {
         dispatchNote: draft.note.trim() || undefined,
         dispatchReference: draft.reference.trim() || undefined,
       });
-      setMessage('Blood dispatched. Supplier inventory has been reduced.');
+      toast.success('Blood dispatched successfully.');
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to dispatch blood.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to dispatch blood.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 
@@ -360,10 +380,12 @@ export default function HospitalActiveRequestsPage() {
         receivedNote: draft.note.trim() || undefined,
         receivedCondition: draft.condition.trim() || undefined,
       });
-      setMessage('Receipt confirmed. Receiving hospital inventory has been increased.');
+      toast.success('Receipt confirmed successfully.');
       await refreshSelected();
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Unable to confirm receipt.');
+      const text = error?.response?.data?.error?.message ?? 'Unable to confirm receipt.';
+      setMessage(text);
+      toast.error(text);
     }
   };
 

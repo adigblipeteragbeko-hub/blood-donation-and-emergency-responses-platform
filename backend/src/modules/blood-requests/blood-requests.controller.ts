@@ -123,6 +123,12 @@ export class BloodRequestsController {
     return this.bloodRequestsService.updateHospitalActiveStatus(id, user.id, user.role, dto);
   }
 
+  @Roles(Role.HOSPITAL_ADMIN, Role.ADMIN)
+  @Patch(':id/emergency-notification/resolve')
+  resolveEmergencyNotification(@Param('id') id: string, @CurrentUser() user: { id: string; role: Role }) {
+    return this.bloodRequestsService.resolveEmergencyNotification(id, user.id, user.role);
+  }
+
   @Roles(Role.HOSPITAL_ADMIN)
   @Post('hospital-active/:id/respond')
   respondAsHospital(

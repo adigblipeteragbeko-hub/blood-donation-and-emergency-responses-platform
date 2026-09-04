@@ -3,13 +3,17 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppCard } from '../components/AppCard';
+import { EmptyState } from '../components/EmptyState';
+import { FeedbackMessage } from '../components/FeedbackMessage';
 import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatBloodGroup } from '../constants/bloodGroups';
 import { colors } from '../constants/colors';
 import { BloodRequest, getDonorEmergencyRequestById, getDonorEmergencyRequests, respondToBloodRequest } from '../services/emergency';
 import { DonorTabsParamList } from '../types/navigation';
 import { formatDateTime, formatDistance } from '../utils/format';
+import { radius, spacing, typography } from '../theme/design';
 
 function statusTone(status?: string): 'success' | 'warning' | 'danger' | 'muted' | 'primary' {
   if (status === 'FULFILLED') return 'success';
@@ -100,18 +104,24 @@ export function EmergencyRequestsScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
-      <AppCard style={styles.header}>
+      <AppCard variant="soft" style={styles.header}>
         <Text style={styles.kicker}>Emergency Donor Response</Text>
         <Text style={styles.title}>Matched Requests</Text>
         <Text style={styles.muted}>Only requests matched to your donor profile appear here.</Text>
       </AppCard>
 
-      {message ? <Text style={styles.message}>{message}</Text> : null}
+      <FeedbackMessage message={message} tone={message.includes('submitted') ? 'success' : 'warning'} />
       {loading ? <Text style={styles.muted}>Loading emergency requests...</Text> : null}
-      {!loading && requests.length === 0 ? <AppCard><Text style={styles.muted}>No matched emergency blood requests at the moment. You will be notified immediately when a compatible emergency request becomes available.</Text></AppCard> : null}
+      {!loading && requests.length === 0 ? (
+        <EmptyState
+          icon="water-outline"
+          title="No Matched Emergency Requests"
+          message="You will be notified immediately when a compatible emergency request becomes available."
+        />
+      ) : null}
 
       {requests.map((request) => (
-        <Pressable key={request.id} onPress={() => void openDetail(request)} style={[styles.listCard, selected?.id === request.id && styles.listCardActive]}>
+        <Pressable key={request.id} onPress={() => void openDetail(request)} style={({ pressed }) => [styles.listCard, selected?.id === request.id && styles.listCardActive, pressed && styles.pressed]}>
           <View style={styles.rowBetween}>
             <Text style={styles.requestRef}>{request.requestReference ?? 'Blood Request'}</Text>
             <StatusBadge label={request.status} tone={statusTone(request.status)} />
@@ -145,12 +155,12 @@ export function EmergencyRequestsScreen() {
           {typeof selected.donorMatchContext?.distanceKm === 'number' ? <Text style={styles.detail}>Distance: {formatDistance(selected.donorMatchContext.distanceKm)}</Text> : null}
 
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Compatibility</Text>
+            <SectionHeader title="Compatibility" />
             <Text style={styles.muted}>{selected.donorMatchContext?.compatible === false ? 'This request is no longer compatible with your donor profile.' : 'You are matched to this request based on donor eligibility and blood compatibility.'}</Text>
           </View>
 
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Your Response</Text>
+            <SectionHeader title="Your Response" />
             {hasResponded(selected) ? (
               <Text style={styles.success}>Your response has been submitted: {selectedResponse}. Hospital staff can now see your response.</Text>
             ) : selected.status === 'FULFILLED' || selected.status === 'CANCELLED' ? (
@@ -166,7 +176,7 @@ export function EmergencyRequestsScreen() {
           </View>
 
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Notes</Text>
+            <SectionHeader title="Notes" />
             <Text style={styles.muted}>{selected.notes || selected.locationNotes || 'No additional emergency notes were provided.'}</Text>
           </View>
         </AppCard>
@@ -176,21 +186,20 @@ export function EmergencyRequestsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: colors.primarySoft, borderColor: '#fecaca' },
-  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontSize: 12 },
-  title: { color: colors.ink, fontSize: 26, fontWeight: '900' },
+  header: { padding: spacing.xl },
+  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 12 },
+  title: { color: colors.ink, ...typography.screenTitle },
   titleSmall: { color: colors.ink, fontSize: 20, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  message: { borderRadius: 14, backgroundColor: colors.successSoft, color: colors.success, padding: 12, fontWeight: '800' },
-  listCard: { gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: '#fff', padding: 14 },
+  muted: { color: colors.muted, ...typography.body },
+  listCard: { gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.elevated, padding: spacing.lg },
   listCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   requestRef: { color: colors.primaryDark, fontWeight: '900' },
-  cardTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' },
-  detail: { color: colors.ink, fontSize: 15, lineHeight: 22 },
-  panel: { gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
-  panelTitle: { color: colors.ink, fontWeight: '900', fontSize: 16 },
-  actions: { gap: 10 },
+  cardTitle: { color: colors.ink, ...typography.cardTitle },
+  detail: { color: colors.ink, ...typography.body },
+  panel: { gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
+  actions: { gap: spacing.md },
   success: { color: colors.success, fontWeight: '800', lineHeight: 20 },
+  pressed: { opacity: 0.86 },
 });

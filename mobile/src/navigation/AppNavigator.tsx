@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { AppointmentsScreen } from '../screens/AppointmentsScreen';
@@ -34,7 +35,7 @@ function AuthNavigator() {
 function MoreNavigator() {
   const { colors } = useTheme();
   return (
-    <MoreStack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.card }, headerTitleStyle: { color: colors.primaryDark, fontWeight: '900' }, headerTintColor: colors.primary, headerShadowVisible: false }}>
+    <MoreStack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.background }, headerTitleStyle: styles.headerTitle, headerTintColor: colors.primaryDark, headerShadowVisible: false, headerBackTitleVisible: false }}>
       <MoreStack.Screen name="MoreHome" component={MoreScreen} options={{ title: 'More' }} />
       <MoreStack.Screen name="Profile" component={ProfileScreen} />
       <MoreStack.Screen name="Eligibility" component={EligibilityScreen} />
@@ -64,8 +65,9 @@ function tabIcon(routeName: keyof DonorTabsParamList) {
 
 function DonorNavigator() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <DonorTabs.Navigator screenOptions={({ route }) => ({ headerStyle: { backgroundColor: colors.card }, headerTitleStyle: { color: colors.primaryDark, fontWeight: '900' }, headerTintColor: colors.primary, headerShadowVisible: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.muted, tabBarStyle: [styles.tabBar, { borderTopColor: colors.border, backgroundColor: colors.card }], tabBarLabelStyle: styles.tabLabel, tabBarIcon: ({ color, size }) => <Ionicons name={tabIcon(route.name)} color={color} size={size} /> })}>
+    <DonorTabs.Navigator screenOptions={({ route }) => ({ headerStyle: { backgroundColor: colors.background }, headerTitleStyle: styles.headerTitle, headerTintColor: colors.primaryDark, headerShadowVisible: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.subtle ?? colors.muted, tabBarStyle: [styles.tabBar, { height: 64 + insets.bottom, paddingBottom: Math.max(8, insets.bottom), borderTopColor: colors.border, backgroundColor: colors.card }], tabBarLabelStyle: styles.tabLabel, tabBarIcon: ({ color }) => <Ionicons name={tabIcon(route.name)} color={color} size={22} /> })}>
       <DonorTabs.Screen name="Dashboard" component={DonorDashboardScreen} options={{ title: 'Dashboard' }} />
       <DonorTabs.Screen name="Emergency" component={EmergencyRequestsScreen} options={{ title: 'Emergency' }} />
       <DonorTabs.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
@@ -82,4 +84,12 @@ export function AppNavigator() {
   return <NavigationContainer><RootStack.Navigator screenOptions={{ headerShown: false }}>{user ? <RootStack.Screen name="Donor" component={DonorNavigator} /> : <RootStack.Screen name="Auth" component={AuthNavigator} />}</RootStack.Navigator></NavigationContainer>;
 }
 
-const styles = StyleSheet.create({ loading: { flex: 1, alignItems: 'center', justifyContent: 'center' }, tabBar: { minHeight: 62, paddingBottom: 8, paddingTop: 6 }, tabLabel: { fontSize: 11, fontWeight: '800' } });
+const styles = StyleSheet.create({
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '900' as const },
+  tabBar: {
+    borderTopWidth: 1,
+    paddingTop: 8,
+  },
+  tabLabel: { fontSize: 11, fontWeight: '900', paddingTop: 2 },
+});

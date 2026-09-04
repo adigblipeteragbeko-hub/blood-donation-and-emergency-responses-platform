@@ -6,6 +6,7 @@ import { Screen } from '../components/Screen';
 import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../constants/colors';
 import { getDonorProfile } from '../services/donor';
+import { spacing, typography } from '../theme/design';
 
 const milestones = [1, 5, 10, 25];
 
@@ -39,7 +40,7 @@ export function RewardsScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
-      <AppCard style={styles.hero}>
+      <AppCard variant="soft" style={styles.hero}>
         <Text style={styles.kicker}>Rewards</Text>
         <Text style={styles.title}>{level}</Text>
         <Text style={styles.muted}>Every completed donation moves you closer to the next donor milestone.</Text>
@@ -65,15 +66,15 @@ export function RewardsScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { backgroundColor: colors.primarySoft, borderColor: '#fecaca' },
-  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontSize: 12 },
-  title: { color: colors.primaryDark, fontSize: 28, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
+  hero: { padding: spacing.xl },
+  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 12 },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
   big: { color: colors.primaryDark, fontSize: 44, fontWeight: '900' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  stat: { flexBasis: '47%', flexGrow: 1 },
-  section: { color: colors.ink, fontSize: 18, fontWeight: '900' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  stat: { flexBasis: '47%', flexGrow: 1, minHeight: 116 },
+  section: { color: colors.ink, ...typography.sectionTitle },
   badge: { minHeight: 92 },
-  badgeTitle: { color: colors.ink, fontSize: 17, fontWeight: '900' },
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  badgeTitle: { color: colors.ink, ...typography.cardTitle },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
 });

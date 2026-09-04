@@ -6,6 +6,7 @@ import { ROLE_PERMISSION_DEFAULTS } from '../../common/rbac/permission-matrix';
 import { SmsService } from '../sms/sms.service';
 import {
   DonorSixMonthRemindersService,
+  SIX_MONTH_IN_APP_NOTIFICATION_TITLE,
   SIX_MONTH_REMINDER_MESSAGE,
   SIX_MONTH_REMINDER_TYPE,
   SIX_MONTH_TEST_REMINDER_MESSAGE,
@@ -64,10 +65,14 @@ function createService(returnedDonors: any[]) {
     },
   };
   const audit = { log: jest.fn(async () => undefined) };
+  const notificationsService = {
+    createAndBroadcastNotification: jest.fn(async (input: any) => ({ id: 'notification-1', ...input })),
+  };
   return {
-    service: new DonorSixMonthRemindersService(prisma as any, audit as any, smsService as any, config as any),
+    service: new DonorSixMonthRemindersService(prisma as any, audit as any, smsService as any, notificationsService as any, config as any),
     prisma,
     smsService,
+    notificationsService,
     audit,
   };
 }
@@ -99,6 +104,8 @@ describe('six-month donor encouragement reminders', () => {
     expect(serviceSource).toContain('DONOR_SIX_MONTH_REMINDER_JOB_STARTED');
     expect(serviceSource).toContain('DONOR_SIX_MONTH_REMINDER_SENT');
     expect(serviceSource).toContain('DONOR_SIX_MONTH_REMINDER_FAILED');
+    expect(serviceSource).toContain('SIX_MONTH_IN_APP_NOTIFICATION_TITLE');
+    expect(serviceSource).toContain('createAndBroadcastNotification');
     expect(serviceSource).toContain(SIX_MONTH_REMINDER_TYPE);
     expect(serviceSource).toContain(SIX_MONTH_TEST_REMINDER_TYPE);
   });
@@ -131,7 +138,7 @@ describe('six-month donor encouragement reminders', () => {
   });
 
   it('previews due donors from completed Donation.donatedAt records without sending SMS', async () => {
-    const { service, prisma, smsService } = createService([donor()]);
+    const { service, prisma, smsService, notificationsService } = createService([donor()]);
 
     const preview = await service.preview({ id: 'admin-1', role: Role.ADMIN });
 
@@ -236,7 +243,7 @@ describe('six-month donor encouragement reminders', () => {
   });
 
   it('sends real scheduled reminders only after creating a pending duplicate-prevention log', async () => {
-    const { service, prisma, smsService } = createService([donor()]);
+    const { service, prisma, smsService, notificationsService } = createService([donor()]);
 
     const result = await service.runDueReminders();
 
@@ -254,6 +261,12 @@ describe('six-month donor encouragement reminders', () => {
       relatedEntityType: 'DONOR_REMINDER',
       message: SIX_MONTH_REMINDER_MESSAGE,
       idempotencyKey: expect.stringContaining('donor-six-month:donor-1:'),
+    }));
+    expect(notificationsService.createAndBroadcastNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      title: SIX_MONTH_IN_APP_NOTIFICATION_TITLE,
+      type: 'PROACTIVE_DONATION',
+      channel: 'IN_APP',
     }));
   });
 

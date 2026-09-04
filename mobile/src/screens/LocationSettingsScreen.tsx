@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppCard } from '../components/AppCard';
+import { FeedbackMessage } from '../components/FeedbackMessage';
 import { Screen } from '../components/Screen';
 import { colors } from '../constants/colors';
 import { getDonorLocation, updateDonorLocation } from '../services/location';
+import { spacing, typography } from '../theme/design';
 
 export function LocationSettingsScreen() {
   const [sharing, setSharing] = useState(false);
@@ -76,25 +78,24 @@ export function LocationSettingsScreen() {
             <Text style={styles.cardTitle}>Enable Secure Location Sharing</Text>
             <Text style={styles.muted}>Used only for emergency donor coordination.</Text>
           </View>
-          <Switch value={sharing} onValueChange={setSharing} thumbColor={sharing ? colors.primary : undefined} />
+          <Switch value={sharing} onValueChange={setSharing} trackColor={{ true: colors.primarySoft, false: colors.border }} thumbColor={sharing ? colors.primary : colors.muted} />
         </View>
         <Text style={styles.detail}>Current status: {latitude && longitude ? 'Location captured' : 'Location not captured yet'}</Text>
         <Text style={styles.detail}>Latitude: {latitude?.toFixed(6) ?? 'Captured automatically'}</Text>
         <Text style={styles.detail}>Longitude: {longitude?.toFixed(6) ?? 'Captured automatically'}</Text>
         {accuracy ? <Text style={styles.detail}>Accuracy: {Math.round(accuracy)} meters</Text> : null}
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-        <AppButton title="Use Browser Location" variant="outline" onPress={() => void capture()} />
-        <AppButton title="Save Location Settings" loading={loading} onPress={() => void save()} />
+        <FeedbackMessage message={message} tone={message.includes('denied') || message.includes('Unable') ? 'warning' : 'success'} />
+        <AppButton title="Use Browser Location" icon="locate-outline" variant="outline" onPress={() => void capture()} />
+        <AppButton title="Save Location Settings" icon="save-outline" loading={loading} onPress={() => void save()} />
       </AppCard>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  cardTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  detail: { color: colors.ink, fontSize: 15 },
-  message: { borderRadius: 12, backgroundColor: colors.warningSoft, color: colors.warning, padding: 10, fontWeight: '700' },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  cardTitle: { color: colors.ink, ...typography.sectionTitle },
+  detail: { color: colors.ink, fontSize: 15, lineHeight: 22 },
 });

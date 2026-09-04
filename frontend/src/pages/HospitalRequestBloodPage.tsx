@@ -2,6 +2,19 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { confirmedBloodGroups } from '../constants/blood-groups';
 import { BloodGroup, PriorityLevel, RequestSource, createHospitalRequest, getHospitalProfile } from '../services/hospital-portal';
+import { useToast } from '../components/ui/ToastProvider';
+
+const expiryOptions = [
+  { label: '15 minutes', value: '15' },
+  { label: '30 minutes', value: '30' },
+  { label: '1 hour', value: '60' },
+  { label: '2 hours', value: '120' },
+  { label: '4 hours', value: '240' },
+  { label: '6 hours', value: '360' },
+  { label: '12 hours', value: '720' },
+  { label: '24 hours', value: '1440' },
+  { label: 'Custom duration', value: 'custom' },
+] as const;
 
 function defaultRequiredBy() {
   const date = new Date();
@@ -10,6 +23,7 @@ function defaultRequiredBy() {
 }
 
 export default function HospitalRequestBloodPage() {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const donorContextId = searchParams.get('donorId') ?? '';
   const bloodGroupContext = searchParams.get('bloodGroup') as BloodGroup | null;
@@ -31,6 +45,9 @@ export default function HospitalRequestBloodPage() {
   const [emergencyRegion, setEmergencyRegion] = useState('');
   const [emergencyLatitude, setEmergencyLatitude] = useState<number | null>(null);
   const [emergencyLongitude, setEmergencyLongitude] = useState<number | null>(null);
+  const [notificationExpiry, setNotificationExpiry] = useState('120');
+  const [customExpiryValue, setCustomExpiryValue] = useState(2);
+  const [customExpiryUnit, setCustomExpiryUnit] = useState<'minutes' | 'hours'>('hours');
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
   const [notes, setNotes] = useState(donorContextId ? `Map donor context: ${donorContextId}` : '');
   const [message, setMessage] = useState('');
@@ -93,9 +110,11 @@ export default function HospitalRequestBloodPage() {
       setEmergencyLatitude(latitude);
       setEmergencyLongitude(longitude);
       setLocation(city || profile.location?.trim() || location);
-      setMessage('Hospital profile location applied.');
+      toast.info('Hospital profile location applied.');
     } catch {
-      setMessage('Unable to load hospital profile location. Please try again.');
+      const text = 'Unable to load hospital profile location. Please try again.';
+      setMessage(text);
+      toast.error(text);
     } finally {
       setLoadingProfileLocation(false);
     }
@@ -127,6 +146,17 @@ export default function HospitalRequestBloodPage() {
         return;
       }
 
+      const emergencyNotificationDurationMinutes =
+        requestType === 'EMERGENCY'
+          ? notificationExpiry === 'custom'
+            ? Math.max(1, customExpiryValue) * (customExpiryUnit === 'hours' ? 60 : 1)
+            : Number(notificationExpiry)
+          : undefined;
+      if (emergencyNotificationDurationMinutes && emergencyNotificationDurationMinutes > 24 * 60) {
+        setMessage('Notification expiry cannot exceed 24 hours.');
+        return;
+      }
+
       const request = await createHospitalRequest({
         patientName: patientName || undefined,
         hospitalPatientReference: hospitalPatientReference || undefined,
@@ -142,10 +172,18 @@ export default function HospitalRequestBloodPage() {
         region: requestType === 'EMERGENCY' ? emergencyRegion.trim() : undefined,
         latitude: requestType === 'EMERGENCY' ? emergencyLatitude ?? undefined : undefined,
         longitude: requestType === 'EMERGENCY' ? emergencyLongitude ?? undefined : undefined,
+        emergencyNotificationDurationMinutes,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
-      setMessage(`Blood request created successfully. Request Reference: ${request.requestReference}`);
+      const requestIncludesHospitals = requestSource !== 'DONORS_ONLY';
+      toast.success(
+        requestType === 'EMERGENCY'
+          ? `Emergency blood request created successfully. Reference: ${request.requestReference}.`
+          : requestIncludesHospitals
+            ? `Blood transfer request sent successfully. Reference: ${request.requestReference}.`
+            : `Blood request created successfully. Reference: ${request.requestReference}.`,
+      );
       setPatientName('');
       setHospitalPatientReference('');
       setWard('');
@@ -153,10 +191,15 @@ export default function HospitalRequestBloodPage() {
       setRequestType('STANDARD');
       setPriority('MEDIUM');
       setRequestSource('DONORS_AND_HOSPITALS');
+      setNotificationExpiry('120');
+      setCustomExpiryValue(2);
+      setCustomExpiryUnit('hours');
       setRequiredBy(defaultRequiredBy());
       setNotes('');
     } catch (error: any) {
-      setMessage(error?.response?.data?.error?.message ?? 'Failed to create request.');
+      const text = error?.response?.data?.error?.message ?? 'Failed to create request.';
+      setMessage(text);
+      toast.error(text);
     } finally {
       setSaving(false);
     }
@@ -235,6 +278,43 @@ export default function HospitalRequestBloodPage() {
             <option value="CRITICAL">CRITICAL</option>
           </select>
         </label>
+        {requestType === 'EMERGENCY' ? (
+          <>
+            <label className="text-sm font-semibold">
+              Notification Expiry
+              <select className="legacy-input mt-1" value={notificationExpiry} onChange={(e) => setNotificationExpiry(e.target.value)}>
+                {expiryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {notificationExpiry === 'custom' ? (
+              <div className="grid gap-2 text-sm font-semibold sm:grid-cols-[1fr_auto]">
+                <label>
+                  Custom Duration
+                  <input
+                    className="legacy-input mt-1"
+                    min={1}
+                    max={customExpiryUnit === 'hours' ? 24 : 1440}
+                    required
+                    type="number"
+                    value={customExpiryValue}
+                    onChange={(e) => setCustomExpiryValue(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Unit
+                  <select className="legacy-input mt-1" value={customExpiryUnit} onChange={(e) => setCustomExpiryUnit(e.target.value as 'minutes' | 'hours')}>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         <label className="text-sm font-semibold md:col-span-2">
           Ward / Unit *
           <input
@@ -331,7 +411,7 @@ export default function HospitalRequestBloodPage() {
         <button className="btn-primary md:col-span-2 md:w-fit" disabled={saving} type="submit">
           {saving ? 'Submitting...' : 'Submit Blood Request'}
         </button>
-        {message ? <p className="text-sm text-primary md:col-span-2">{message}</p> : null}
+        {message ? <p className="text-sm font-semibold text-primary md:col-span-2">{message}</p> : null}
       </form>
     </section>
   );

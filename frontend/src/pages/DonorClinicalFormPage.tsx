@@ -22,121 +22,50 @@ const questions = [
     section: 'Previous Blood Donations',
   },
   {
-    questionText: 'Are you currently taking any prescription or over-the-counter medication?',
-    helperText: 'Include tablets, injections, herbal medicines, antibiotics, and medicines bought without a prescription.',
-    section: 'Current Medication',
+    questionText: 'Are you currently taking any medication, treatment, or antibiotics?',
+    helperText: 'Include prescription medicine, over-the-counter medicine, herbal treatment, injections, and antibiotics.',
+    section: 'Short Health Pre-Screening',
   },
   {
-    questionText: 'Have you ever been diagnosed with epilepsy, stomach ulcer, heart disease, cancer, or another serious medical condition?',
+    questionText: 'Have you ever been diagnosed with heart disease, cancer, epilepsy, tuberculosis, sickle cell disease, or another serious medical condition?',
     helperText: 'Tell the review team about any serious condition, even if it is controlled or happened in the past.',
-    section: 'Medical History',
-    terms: ['Epilepsy', 'Heart Disease', 'Cancer'],
+    section: 'Short Health Pre-Screening',
+    terms: ['Heart Disease', 'Cancer', 'Epilepsy', 'Tuberculosis'],
   },
   {
-    questionText: 'Have you ever had tuberculosis?',
-    helperText: 'Include tuberculosis that was treated in the past or is still being treated.',
-    section: 'Medical History',
-    terms: ['Tuberculosis'],
+    questionText: 'In the recent policy period, have you had surgery, a blood transfusion, a tattoo, a piercing, or a needle-stick injury?',
+    helperText: 'Include any recent operation, transfusion, accidental needle injury, tattoo, ear/body piercing, or similar skin-piercing procedure.',
+    section: 'Short Health Pre-Screening',
   },
   {
-    questionText: 'Have you received any vaccination in the last four weeks?',
+    questionText: 'Have you ever had jaundice, hepatitis, HIV/AIDS, or another blood-borne or infectious disease?',
+    helperText: 'Include liver infection, a positive hepatitis or HIV test, yellowing of the eyes or skin, or any infection passed through blood.',
+    section: 'Short Health Pre-Screening',
+    terms: ['Hepatitis'],
+  },
+  {
+    questionText: 'Have you recently had symptoms or a diagnosis of a sexually transmitted infection, or another significant infection?',
+    helperText: 'Include genital pain, urinary pain, unusual discharge, fever from infection, or any recent diagnosis that required treatment.',
+    section: 'Short Health Pre-Screening',
+  },
+  {
+    questionText: 'Have you received any vaccination recently?',
     helperText: 'Include COVID-19, Yellow Fever, Hepatitis, and any other recent vaccinations.',
-    section: 'Vaccinations',
+    section: 'Short Health Pre-Screening',
     terms: ['Hepatitis'],
   },
   {
-    questionText: 'Have you ever had jaundice, liver disease, or a positive hepatitis blood test?',
-    helperText: 'Include yellowing of the eyes or skin, liver problems, or any hepatitis test result you were told was positive.',
-    section: 'Infectious Diseases',
-    terms: ['Hepatitis'],
-  },
-  {
-    questionText: 'Do you have sickle cell disease?',
-    helperText: 'Answer Yes if a healthcare professional has told you that you have sickle cell disease.',
-    section: 'Medical History',
-  },
-  {
-    questionText: 'Have you ever injected yourself with drugs or medication?',
-    helperText: 'Include injections outside a healthcare setting or any injected drugs not given by a healthcare professional.',
-    section: 'Lifestyle & Exposure',
-  },
-  {
-    questionText: 'In the last six months, have you had a needle-stick injury, an injection outside a hospital or clinic, a tattoo, or a body piercing?',
-    helperText: 'Include any accidental needle injury, non-clinic injection, tattoo, ear/body piercing, or similar skin-piercing procedure.',
-    section: 'Lifestyle & Exposure',
-  },
-  {
-    questionText: 'Have you ever had a headache?',
-    helperText: 'Answer Yes if you have ever had headaches, even if they were mild or occasional.',
-    section: 'Current Health',
-  },
-  {
-    questionText: 'Have you had dental treatment in the last week, or are you currently taking antibiotics?',
-    helperText: 'Include tooth extraction, dental cleaning, dental surgery, or any antibiotic medicine you are taking now.',
-    section: 'Current Medication',
-  },
-  {
-    questionText: 'Have you had surgery with general anaesthesia in the last six months?',
-    helperText: 'General anaesthesia means you were put fully to sleep for an operation.',
-    section: 'Medical History',
-  },
-  {
-    questionText: 'Have you received blood or any blood component transfusion in the last six months?',
-    helperText: 'Include transfusion of whole blood, plasma, platelets, or other blood components.',
-    section: 'Medical History',
-  },
-  {
-    questionText: 'Have you lost more than 5 kg without trying in the last six months?',
-    helperText: 'Answer Yes if you lost weight unexpectedly, without dieting or intentional exercise changes.',
-    section: 'Current Health',
-  },
-  {
-    questionText: 'In the last six months, have you had unprotected sex with more than one partner, paid someone for sex, or been paid for sex?',
-    helperText: 'This helps the clinical team assess infection risk while keeping your information confidential.',
-    section: 'Lifestyle & Exposure',
-  },
-  {
-    questionText: 'Have you had gonorrhoea, genital pain, urinary pain, or unusual genital or urinary discharge?',
-    helperText: 'Include any sexually transmitted infection symptoms or diagnosis, even if treated.',
-    section: 'Infectious Diseases',
-  },
-  {
-    questionText: 'For men only: in the last six months, have you had sex with another man?',
-    helperText: 'If this does not apply to you, answer No.',
-    section: 'Lifestyle & Exposure',
-  },
-  {
-    questionText: 'Have you or your partner ever tested positive for HIV or AIDS?',
-    helperText: 'Answer Yes if either you or a sexual partner has ever received a positive HIV or AIDS test result.',
-    section: 'Infectious Diseases',
-  },
-  {
-    questionText: 'After donating, will you do strenuous or risky activities such as climbing, driving heavy vehicles, operating heavy machinery, or working at heights?',
-    helperText: 'These activities may be unsafe soon after donation because some people feel light-headed.',
-    section: 'Lifestyle & Work Safety',
-  },
-  {
-    questionText: 'Are you donating because someone told you that you have too much blood?',
-    helperText: 'Blood donation should not replace medical care for a condition that needs treatment.',
-    section: 'Previous Blood Donations',
-  },
-  {
-    questionText: 'Have you been pregnant in the last 12 months, or are you currently breastfeeding?',
-    helperText: 'This applies to pregnancy, recent delivery, miscarriage, abortion, or current breastfeeding.',
-    section: 'Pregnancy & Breastfeeding',
+    questionText: 'If clinically applicable, are you pregnant, recently pregnant, or breastfeeding?',
+    helperText: 'Select Not Applicable if this question does not apply to you. Include pregnancy, recent delivery, miscarriage, abortion, or current breastfeeding.',
+    section: 'Short Health Pre-Screening',
+    terms: ['Pregnancy'],
+    allowNotApplicable: true,
   },
 ].map((question, index) => ({ questionKey: `q${index + 1}`, ...question }));
 
 const healthQuestionSections = [
   'Current Health',
-  'Medical History',
-  'Current Medication',
-  'Infectious Diseases',
-  'Vaccinations',
-  'Lifestyle & Exposure',
-  'Lifestyle & Work Safety',
-  'Previous Blood Donations',
-  'Pregnancy & Breastfeeding',
+  'Short Health Pre-Screening',
 ];
 
 const medicalTooltips: Record<string, string> = {
@@ -146,9 +75,11 @@ const medicalTooltips: Record<string, string> = {
   Hepatitis: 'Inflammation or infection of the liver, sometimes caused by a virus.',
   Cancer: 'A serious condition where abnormal cells grow and may spread in the body.',
   'Heart Disease': 'A medical condition affecting the heart or blood vessels.',
+  Pregnancy: 'A period when someone is carrying a developing baby before birth.',
 };
 
 const steps = ['Personal', 'History', 'Replacement', 'Health', 'Declaration'];
+type AnswerChoice = '' | 'yes' | 'no' | 'na';
 
 const documentTypes = ['Ghana Card', 'Passport', "Driver's License", 'Voter ID', 'NHIS', 'Other'];
 const patientRelationships = ['Parent', 'Child', 'Brother', 'Sister', 'Spouse', 'Relative', 'Friend', 'Other'];
@@ -305,8 +236,9 @@ const getWorkflowDisplay = (record: DonorClinicalRecord | null) => {
 export default function DonorClinicalFormPage() {
   const [step, setStep] = useState(0);
   const [record, setRecord] = useState<DonorClinicalRecord | null>(null);
+  const [canStartNewAssessment, setCanStartNewAssessment] = useState(false);
   const [form, setForm] = useState<any>(emptyForm);
-  const [answers, setAnswers] = useState<Record<string, { answer: '' | 'yes' | 'no'; details: string }>>(
+  const [answers, setAnswers] = useState<Record<string, { answer: AnswerChoice; details: string }>>(
     Object.fromEntries(questions.map((q) => [q.questionKey, { answer: '', details: '' }])),
   );
   const [hospitals, setHospitals] = useState<Array<{ id: string; hospitalName: string; location: string; address?: string; city?: string | null; region?: string | null }>>([]);
@@ -314,12 +246,13 @@ export default function DonorClinicalFormPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [feelingWellDetailsAttempted, setFeelingWellDetailsAttempted] = useState(false);
   const [requestValidation, setRequestValidation] = useState<{
     state: 'idle' | 'loading' | 'valid' | 'invalid';
     message: string;
   }>({ state: 'idle', message: '' });
 
-  const locked = record ? record.status !== 'DRAFT' : false;
+  const locked = record ? record.status !== 'DRAFT' && !canStartNewAssessment : false;
   const workflowDisplay = useMemo(() => getWorkflowDisplay(record), [record]);
 
   useEffect(() => {
@@ -327,7 +260,14 @@ export default function DonorClinicalFormPage() {
       try {
         const [mine, hospitalResponse] = await Promise.all([getMyClinicalRecords(), api.get('/donors/hospital-options')]);
         const latest = mine.latest;
-        setRecord(latest);
+        const nextEligibilityDate = mine.donorProfile?.nextEligibilityDate ? new Date(mine.donorProfile.nextEligibilityDate) : null;
+        const deferralWindowEnded =
+          latest?.status === 'TEMPORARILY_DEFERRED' &&
+          nextEligibilityDate &&
+          !Number.isNaN(nextEligibilityDate.getTime()) &&
+          nextEligibilityDate <= new Date();
+        setCanStartNewAssessment(Boolean(deferralWindowEnded));
+        setRecord(deferralWindowEnded ? null : latest);
         if (latest) {
           setForm((prev: any) => ({
             ...prev,
@@ -340,7 +280,15 @@ export default function DonorClinicalFormPage() {
           if (latest.healthAnswers?.length) {
             setAnswers(Object.fromEntries(questions.map((q) => {
               const found = latest.healthAnswers?.find((a) => a.questionKey === q.questionKey);
-              return [q.questionKey, { answer: found ? (found.answer ? 'yes' : 'no') : '', details: found?.details ?? '' }];
+              const foundDetails = found?.details ?? '';
+              const nextAnswer = found
+                ? q.allowNotApplicable && foundDetails === 'Not Applicable'
+                  ? 'na'
+                  : found.answer
+                    ? 'yes'
+                    : 'no'
+                : '';
+              return [q.questionKey, { answer: nextAnswer, details: foundDetails === 'Not Applicable' ? '' : foundDetails }];
             })));
           }
         } else if (mine.donorProfile) {
@@ -417,7 +365,7 @@ export default function DonorClinicalFormPage() {
       questionKey: q.questionKey,
       questionText: q.questionText,
       answer: answers[q.questionKey]?.answer === 'yes',
-      details: answers[q.questionKey]?.details,
+      details: answers[q.questionKey]?.answer === 'na' ? 'Not Applicable' : answers[q.questionKey]?.details,
     })), [answers]);
 
   const buildHealthAnswersPayload = (): HealthAnswerPayload[] => healthAnswers.map((answer) => ({
@@ -426,6 +374,8 @@ export default function DonorClinicalFormPage() {
     answer: answer.answer,
     ...(answer.details?.trim() ? { details: answer.details.trim() } : {}),
   }));
+  const feelingWellAnswer = answers.q1;
+  const feelingWellNeedsDetails = feelingWellAnswer?.answer === 'no' && !feelingWellAnswer.details.trim();
 
   const save = async () => {
     setSaving(true); setError(''); setMessage('');
@@ -444,10 +394,6 @@ export default function DonorClinicalFormPage() {
       }
       if (hasDonatedBefore && !normalizedLastDonationDate) {
         setError('Please provide your last donation date.');
-        return null;
-      }
-      if (hasDonatedBefore && previousDonationCount <= 0) {
-        setError('Please enter total previous donations.');
         return null;
       }
 
@@ -470,14 +416,27 @@ export default function DonorClinicalFormPage() {
         declarationDate: optionalIsoDate(form.declarationDate) ?? new Date().toISOString(),
         healthAnswers: buildHealthAnswersPayload(),
       };
-      const saved = await saveClinicalDraft(payload, record?.id);
+      const saved = await saveClinicalDraft(payload, canStartNewAssessment ? undefined : record?.id);
       setRecord(saved);
+      setCanStartNewAssessment(false);
       setMessage('Draft saved successfully.');
       return saved;
     } catch (err: any) {
       setError(friendlyClinicalError(err, 'Unable to save draft. Please check the required fields.'));
       return null;
     } finally { setSaving(false); }
+  };
+
+  const validateFeelingWellDetails = () => {
+    if (!feelingWellNeedsDetails) return true;
+    setFeelingWellDetailsAttempted(true);
+    setStep(3);
+    return false;
+  };
+
+  const goNext = () => {
+    if (step === 3 && !validateFeelingWellDetails()) return;
+    setStep((s) => Math.min(steps.length - 1, s + 1));
   };
 
   const submit = async (event: FormEvent) => {
@@ -488,10 +447,11 @@ export default function DonorClinicalFormPage() {
       return;
     }
     if (healthAnswers.length < questions.length) {
-      setError('Please answer all 22 health questionnaire questions before submitting for review.');
+      setError('Please answer all eligibility screening questions before submitting for review.');
       setStep(3);
       return;
     }
+    if (!validateFeelingWellDetails()) return;
     const saved = await save();
     const id = saved?.id ?? record?.id;
     if (!id) return;
@@ -509,6 +469,7 @@ export default function DonorClinicalFormPage() {
   const selectedHospital = hospitals.find((hospital) => hospital.id === form.selectedHospitalId);
   const venueForHospital = (hospital?: { location?: string; address?: string; city?: string | null; region?: string | null }) =>
     [hospital?.address, hospital?.location, hospital?.city, hospital?.region].filter(Boolean).join(', ');
+  const requiredFromLogin = new URLSearchParams(window.location.search).get('required') === '1';
 
   if (loading) {
     return (
@@ -535,6 +496,13 @@ export default function DonorClinicalFormPage() {
         <p className="text-sm text-gray-600">Save a draft, submit for hospital review, then staff complete office-use screening.</p>
         <Workflow display={workflowDisplay} />
       </div>
+
+      {(requiredFromLogin || !record || canStartNewAssessment) && !locked ? (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+          <p className="font-black">Complete Your Eligibility Form</p>
+          <p className="mt-1">Before you can participate in blood donation activities, please complete this short eligibility form.</p>
+        </div>
+      ) : null}
 
       {message ? <p className="rounded-xl bg-green-50 p-3 text-sm font-semibold text-green-700">{message}</p> : null}
       {error ? <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
@@ -571,13 +539,10 @@ export default function DonorClinicalFormPage() {
               {hospitals.map((h) => <option key={h.id} value={h.id}>{h.hospitalName} - {h.location}</option>)}
             </select>
           </div>
-          <select className="legacy-input" disabled={locked} value={form.title ?? ''} onChange={(e) => setValue('title', e.target.value)}><option value="">Title</option>{['Mr','Mrs','Ms','Dr','Prof','Other'].map((v) => <option key={v}>{v}</option>)}</select>
           <input className="legacy-input" disabled={locked} placeholder="First Name *" value={form.firstName ?? ''} onChange={(e) => setValue('firstName', e.target.value)} required />
           <input className="legacy-input" disabled={locked} placeholder="Other Name(s)" value={form.otherNames ?? ''} onChange={(e) => setValue('otherNames', e.target.value)} />
           <input className="legacy-input" disabled={locked} placeholder="Surname *" value={form.lastName ?? ''} onChange={(e) => setValue('lastName', e.target.value)} required />
           <input className="legacy-input" disabled={locked} placeholder="Area / Community of Residence *" value={form.areaOfResidence ?? ''} onChange={(e) => setValue('areaOfResidence', e.target.value)} required />
-          <input className="legacy-input" disabled={locked} placeholder="Digital Residential Address (Optional) e.g. GA-123-4567" value={form.addressOrWorkplace ?? ''} onChange={(e) => setValue('addressOrWorkplace', e.target.value)} />
-          <input className="legacy-input" disabled={locked} placeholder="Occupation" value={form.occupation ?? ''} onChange={(e) => setValue('occupation', e.target.value)} />
           <label className="space-y-1">
             <span className="text-sm font-bold text-navy">Document Type *</span>
             <select
@@ -612,7 +577,6 @@ export default function DonorClinicalFormPage() {
             </p>
           </label>
           <input className="legacy-input" disabled={locked} placeholder="Primary Phone Number *" value={form.phoneNumber ?? ''} onChange={(e) => setValue('phoneNumber', e.target.value)} required />
-          <input className="legacy-input" disabled={locked} placeholder="Email *" type="email" value={form.email ?? ''} onChange={(e) => setValue('email', e.target.value)} required />
           <label className="space-y-1">
             <span className="text-sm font-bold text-navy">Date of Birth *</span>
             <input className="legacy-input" disabled={locked} type="date" value={String(form.dateOfBirth ?? '').slice(0,10)} onChange={(e) => setValue('dateOfBirth', e.target.value)} required />
@@ -633,11 +597,17 @@ export default function DonorClinicalFormPage() {
               <span className="text-sm font-bold text-navy">Date of Last Donation *</span>
               <input className="legacy-input" disabled={locked} required type="date" value={String(form.lastDonationDate ?? '').slice(0,10)} onChange={(e) => setValue('lastDonationDate', e.target.value)} />
             </label>
-            <label className="space-y-1">
-              <span className="text-sm font-bold text-navy">Total Previous Donations *</span>
-              <input className="legacy-input" disabled={locked} required type="number" min={1} value={Number(form.numberOfVoluntaryDonations ?? 0) || ''} onChange={(e) => setValue('numberOfVoluntaryDonations', Number(e.target.value))} />
-            </label>
           </> : null}
+          <div className="md:col-span-2">
+            <HealthQuestion
+              question={questions[1]}
+              answer={answers.q2}
+              locked={locked}
+              showFeelingWellDetailsError={false}
+              onAnswer={(answer) => setAnswers((a) => ({ ...a, q2: { ...a.q2, answer } }))}
+              onDetails={(details) => setAnswers((a) => ({ ...a, q2: { ...a.q2, details } }))}
+            />
+          </div>
         </div> : null}
 
         {step === 2 ? <div className="space-y-3"><select className="legacy-input" disabled={locked} value={form.donorType ?? 'VOLUNTARY'} onChange={(e) => setValue('donorType', e.target.value)}><option value="VOLUNTARY">Voluntary Donor</option><option value="REPLACEMENT_FAMILY">Replacement / Family Donor</option></select>{form.donorType === 'REPLACEMENT_FAMILY' ? <div className="grid gap-3 md:grid-cols-2">
@@ -669,8 +639,15 @@ export default function DonorClinicalFormPage() {
                       question={q}
                       answer={answers[q.questionKey]}
                       locked={locked}
-                      onAnswer={(answer) => setAnswers((a) => ({ ...a, [q.questionKey]: { ...a[q.questionKey], answer } }))}
-                      onDetails={(details) => setAnswers((a) => ({ ...a, [q.questionKey]: { ...a[q.questionKey], details } }))}
+                      showFeelingWellDetailsError={q.questionKey === 'q1' && feelingWellDetailsAttempted && feelingWellNeedsDetails}
+                      onAnswer={(answer) => {
+                        if (q.questionKey === 'q1' && answer !== 'no') setFeelingWellDetailsAttempted(false);
+                        setAnswers((a) => ({ ...a, [q.questionKey]: { ...a[q.questionKey], answer, details: answer === 'na' ? '' : a[q.questionKey].details } }));
+                      }}
+                      onDetails={(details) => {
+                        if (q.questionKey === 'q1' && details.trim()) setFeelingWellDetailsAttempted(false);
+                        setAnswers((a) => ({ ...a, [q.questionKey]: { ...a[q.questionKey], details } }));
+                      }}
                     />
                   ))}
                 </fieldset>
@@ -694,7 +671,7 @@ export default function DonorClinicalFormPage() {
 
         <div className="flex flex-wrap gap-3 border-t border-gray-100 pt-4">
           <button type="button" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))} className="rounded-xl border border-gray-200 px-4 py-2 font-bold">Back</button>
-          <button type="button" disabled={step === steps.length - 1} onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))} className="rounded-xl border border-gray-200 px-4 py-2 font-bold">Next</button>
+          <button type="button" disabled={step === steps.length - 1} onClick={goNext} className="rounded-xl border border-gray-200 px-4 py-2 font-bold">Next</button>
           <button type="button" disabled={saving || locked} onClick={save} className="btn-secondary">{saving ? 'Saving...' : 'Save Draft'}</button>
           <button type="submit" disabled={saving || locked} className="btn-primary">Submit for Review</button>
           {record?.id ? <button type="button" className="rounded-xl border border-red-200 px-4 py-2 font-bold text-primary" onClick={() => downloadClinicalRecordExport(record.id)}>Export Record</button> : null}
@@ -741,19 +718,40 @@ function HealthQuestion({
   question,
   answer,
   locked,
+  showFeelingWellDetailsError,
   onAnswer,
   onDetails,
 }: {
   question: HealthQuestionItem;
-  answer?: { answer: '' | 'yes' | 'no'; details: string };
+  answer?: { answer: AnswerChoice; details: string };
   locked: boolean;
-  onAnswer: (answer: 'yes' | 'no') => void;
+  showFeelingWellDetailsError?: boolean;
+  onAnswer: (answer: AnswerChoice) => void;
   onDetails: (details: string) => void;
 }) {
   const labelId = `${question.questionKey}-label`;
   const helperId = `${question.questionKey}-helper`;
   const detailsId = `${question.questionKey}-details`;
+  const detailsErrorId = `${question.questionKey}-details-error`;
   const displayNumber = question.questionKey.replace('q', 'Question ');
+  const isFeelingWellQuestion = question.questionKey === 'q1';
+  const isPreviousDeferralQuestion = question.questionKey === 'q2';
+  const selectedAnswer = answer?.answer;
+  const riskAnswerSelected = isFeelingWellQuestion ? selectedAnswer === 'no' : selectedAnswer === 'yes';
+  const showDetails = riskAnswerSelected;
+  const detailsRequired = isFeelingWellQuestion && selectedAnswer === 'no';
+  const yesSelectedClass = isFeelingWellQuestion ? 'border-green-600 bg-green-600 text-white ring-2 ring-green-600 ring-offset-1' : 'border-red-600 bg-red-600 text-white ring-2 ring-red-600 ring-offset-1';
+  const noSelectedClass = isFeelingWellQuestion ? 'border-red-600 bg-red-600 text-white ring-2 ring-red-600 ring-offset-1' : 'border-green-600 bg-green-600 text-white ring-2 ring-green-600 ring-offset-1';
+  const inactiveClass = 'border-transparent bg-gray-100 text-slate-800';
+  const yesButtonClass = `min-h-11 rounded-full border px-5 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-offset-2 ${isFeelingWellQuestion ? 'focus:ring-green-600' : 'focus:ring-red-600'} ${selectedAnswer === 'yes' ? yesSelectedClass : inactiveClass}`;
+  const noButtonClass = `min-h-11 rounded-full border px-5 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-offset-2 ${isFeelingWellQuestion ? 'focus:ring-red-600' : 'focus:ring-green-600'} ${selectedAnswer === 'no' ? noSelectedClass : inactiveClass}`;
+  const naButtonClass = `min-h-11 rounded-full border px-5 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 ${selectedAnswer === 'na' ? 'border-slate-500 bg-slate-600 text-white ring-2 ring-slate-500 ring-offset-1' : inactiveClass}`;
+  const detailsClass = `legacy-input mt-1 min-h-24 ${riskAnswerSelected ? 'border-red-300 bg-red-50/40 focus:border-red-600 focus:ring-red-100' : 'border-green-300 focus:border-green-600 focus:ring-green-100'}`;
+  const detailsPlaceholder = isFeelingWellQuestion && selectedAnswer === 'no'
+    ? 'Please explain why you are not feeling well enough to donate today.'
+    : isPreviousDeferralQuestion
+      ? 'Share what the healthcare professional or donation centre told you, if you remember.'
+      : 'Add any dates, treatment, symptoms, or details you remember.';
 
   return (
     <fieldset
@@ -774,7 +772,7 @@ function HealthQuestion({
           type="button"
           onClick={() => onAnswer('yes')}
           aria-pressed={answer?.answer === 'yes'}
-          className={`min-h-11 rounded-full px-5 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${answer?.answer === 'yes' ? 'bg-primary text-white' : 'bg-gray-100 text-slate-800'}`}
+          className={yesButtonClass}
         >
           Yes
         </button>
@@ -783,22 +781,41 @@ function HealthQuestion({
           type="button"
           onClick={() => onAnswer('no')}
           aria-pressed={answer?.answer === 'no'}
-          className={`min-h-11 rounded-full px-5 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 ${answer?.answer === 'no' ? 'bg-green-600 text-white' : 'bg-gray-100 text-slate-800'}`}
+          className={noButtonClass}
         >
           No
         </button>
+        {question.allowNotApplicable ? (
+          <button
+            disabled={locked}
+            type="button"
+            onClick={() => onAnswer('na')}
+            aria-pressed={answer?.answer === 'na'}
+            className={naButtonClass}
+          >
+            Not Applicable
+          </button>
+        ) : null}
       </div>
-      {answer?.answer === 'yes' ? (
+      {showDetails ? (
         <label className="mt-3 block" htmlFor={detailsId}>
           <span className="text-sm font-bold text-navy">Details for review staff</span>
           <textarea
             id={detailsId}
             disabled={locked}
-            className="legacy-input mt-1 min-h-24"
-            placeholder="Add any dates, treatment, symptoms, or details you remember."
-            value={answer.details ?? ''}
+            required={detailsRequired}
+            aria-invalid={showFeelingWellDetailsError ? 'true' : undefined}
+            aria-describedby={showFeelingWellDetailsError ? detailsErrorId : undefined}
+            className={detailsClass}
+            placeholder={detailsPlaceholder}
+            value={answer?.details ?? ''}
             onChange={(event) => onDetails(event.target.value)}
           />
+          {showFeelingWellDetailsError ? (
+            <span id={detailsErrorId} className="mt-1 block text-sm font-semibold text-red-700">
+              Please provide an explanation before continuing.
+            </span>
+          ) : null}
         </label>
       ) : null}
     </fieldset>

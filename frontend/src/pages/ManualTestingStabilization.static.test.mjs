@@ -92,3 +92,49 @@ test('admin donor management separates account approval from clinical eligibilit
   assert.match(source, /api\.patch\(`\/donors\/admin\/\$\{id\}\/account-status`/);
   assert.doesNotMatch(source, /api\.patch\(`\/donors\/admin\/\$\{id\}\/eligibility`/);
 });
+
+test('live emergency banner expiry is selectable and enforced in the UI', () => {
+  const emergencyRequest = read('src/pages/HospitalEmergencyRequestsPage.tsx');
+  const bloodRequest = read('src/pages/HospitalRequestBloodPage.tsx');
+  const banner = read('src/components/LiveEmergencyAlertBanner.tsx');
+  const service = read('src/services/hospital-portal.ts');
+
+  [emergencyRequest, bloodRequest].forEach((source) => {
+    assert.match(source, /Notification Expiry/);
+    assert.match(source, /Custom duration/);
+    assert.match(source, /emergencyNotificationDurationMinutes/);
+    assert.match(source, /24 \* 60/);
+  });
+
+  assert.match(banner, /emergencyNotificationExpiresAt/);
+  assert.match(banner, /Expires in/);
+  assert.match(banner, /10 \* 60 \* 1000/);
+  assert.match(banner, /Mark Resolved/);
+  assert.match(banner, /\/blood-requests\/\$\{activeAlert\.id\}\/emergency-notification\/resolve/);
+  assert.match(service, /resolveEmergencyNotification/);
+});
+
+test('public main website navbar ends at login without announcement bell', () => {
+  const mainLayout = read('src/layouts/MainLayout.tsx');
+
+  assert.match(mainLayout, /\['\/login', 'Login'\]/);
+  assert.match(mainLayout, /desktopNavItems = isAuthenticated \? authNavItems : publicNavItems/);
+  assert.match(mainLayout, /aria-label="Open notifications"/);
+  assert.match(mainLayout, /onClick=\{openNotifications\}/);
+  assert.doesNotMatch(mainLayout, /announcement-panel/);
+  assert.doesNotMatch(mainLayout, /Support channels are live/);
+});
+
+test('header notification badge uses the same real notification source as the donor notifications page', () => {
+  const mainLayout = read('src/layouts/MainLayout.tsx');
+  const notificationsPage = read('src/pages/NotificationsPage.tsx');
+
+  assert.match(mainLayout, /getHospitalNotifications\(\{ take: 100 \}\)/);
+  assert.match(notificationsPage, /getHospitalNotifications\(\{ take: 100 \}\)/);
+  assert.match(mainLayout, /headerNotifications\.filter\(\(notification\) => !notification\.delivered\)\.length/);
+  assert.match(notificationsPage, /notifications\.filter\(\(item\) => !item\.delivered\)\.length/);
+  assert.match(mainLayout, /unreadNotifications > 0 \? \(/);
+  assert.match(notificationsPage, /window\.dispatchEvent\(new Event\('notifications:changed'\)\)/);
+  assert.doesNotMatch(mainLayout, /getUserAnnouncements/);
+  assert.doesNotMatch(mainLayout, /unreadAnnouncements/);
+});

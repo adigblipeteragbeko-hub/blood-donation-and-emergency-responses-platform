@@ -1,10 +1,14 @@
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../components/AppButton';
 import { AppCard } from '../components/AppCard';
+import { EmptyState } from '../components/EmptyState';
+import { FeedbackMessage } from '../components/FeedbackMessage';
 import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { SmartAvatar } from '../components/SmartAvatar';
 import { formatBloodGroup } from '../constants/bloodGroups';
@@ -18,6 +22,7 @@ import { getNotifications, NotificationItem } from '../services/notifications';
 import { DonorTabsParamList } from '../types/navigation';
 import { donorDisplayName } from '../utils/donorIdentity';
 import { formatDate, formatDateTime, formatDistance } from '../utils/format';
+import { radius, spacing, typography } from '../theme/design';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -85,28 +90,28 @@ export function DonorDashboardScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={() => void load()}>
-      <AppCard style={styles.hero}>
+      <AppCard variant="soft" style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>Donor Dashboard</Text>
             <Text style={styles.title}>{greeting()}, {donorFirstName(profile)}</Text>
             <Text style={styles.muted}>Thank you for being a lifesaving donor.</Text>
+            <Text style={styles.ref}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
           </View>
-          <SmartAvatar name={donorDisplayName(profile)} email={profile?.email ?? profile?.user?.email} src={profile?.profileImageUrl} size="md" />
-          <AppButton title="Logout" variant="outline" onPress={() => void logout()} style={{ minHeight: 42 }} />
+          <View style={styles.heroActions}>
+            <SmartAvatar name={donorDisplayName(profile)} email={profile?.email ?? profile?.user?.email} src={profile?.profileImageUrl} size="md" />
+            <AppButton title="Logout" variant="outline" onPress={() => void logout()} style={styles.logoutButton} />
+          </View>
         </View>
-        <Text style={styles.ref}>{profile?.donorNumber ?? 'Donor reference pending'}</Text>
       </AppCard>
 
-      {message ? <Text style={styles.warning}>{message}</Text> : null}
+      <FeedbackMessage message={message} />
       {eligibility && eligibility.canSetAvailable === false ? (
-        <Text style={styles.warning}>
-          {eligibility.reason ?? 'Complete your Health Eligibility Form and hospital review before becoming available for emergency matching.'}
-        </Text>
+        <FeedbackMessage message={eligibility.reason ?? 'Complete your Health Eligibility Form and hospital review before becoming available for emergency matching.'} />
       ) : null}
 
       <AppCard>
-        <Text style={styles.sectionTitle}>Today's Status</Text>
+        <SectionHeader title="Today's Status" />
         <View style={styles.statusGrid}>
           <MiniStatus label="Eligibility" value={eligibilityApproved ? 'Approved' : 'Pending'} tone={statusTone(eligibilityApproved)} />
           <MiniStatus label="Availability" value={profile?.availabilityStatus ? 'Available' : 'Not Available'} tone={profile?.availabilityStatus ? 'success' : 'muted'} />
@@ -116,14 +121,14 @@ export function DonorDashboardScreen() {
       </AppCard>
 
       <View style={styles.grid}>
-        <AppCard style={styles.stat}><Text style={styles.label}>Lifetime Donations</Text><Text style={styles.value}>{completedDonations}</Text></AppCard>
-        <AppCard style={styles.stat}><Text style={styles.label}>Estimated Lives Saved</Text><Text style={styles.value}>{completedDonations * 3}</Text></AppCard>
-        <AppCard style={styles.stat}><Text style={styles.label}>Reward Points</Text><Text style={styles.value}>{rewardPoints}</Text></AppCard>
-        <AppCard style={styles.stat}><Text style={styles.label}>Emergency Responses</Text><Text style={styles.value}>{profile?.emergencyResponseCount ?? alerts}</Text></AppCard>
+        <StatCard label="Lifetime Donations" value={completedDonations} icon="water-outline" />
+        <StatCard label="Estimated Lives Saved" value={completedDonations * 3} icon="heart-outline" />
+        <StatCard label="Reward Points" value={rewardPoints} icon="ribbon-outline" />
+        <StatCard label="Emergency Responses" value={profile?.emergencyResponseCount ?? alerts} icon="pulse-outline" />
       </View>
 
       <AppCard>
-        <Text style={styles.sectionTitle}>Nearest Center</Text>
+        <SectionHeader title="Nearest Center" />
         {nearestCenter ? (
           <>
             <Text style={styles.rowStrong}>{nearestCenter.name}</Text>
@@ -134,33 +139,61 @@ export function DonorDashboardScreen() {
       </AppCard>
 
       <AppCard>
-        <Text style={styles.sectionTitle}>Next Appointment</Text>
+        <SectionHeader title="Next Appointment" />
         {nextAppointment ? (
           <>
             <Text style={styles.rowStrong}>{nextAppointment.appointmentReference ?? 'Appointment scheduled'}</Text>
             <Text style={styles.row}>{nextAppointment.hospital?.hospitalName ?? 'Hospital'} - {nextAppointment.appointmentType ?? 'Blood Donation'}</Text>
             <Text style={styles.row}>{formatDateTime(nextAppointment.scheduledAt)}</Text>
           </>
-        ) : <Text style={styles.muted}>No upcoming appointment scheduled yet.</Text>}
+        ) : <EmptyState icon="calendar-outline" title="No Upcoming Appointment" message="No upcoming appointment scheduled yet." />}
       </AppCard>
 
       <AppCard>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <SectionHeader title="Quick Actions" />
         <View style={styles.actions}>
-          <AppButton title="Emergency Requests" onPress={() => navigation.navigate('Emergency')} />
-          <AppButton title="Notifications" variant="outline" onPress={() => navigation.navigate('Notifications')} />
-          <AppButton title="Donor Card" variant="outline" onPress={() => navigation.navigate('DonorCard')} />
-          <AppButton title="Location Settings" variant="outline" onPress={() => navigation.navigate('More', { screen: 'Location' })} />
-          <AppButton title="Appointments" variant="outline" onPress={() => navigation.navigate('More', { screen: 'Appointments' })} />
-          <AppButton title="Centers" variant="outline" onPress={() => navigation.navigate('More', { screen: 'Centers' })} />
+          <AppButton title="Emergency Requests" icon="warning-outline" onPress={() => navigation.navigate('Emergency')} />
+          <View style={styles.actionGrid}>
+            <QuickAction title="Notifications" icon="notifications-outline" onPress={() => navigation.navigate('Notifications')} />
+            <QuickAction title="Donor Card" icon="card-outline" onPress={() => navigation.navigate('DonorCard')} />
+            <QuickAction title="Location" icon="location-outline" onPress={() => navigation.navigate('More', { screen: 'Location' })} />
+            <QuickAction title="Appointments" icon="calendar-outline" onPress={() => navigation.navigate('More', { screen: 'Appointments' })} />
+            <QuickAction title="Centers" icon="business-outline" onPress={() => navigation.navigate('More', { screen: 'Centers' })} />
+          </View>
         </View>
       </AppCard>
 
       <AppCard>
-        <Text style={styles.sectionTitle}>Latest Notifications</Text>
-        {notifications.length === 0 ? <Text style={styles.muted}>No notifications yet.</Text> : notifications.map((item) => <Text key={item.id} style={styles.row}>{item.title}</Text>)}
+        <SectionHeader title="Latest Notifications" />
+        {notifications.length === 0 ? (
+          <EmptyState icon="notifications-outline" title="No Notifications Yet" message="Emergency alerts and appointment updates will appear here." />
+        ) : notifications.map((item) => (
+          <View key={item.id} style={styles.notificationPreview}>
+            <Text style={styles.rowStrong}>{item.title}</Text>
+            <Text style={styles.muted}>{formatDateTime(item.createdAt)}</Text>
+          </View>
+        ))}
       </AppCard>
     </Screen>
+  );
+}
+
+function StatCard({ label, value, icon }: { label: string; value: number; icon: keyof typeof Ionicons.glyphMap }) {
+  return (
+    <AppCard variant="elevated" style={styles.stat}>
+      <Ionicons name={icon} size={20} color={colors.primaryDark} />
+      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.label}>{label}</Text>
+    </AppCard>
+  );
+}
+
+function QuickAction({ title, icon, onPress }: { title: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}>
+      <Ionicons name={icon} size={21} color={colors.primaryDark} />
+      <Text style={styles.quickActionText}>{title}</Text>
+    </Pressable>
   );
 }
 
@@ -174,21 +207,26 @@ function MiniStatus({ label, value, tone }: { label: string; value: string; tone
 }
 
 const styles = StyleSheet.create({
-  hero: { backgroundColor: colors.primarySoft, borderColor: '#fecaca' },
-  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
-  title: { color: colors.ink, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  ref: { color: colors.primaryDark, fontWeight: '900', marginTop: 10 },
-  warning: { borderRadius: 12, backgroundColor: colors.warningSoft, color: colors.warning, padding: 10, fontWeight: '800' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  stat: { flexGrow: 1, flexBasis: '46%', minHeight: 105 },
+  hero: { padding: spacing.xl },
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroActions: { alignItems: 'center', gap: spacing.sm },
+  logoutButton: { minHeight: 40, paddingHorizontal: spacing.md },
+  kicker: { color: colors.primary, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 12 },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  ref: { alignSelf: 'flex-start', color: colors.primaryDark, fontWeight: '900', marginTop: spacing.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  stat: { flexGrow: 1, flexBasis: '46%', minHeight: 118 },
   label: { color: colors.muted, fontWeight: '800', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 },
-  value: { color: colors.primaryDark, fontSize: 24, fontWeight: '900' },
-  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  row: { color: colors.ink, fontSize: 15, lineHeight: 22 },
-  rowStrong: { color: colors.ink, fontSize: 17, lineHeight: 24, fontWeight: '900' },
-  actions: { gap: 10 },
-  statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  miniStatus: { flexBasis: '47%', flexGrow: 1, gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 12, backgroundColor: '#fff' },
+  value: { color: colors.primaryDark, ...typography.stat },
+  row: { color: colors.ink, ...typography.body },
+  rowStrong: { color: colors.ink, ...typography.cardTitle },
+  actions: { gap: spacing.md },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  quickAction: { flexBasis: '47%', flexGrow: 1, minHeight: 78, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.elevated, padding: spacing.md, justifyContent: 'center', gap: spacing.sm },
+  quickActionText: { color: colors.ink, fontWeight: '900', fontSize: 14 },
+  pressed: { opacity: 0.82 },
+  notificationPreview: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, gap: spacing.xs },
+  statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  miniStatus: { flexBasis: '47%', flexGrow: 1, minHeight: 86, gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.md, backgroundColor: colors.elevated },
 });

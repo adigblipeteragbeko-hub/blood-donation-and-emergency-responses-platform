@@ -9,6 +9,18 @@ import { BloodGroup, RequestSource, createHospitalRequest, getTypeaheadSuggestio
 import { AppIcon } from '../components/ui/AppIcon';
 
 const GHANA_CENTER: [number, number] = [7.9465, -1.0232];
+const expiryOptions = [
+  { label: '15 minutes', value: '15' },
+  { label: '30 minutes', value: '30' },
+  { label: '1 hour', value: '60' },
+  { label: '2 hours', value: '120' },
+  { label: '4 hours', value: '240' },
+  { label: '6 hours', value: '360' },
+  { label: '12 hours', value: '720' },
+  { label: '24 hours', value: '1440' },
+  { label: 'Custom duration', value: 'custom' },
+] as const;
+
 const markerIcon = L.divIcon({
   className: 'live-map-marker',
   html: '<span style="background:#dc0d28">ER</span>',
@@ -50,6 +62,9 @@ export default function HospitalEmergencyRequestsPage() {
   const [locationNotes, setLocationNotes] = useState('');
   const [requestSource, setRequestSource] = useState<RequestSource>('DONORS_AND_HOSPITALS');
   const [radiusKm, setRadiusKm] = useState<5 | 10 | 20>(10);
+  const [notificationExpiry, setNotificationExpiry] = useState('120');
+  const [customExpiryValue, setCustomExpiryValue] = useState(2);
+  const [customExpiryUnit, setCustomExpiryUnit] = useState<'minutes' | 'hours'>('hours');
   const [requiredBy, setRequiredBy] = useState(defaultRequiredBy());
   const [notes, setNotes] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -85,6 +100,14 @@ export default function HospitalEmergencyRequestsPage() {
       setMessage('Please select emergency coordinates on the map or via browser location.');
       return;
     }
+    const emergencyNotificationDurationMinutes =
+      notificationExpiry === 'custom'
+        ? Math.max(1, customExpiryValue) * (customExpiryUnit === 'hours' ? 60 : 1)
+        : Number(notificationExpiry);
+    if (emergencyNotificationDurationMinutes > 24 * 60) {
+      setMessage('Notification expiry cannot exceed 24 hours.');
+      return;
+    }
     setSubmitting(true);
     setMessage('');
     try {
@@ -104,12 +127,16 @@ export default function HospitalEmergencyRequestsPage() {
         latitude,
         longitude,
         radiusKm,
+        emergencyNotificationDurationMinutes,
         requiredBy: new Date(requiredBy).toISOString(),
         notes,
       });
       setMessage(`Emergency request broadcasted. Request Reference: ${request.requestReference}`);
       setUnitsNeeded(1);
       setRequiredBy(defaultRequiredBy());
+      setNotificationExpiry('120');
+      setCustomExpiryValue(2);
+      setCustomExpiryUnit('hours');
       setNotes('');
       setLocationNotes('');
     } catch (error: any) {
@@ -221,6 +248,39 @@ export default function HospitalEmergencyRequestsPage() {
             <option value={20}>20 km</option>
           </select>
         </label>
+        <label className="text-sm font-semibold">
+          Notification Expiry
+          <select className="legacy-input mt-1" value={notificationExpiry} onChange={(e) => setNotificationExpiry(e.target.value)}>
+            {expiryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {notificationExpiry === 'custom' ? (
+          <div className="grid gap-2 text-sm font-semibold sm:grid-cols-[1fr_auto]">
+            <label>
+              Custom Duration
+              <input
+                className="legacy-input mt-1"
+                min={1}
+                max={customExpiryUnit === 'hours' ? 24 : 1440}
+                required
+                type="number"
+                value={customExpiryValue}
+                onChange={(e) => setCustomExpiryValue(Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Unit
+              <select className="legacy-input mt-1" value={customExpiryUnit} onChange={(e) => setCustomExpiryUnit(e.target.value as 'minutes' | 'hours')}>
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+              </select>
+            </label>
+          </div>
+        ) : null}
         <label className="text-sm font-semibold md:col-span-2">
           Request Source
           <select className="legacy-input mt-1" value={requestSource} onChange={(e) => setRequestSource(e.target.value as RequestSource)}>

@@ -74,6 +74,23 @@ describe('InventoryService inventory health rules', () => {
     expect(result.riskScore).toBeGreaterThanOrEqual(50);
   });
 
+  it('keeps current zero stock critical while incoming supply improves the forecast', () => {
+    const result = service.calculateInventoryHealth({
+      ...baseArgs,
+      currentUnits: 0,
+      activeRequestedUnits: 0,
+      urgentRequestedUnits: 0,
+      incomingTransferUnits: 10,
+      scheduledDonationUnits: 1,
+    });
+
+    expect(result.usableUnits).toBe(0);
+    expect(result.forecastedAvailableUnits).toBe(11);
+    expect(result.status).toBe('Critical');
+    expect(result.forecastStatus).toBe('Healthy');
+    expect(result.explanation).toContain('forecasted available stock is 11');
+  });
+
   it('marks adequate stock with low demand as healthy and low risk', () => {
     const result = service.calculateInventoryHealth(baseArgs);
 
@@ -145,7 +162,7 @@ describe('InventoryService donor mobilization workflow', () => {
     expect(serviceSource).toContain('skippedReasons');
     expect(serviceSource).toContain('notificationConsentDisabled');
     expect(serviceSource).toContain('outsideRadius');
-    expect(serviceSource).toContain('No eligible compatible donors matched the current campaign criteria.');
+    expect(serviceSource).toContain('No currently eligible and available donors were found for mobilization.');
     expect(serviceSource).toContain('DONOR_MOBILIZATION_SENT');
     expect(serviceSource).toContain('tx.auditLog.create');
     expect(serviceSource).toContain('tx.activityLog.create');
@@ -157,6 +174,71 @@ describe('InventoryService donor mobilization workflow', () => {
     expect(serviceSource).toContain('smsEligibleRecipients');
     expect(serviceSource).toContain('DONOR_MOBILIZATION_SMS_SENT');
     expect(controllerSource).toContain('PermissionCode.INVENTORY_REPORT_VIEW, PermissionCode.DONOR_MATCH_VIEW');
+  });
+
+  it('records stock warning history only when the state changes', async () => {
+    const create = jest.fn((args: unknown) => args);
+    const findFirst = jest.fn() as any;
+    findFirst
+      .mockResolvedValueOnce({
+        level: 'CRITICAL',
+        currentUnits: 0,
+        activeDemandUnits: 0,
+        expiringUnits: 0,
+        incomingTransferUnits: 0,
+        scheduledDonationUnits: 0,
+      })
+      .mockResolvedValueOnce({
+        level: 'WATCH',
+        currentUnits: 3,
+        activeDemandUnits: 0,
+        expiringUnits: 0,
+        incomingTransferUnits: 0,
+        scheduledDonationUnits: 0,
+      });
+    const prisma = {
+      bloodStockWarning: {
+        findFirst,
+        create,
+      },
+      $transaction: jest.fn(),
+    };
+    const warning = {
+      hospitalId: 'hospital-1',
+      bloodGroup: BloodGroup.O_POS,
+      level: 'CRITICAL',
+      currentUnits: 0,
+      activeDemandUnits: 0,
+      expiringUnits: 0,
+      incomingTransferUnits: 0,
+      scheduledDonationUnits: 0,
+      explanation: 'O+: Critical.',
+      recommendedAction: 'Request transfer.',
+    };
+    const transitionService = new InventoryService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any) as any;
+
+    await transitionService.recordMeaningfulWarningTransitions([warning]);
+    expect(create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+
+    await transitionService.recordMeaningfulWarningTransitions([warning]);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps early-warning forecasts, donor counts, and launch safety deterministic', () => {
+    const serviceSource = readFileSync(join(__dirname, 'inventory.service.ts'), 'utf8');
+
+    expect(serviceSource).toContain('recordMeaningfulWarningTransitions(warnings)');
+    expect(serviceSource).toContain('scheduledAt: { gte: now, lte: forecastWindowEnd }');
+    expect(serviceSource).toContain('const expiringUnits = inventoryExpiringUnits;');
+    expect(serviceSource).toContain('status: { in: [HospitalBloodTransferStatus.ACCEPTED, HospitalBloodTransferStatus.DISPATCHED] }');
+    expect(serviceSource).toContain('transfer.status === HospitalBloodTransferStatus.DISPATCHED');
+    expect(serviceSource).toContain('selectMobilizationDonors(hospitalContext, bloodGroup, 25)');
+    expect(serviceSource).toContain('const eligibleDonorCount = compatibleAvailableDonors;');
+    expect(serviceSource).toContain('MOBILIZATION_DUPLICATE_WINDOW_MINUTES');
+    expect(serviceSource).toContain('duplicateCampaign: true');
+    expect(serviceSource).toContain('No duplicate notifications or SMS were sent.');
   });
 
   it('allows hospital staff default RBAC permissions to satisfy mobilization authorization', () => {

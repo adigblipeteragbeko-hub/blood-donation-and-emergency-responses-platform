@@ -13,6 +13,7 @@ import { SecurityEventsService } from '../../common/security/security-events.ser
 import { GeocodingService } from '../../common/maps/geocoding.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import { generateDonorReference } from '../../common/utils/donor-reference';
+import { normalizeEmail } from '../../common/utils/email-normalization';
 import { SmsService } from '../sms/sms.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -51,6 +52,8 @@ type VerificationDeliveryMethod = 'EMAIL' | 'SMS';
 
 @Injectable()
 export class AuthService {
+  private readonly invalidLoginMessage = 'Invalid email or password';
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -92,8 +95,16 @@ export class AuthService {
       .join(' ') || profile.fullName?.trim() || 'Unnamed Donor';
   }
 
+  private findUserByEmail(email: string) {
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async register(payload: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({ where: { email: payload.email } });
+    const email = normalizeEmail(payload.email);
+    const existing = await this.findUserByEmail(email);
     if (existing) {
       throw new BadRequestException('Email already in use');
     }
@@ -122,7 +133,7 @@ export class AuthService {
     const user = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
-          email: payload.email,
+          email,
           passwordHash: await argon2.hash(payload.password),
           role: payload.role as Role,
           emailVerified: false,
@@ -209,28 +220,28 @@ export class AuthService {
     if (payload.role === 'DONOR') {
       await this.activityService.log({
         actorUserId: user.id,
-        actorName: payload.donorProfile?.fullName ?? payload.email,
+        actorName: payload.donorProfile?.fullName ?? email,
         type: 'DONOR_REGISTERED',
         module: 'AUTH',
         title: 'New donor registered',
-        description: `${payload.email} created a donor account and is waiting for verification.`,
+        description: `${email} created a donor account and is waiting for verification.`,
         entityType: 'USER',
         entityId: user.id,
       });
     } else {
       await this.activityService.log({
         actorUserId: user.id,
-        actorName: payload.hospitalProfile?.hospitalName ?? payload.email,
+        actorName: payload.hospitalProfile?.hospitalName ?? email,
         type: 'HOSPITAL_REGISTERED',
         module: 'AUTH',
         title: 'New hospital registered',
-        description: `${payload.email} registered a hospital/blood bank profile for onboarding.`,
+        description: `${email} registered a hospital/blood bank profile for onboarding.`,
         entityType: 'USER',
         entityId: user.id,
       });
       this.realtime.broadcastHospitalMapUpdate({
         reason: 'hospital.registered',
-        email: payload.email,
+        email,
         hospitalName: payload.hospitalProfile?.hospitalName ?? null,
       });
     }
@@ -246,47 +257,59 @@ export class AuthService {
   }
 
   async login(payload: LoginDto, metadata?: RequestMetadata) {
-    const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
+    const email = normalizeEmail(payload.email);
+    const user = await this.findUserByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(this.invalidLoginMessage);
     }
 
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) {
+      throw new UnauthorizedException(this.invalidLoginMessage);
+    }
+    const failedCountBasis = user.lockedUntil && user.lockedUntil <= now ? 0 : user.failedLoginCount;
     const isValid = await argon2.verify(user.passwordHash, payload.password);
     if (!isValid) {
-      const failedLoginCount = user.failedLoginCount + 1;
+      const failedLoginCount = failedCountBasis + 1;
+      const shouldLock = failedLoginCount >= this.failedLoginThreshold;
+      const lockedUntil = shouldLock ? this.buildLockoutExpiry() : null;
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { failedLoginCount },
+        data: { failedLoginCount, lockedUntil },
       });
 
       await this.securityEvents.log({
         actorUserId: user.id,
         email: user.email,
         eventType: 'FAILED_LOGIN',
-        severity: failedLoginCount >= 5 ? 'WARNING' : 'INFO',
+        severity: shouldLock ? 'WARNING' : 'INFO',
         description: `Failed login attempt for ${user.email}.`,
         ipAddress: metadata?.ipAddress ?? null,
         device: this.buildDeviceLabel(metadata?.userAgent),
         userAgent: metadata?.userAgent ?? null,
       });
 
-      if (failedLoginCount >= 5) {
+      if (shouldLock) {
         this.alertsService.notifySecurity('FAILED_LOGIN_THRESHOLD', {
           userId: user.id,
           email: user.email,
         });
       }
 
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(this.invalidLoginMessage);
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException(this.invalidLoginMessage);
     }
 
     if (user.role !== Role.ADMIN && !user.emailVerified) {
       throw new UnauthorizedException('Please verify your email before login');
     }
 
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: user.id },
-      data: { failedLoginCount: 0 },
+      data: { failedLoginCount: 0, lockedUntil: null },
     });
 
     const tokens = await this.generateTokens(user.id, user.role);
@@ -328,11 +351,12 @@ export class AuthService {
       entityId: user.id,
     });
 
-    return { user: this.toSafeUser(user), ...tokens };
+    return { user: this.toSafeUser(updatedUser), ...tokens };
   }
 
   async verifyEmail(payload: VerifyEmailDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
+    const email = normalizeEmail(payload.email);
+    const user = await this.findUserByEmail(email);
     if (!user) {
       throw new BadRequestException('Invalid verification request');
     }
@@ -394,7 +418,8 @@ export class AuthService {
   }
 
   async resendVerificationCode(payload: ResendVerificationDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
+    const email = normalizeEmail(payload.email);
+    const user = await this.findUserByEmail(email);
     if (!user || user.emailVerified) {
       return { message: user?.emailVerified ? 'This account is already verified.' : 'If verification is pending, a new code has been sent.' };
     }
@@ -524,7 +549,8 @@ export class AuthService {
   }
 
   async forgotPassword(payload: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: payload.email } });
+    const email = normalizeEmail(payload.email);
+    const user = await this.findUserByEmail(email);
     if (!user) {
       return { message: 'If account exists, reset instructions were sent' };
     }
@@ -539,13 +565,33 @@ export class AuthService {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
+    await this.sendPasswordResetEmail(user.email, plainToken, ttlMinutes);
     await this.auditService.log('PASSWORD_RESET_REQUESTED', 'USER', user.id, user.id);
 
     return {
       message: 'If account exists, reset instructions were sent',
-      // In production replace this with email/SMS dispatch only.
-      resetTokenPreview: plainToken,
     };
+  }
+
+  private async sendPasswordResetEmail(email: string, token: string, ttlMinutes: number) {
+    const frontendUrl = this.config.get<string>('app.frontendUrl', 'http://localhost:5173').replace(/\/$/, '');
+    const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    const delivery = await this.mailService.sendEmail({
+      to: email,
+      subject: 'BloodSOS Password Reset',
+      text: `Use this link to reset your BloodSOS password: ${resetUrl}\n\nIt expires in ${ttlMinutes} minutes. If you did not request this, ignore this message.`,
+      html: [
+        '<p>Hello,</p>',
+        '<p>Use the link below to reset your BloodSOS password.</p>',
+        `<p><a href="${resetUrl}">Reset your password</a></p>`,
+        `<p>This link expires in ${ttlMinutes} minutes. If you did not request this, ignore this message.</p>`,
+      ].join(''),
+    });
+
+    if (delivery.rejected?.length && !delivery.accepted?.length) {
+      throw new BadRequestException('Email provider rejected the password reset email.');
+    }
   }
 
   async resetPassword(payload: ResetPasswordDto) {
@@ -908,6 +954,18 @@ export class AuthService {
 
   private get maxVerificationAttempts() {
     return this.config.get<number>('security.verificationMaxAttemptsPerCode', 5);
+  }
+
+  private get failedLoginThreshold() {
+    return this.config.get<number>('security.loginFailedAttemptThreshold', 5);
+  }
+
+  private get loginLockoutMinutes() {
+    return this.config.get<number>('security.loginLockoutMinutes', 15);
+  }
+
+  private buildLockoutExpiry() {
+    return new Date(Date.now() + Math.max(1, this.loginLockoutMinutes) * 60_000);
   }
 
   toSafeUser(user: {

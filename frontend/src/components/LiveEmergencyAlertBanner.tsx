@@ -13,6 +13,9 @@ type EmergencyAlertItem = {
   urgencyLevel?: string;
   status?: string;
   trackingStatus?: string;
+  emergencyNotificationStatus?: 'ACTIVE' | 'EXPIRED' | 'RESOLVED' | 'CANCELLED' | string | null;
+  emergencyNotificationExpiresAt?: string | null;
+  emergencyNotificationDurationMinutes?: number | null;
   requiredBy?: string;
   hospital?: {
     name?: string;
@@ -41,11 +44,29 @@ function normalizeList(payload: unknown): EmergencyAlertItem[] {
   return [];
 }
 
+function getExpiryTime(alert: EmergencyAlertItem) {
+  const value = alert.emergencyNotificationExpiresAt;
+  if (!value) return Number.POSITIVE_INFINITY;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+}
+
+function formatExpiryRemaining(milliseconds: number) {
+  const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export function LiveEmergencyAlertBanner() {
   const location = useLocation();
   const [alerts, setAlerts] = useState<EmergencyAlertItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -82,17 +103,25 @@ export function LiveEmergencyAlertBanner() {
     };
   }, [location.pathname]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const activeAlerts = useMemo(
     () =>
       alerts.filter((alert) => {
         const priority = String(alert.priority ?? alert.urgencyLevel ?? '').toUpperCase();
         const status = String(alert.status ?? alert.trackingStatus ?? '').toUpperCase();
+        const notificationStatus = String(alert.emergencyNotificationStatus ?? 'ACTIVE').toUpperCase();
         return (
           ['CRITICAL', 'HIGH', 'URGENT'].includes(priority) &&
-          !['FULFILLED', 'COMPLETED', 'CANCELLED', 'CANCELED'].includes(status)
+          !['FULFILLED', 'COMPLETED', 'CANCELLED', 'CANCELED'].includes(status) &&
+          notificationStatus === 'ACTIVE' &&
+          now < getExpiryTime(alert)
         );
       }),
-    [alerts],
+    [alerts, now],
   );
 
   useEffect(() => {
@@ -110,11 +139,16 @@ export function LiveEmergencyAlertBanner() {
   const activeAlert = activeAlerts[activeIndex] ?? activeAlerts[0];
   if (!activeAlert) return null;
 
+  const canResolve = location.pathname.startsWith('/hospital') || location.pathname.startsWith('/admin');
   const bloodType = bloodGroupLabel[activeAlert.bloodGroup ?? activeAlert.bloodType ?? ''] ?? activeAlert.bloodGroup ?? activeAlert.bloodType ?? 'Blood';
   const hospital = activeAlert.hospital?.name ?? activeAlert.hospital?.hospitalName ?? 'partner hospital';
   const units = activeAlert.unitsNeeded ?? 0;
   const urgency = String(activeAlert.priority ?? activeAlert.urgencyLevel ?? 'CRITICAL').toUpperCase();
-  const status = String(activeAlert.status ?? activeAlert.trackingStatus ?? 'ACTIVE').toUpperCase();
+  const status = String(activeAlert.emergencyNotificationStatus ?? activeAlert.status ?? activeAlert.trackingStatus ?? 'ACTIVE').toUpperCase();
+  const expiryTime = getExpiryTime(activeAlert);
+  const expiryRemaining = expiryTime - now;
+  const hasExpiry = Number.isFinite(expiryTime);
+  const expiryIsUrgent = hasExpiry && expiryRemaining <= 10 * 60 * 1000;
   const targetHref = location.pathname.startsWith('/hospital')
     ? `/hospital/active-requests?requestId=${activeAlert.id}`
     : location.pathname.startsWith('/donor')
@@ -122,6 +156,23 @@ export function LiveEmergencyAlertBanner() {
       : location.pathname.startsWith('/admin')
         ? `/admin/management?section=request-tracking&requestId=${activeAlert.id}`
         : `/emergency-requests?requestId=${activeAlert.id}`;
+  const resolveAlert = async () => {
+    if (!activeAlert || resolvingId) return;
+    setResolvingId(activeAlert.id);
+    setError('');
+    try {
+      await api.patch(`/blood-requests/${activeAlert.id}/emergency-notification/resolve`);
+      setAlerts((current) =>
+        current.map((alert) =>
+          alert.id === activeAlert.id ? { ...alert, emergencyNotificationStatus: 'RESOLVED' } : alert,
+        ),
+      );
+    } catch (resolveError: any) {
+      setError(resolveError?.response?.data?.error?.message ?? 'Unable to resolve this emergency alert.');
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
   return (
     <div
@@ -149,6 +200,15 @@ export function LiveEmergencyAlertBanner() {
               </span>
               <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">{urgency}</span>
               <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">{status}</span>
+              {hasExpiry ? (
+                <span
+                  className={`rounded-full border px-3 py-1 ${
+                    expiryIsUrgent ? 'border-amber-200 bg-amber-200 text-red-950' : 'border-white/25 bg-white/15'
+                  }`}
+                >
+                  Expires in {formatExpiryRemaining(expiryRemaining)}
+                </span>
+              ) : null}
               {activeAlert.requiredBy ? (
                 <span className="rounded-full border border-white/25 bg-white/15 px-3 py-1">
                   Required by: {new Date(activeAlert.requiredBy).toLocaleString('en-GB', {
@@ -189,8 +249,20 @@ export function LiveEmergencyAlertBanner() {
             <AppIcon name="notification" className="h-4 w-4" />
             View Details
           </Link>
+          {canResolve ? (
+            <button
+              aria-label={`Mark emergency alert for ${bloodType} at ${hospital} as resolved`}
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/70 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={resolvingId === activeAlert.id}
+              type="button"
+              onClick={resolveAlert}
+            >
+              {resolvingId === activeAlert.id ? 'Resolving...' : 'Mark Resolved'}
+            </button>
+          ) : null}
         </div>
       </div>
+      {error ? <p className="mt-3 text-sm font-bold text-red-50" role="alert">{error}</p> : null}
     </div>
   );
 }

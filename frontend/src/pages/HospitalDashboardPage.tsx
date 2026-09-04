@@ -150,6 +150,11 @@ const getWarningLevelLabel = (level: StockWarningLevel) => {
   return 'Healthy';
 };
 
+const formatStatusLabel = (value?: string | null) => {
+  if (!value) return 'Not available';
+  return value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
 const getWarningLevelClassName = (level: StockWarningLevel) => {
   if (level === 'CRITICAL') return 'bg-red-100 text-red-800 border-red-200';
   if (level === 'LIKELY_SHORTAGE') return 'bg-orange-100 text-orange-800 border-orange-200';
@@ -168,7 +173,7 @@ function getRuleTriggers(item: BloodStockWarningItem) {
   if (currentUnits < activeDemand) {
     triggers.push('Inventory < Emergency Demand');
   }
-  if (currentUnits <= 5 || item.level === 'CRITICAL') {
+  if (currentUnits <= Number(item.criticalStockLevel ?? 0) || item.level === 'CRITICAL') {
     triggers.push('Inventory <= Critical Threshold');
   }
   if (expiringUnits > Math.max(0, currentUnits - activeDemand)) {
@@ -483,7 +488,7 @@ export default function HospitalDashboardPage() {
           .slice(0, 2)
           .map((item) => ({
             id: `appointment-${item.id}`,
-            title: `${item.appointmentReference}: appointment ${item.status.toLowerCase()} for ${item.donor?.fullName ?? 'donor'}`,
+            title: `${item.appointmentReference}: appointment ${formatStatusLabel(item.status)} for ${item.donor?.fullName ?? 'donor'}`,
             timestamp: item.completedAt ?? item.scheduledAt,
           }));
         const completedAppointmentActivity = appointments
@@ -503,7 +508,7 @@ export default function HospitalDashboardPage() {
             const donationNumber = item.donationNumber ? ` (${item.donationNumber})` : '';
             return {
               id: `donation-${item.id}`,
-              title: `Donation posted${donationNumber}: +${units} ${item.donor?.bloodGroup ?? 'blood'} from ${donor}`,
+              title: `Donation posted${donationNumber}: +${units} ${item.donor?.bloodGroup ? formatBloodGroup(item.donor.bloodGroup) : 'blood'} from ${donor}`,
               timestamp: item.donationPostedAt ?? item.completedAt,
             };
           });
@@ -511,12 +516,12 @@ export default function HospitalDashboardPage() {
           .slice(0, 2)
           .map((item) => ({
             id: `inventory-${item.id}`,
-            title: `Inventory updated: ${item.inventory.bloodGroup} ${item.previousUnits} to ${item.newUnits}${item.reason ? ` (${item.reason})` : ''}`,
+            title: `Inventory updated: ${formatBloodGroup(item.inventory.bloodGroup)} ${item.previousUnits} to ${item.newUnits}${item.reason ? ` (${item.reason})` : ''}`,
             timestamp: item.createdAt,
           }));
         const requestActivity = requests.slice(0, 4).map((item) => ({
           id: `request-${item.id}`,
-          title: `${item.requestReference}: ${item.bloodGroup} request, ${item.unitsNeeded} units (${item.status}, ${item.requestSource})`,
+          title: `${item.requestReference}: ${formatBloodGroup(item.bloodGroup)} request, ${item.unitsNeeded} units (${formatStatusLabel(item.status)}, ${formatStatusLabel(item.requestSource)})`,
           timestamp: item.createdAt,
         }));
         const transferActivity = requestHistory.flatMap((item) =>
@@ -525,7 +530,7 @@ export default function HospitalDashboardPage() {
             if (response.status === 'ACCEPTED' || response.status === 'REJECTED') {
               entries.push({
                 id: `offer-${response.id}`,
-                title: `Hospital offer ${response.status.toLowerCase()}: ${item.requestReference}`,
+                title: `Hospital offer ${formatStatusLabel(response.status)}: ${item.requestReference}`,
                 timestamp: response.updatedAt ?? response.createdAt,
               });
             }
@@ -551,7 +556,7 @@ export default function HospitalDashboardPage() {
           .slice(0, 4)
           .map((item) => ({
             id: `history-${item.id}`,
-            title: `Emergency request ${item.status.toLowerCase()}: ${item.requestReference}`,
+            title: `Emergency request ${formatStatusLabel(item.status)}: ${item.requestReference}`,
             timestamp: item.updates?.[0]?.createdAt ?? item.createdAt,
           }));
         setRecentActivity([
@@ -584,6 +589,7 @@ export default function HospitalDashboardPage() {
     socket.on('appointment.updated', refreshDashboard);
     socket.on('donor.search.invalidated', refreshDashboard);
     socket.on('donor.response.updated', refreshDashboard);
+    socket.on('donor.mobilization.response.updated', refreshDashboard);
     socket.on('hospital.map.updated', refreshDashboard);
     let localDayTimer: ReturnType<typeof window.setTimeout> | null = null;
     const scheduleLocalDayRefresh = () => {
@@ -601,6 +607,7 @@ export default function HospitalDashboardPage() {
       socket.off('appointment.updated', refreshDashboard);
       socket.off('donor.search.invalidated', refreshDashboard);
       socket.off('donor.response.updated', refreshDashboard);
+      socket.off('donor.mobilization.response.updated', refreshDashboard);
       socket.off('hospital.map.updated', refreshDashboard);
       if (localDayTimer) {
         window.clearTimeout(localDayTimer);
@@ -1083,7 +1090,7 @@ export default function HospitalDashboardPage() {
                   Launch campaign for {campaignRequest.requestReference}
                 </h2>
                 <p className="mt-1 text-sm font-semibold text-muted">
-                  {formatBloodGroup(campaignRequest.bloodGroup)} - {campaignRequest.unitsNeeded} unit(s) - {campaignRequest.priority}
+                {formatBloodGroup(campaignRequest.bloodGroup)} - {campaignRequest.unitsNeeded} unit(s) - {formatStatusLabel(campaignRequest.priority)}
                 </p>
               </div>
               <button
@@ -1195,7 +1202,15 @@ export default function HospitalDashboardPage() {
                 <strong>Usable units:</strong> {getWarningUsableUnits(warningCampaign)}
               </p>
               <p>
-                <strong>Risk level:</strong> {getWarningLevelLabel(warningCampaign.level)}
+                <strong>Stock status:</strong> {getWarningLevelLabel(warningCampaign.level)}
+              </p>
+              <p>
+                <strong>Forecasted available:</strong>{' '}
+                {warningCampaign.forecastedAvailableUnits ?? getWarningUsableUnits(warningCampaign)}
+              </p>
+              <p>
+                <strong>Mobilizable donors:</strong>{' '}
+                {warningCampaign.exactAvailableDonors ?? 0} exact / {warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0} compatible
               </p>
               <p>
                 <strong>Recommended action:</strong>{' '}
@@ -1251,11 +1266,20 @@ export default function HospitalDashboardPage() {
               <button
                 aria-label={`Launch campaign for ${formatBloodGroup(warningCampaign.bloodGroup)} compatible donors`}
                 className="btn-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={warningCampaignSending || !warningCampaignMessage.trim() || Boolean(warningCampaignSuccess)}
+                disabled={
+                  warningCampaignSending ||
+                  !warningCampaignMessage.trim() ||
+                  Boolean(warningCampaignSuccess) ||
+                  (warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0) <= 0
+                }
                 onClick={() => void launchWarningCampaign()}
                 type="button"
               >
-                {warningCampaignSending ? 'Launching...' : 'Confirm and Launch Campaign'}
+                {(warningCampaign.compatibleAvailableDonors ?? warningCampaign.eligibleDonorCount ?? 0) <= 0
+                  ? 'No Mobilizable Donors'
+                  : warningCampaignSending
+                    ? 'Launching...'
+                    : 'Confirm and Launch Campaign'}
               </button>
             </div>
           </div>
@@ -1321,7 +1345,7 @@ export default function HospitalDashboardPage() {
               Risk Score: <span className="text-primary">{highestRiskRow.riskScore}/100</span> - {highestRiskRow.riskLabel}
             </p>
             <p className="mt-2 text-sm text-slate-700">
-              {`${highestRiskRow.label} currently has ${highestRiskRow.usableUnits} usable unit(s), ${highestRiskRow.activeDemandUnits} unit(s) in active emergency demand, and ${highestRiskRow.compatibleAvailableDonors} compatible donor(s) available.`}
+              {`${highestRiskRow.label} currently has ${highestRiskRow.usableUnits} usable unit(s), ${highestRiskRow.activeDemandUnits} unit(s) in active emergency demand, and ${highestRiskRow.compatibleAvailableDonors} compatible mobilizable donor(s).`}
             </p>
             <p className="mt-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
               Main reason: {formatRiskReason(highestRiskRow.riskFactors[0])}

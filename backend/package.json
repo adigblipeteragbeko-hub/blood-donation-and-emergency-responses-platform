@@ -12,7 +12,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:seed:demo-donors": "ts-node prisma/seed-demo-donors.ts"
+    "prisma:seed:demo-donors": "ts-node prisma/seed-demo-donors.ts",
+    "seed:demo-inventory": "ts-node prisma/seed-demo-inventory.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

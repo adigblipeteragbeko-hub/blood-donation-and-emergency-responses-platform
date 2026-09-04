@@ -71,6 +71,8 @@ export type BloodStockWarningItem = {
   status?: 'Critical' | 'Low Stock' | 'Monitor' | 'Healthy';
   currentUnits: number;
   usableUnits?: number;
+  forecastedAvailableUnits?: number;
+  forecastStatus?: 'Critical' | 'Low Stock' | 'Monitor' | 'Healthy';
   minimumStockLevel?: number;
   criticalStockLevel?: number;
   forecastPeriodHours?: number;
@@ -230,6 +232,10 @@ export type BloodRequestItem = {
   requestSource: RequestSource;
   status: RequestStatus;
   trackingStatus: RequestProgressStatus;
+  emergencyNotificationStatus?: 'ACTIVE' | 'EXPIRED' | 'RESOLVED' | 'CANCELLED' | null;
+  emergencyNotificationExpiresAt?: string | null;
+  emergencyNotificationDurationMinutes?: number | null;
+  emergencyNotificationResolvedAt?: string | null;
   location: string;
   emergencyLocation?: string | null;
   city?: string | null;
@@ -576,6 +582,8 @@ export async function mobilizeCompatibleDonors(payload: {
     notificationsCreated: number;
     notificationsSkipped: number;
     skippedReasons: Record<string, number>;
+    duplicateCampaign?: boolean;
+    duplicateWindowMinutes?: number;
     auditLogCreated: boolean;
     hospitalActivityCreated: boolean;
     campaignReference: string | null;
@@ -645,8 +653,14 @@ export async function createHospitalRequest(payload: {
   latitude?: number;
   longitude?: number;
   radiusKm?: 5 | 10 | 20;
+  emergencyNotificationDurationMinutes?: number;
 }) {
   const response = await api.post<ApiEnvelope<BloodRequestItem>>('/blood-requests', payload);
+  return unwrap(response.data);
+}
+
+export async function resolveEmergencyNotification(id: string) {
+  const response = await api.patch<ApiEnvelope<BloodRequestItem>>(`/blood-requests/${id}/emergency-notification/resolve`);
   return unwrap(response.data);
 }
 

@@ -60,6 +60,18 @@ export class AppointmentsService {
     return labels[type];
   }
 
+  private formatBloodGroup(value?: BloodGroup | null) {
+    if (!value) return 'blood';
+    return value.replace('_POS', '+').replace('_NEG', '-');
+  }
+
+  private formatAppointmentDateTime(value: Date) {
+    return {
+      date: value.toLocaleDateString(),
+      time: value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
   private addMonths(date: Date, months: number) {
     const next = new Date(date);
     next.setMonth(next.getMonth() + months);
@@ -129,40 +141,29 @@ export class AppointmentsService {
     }, appointment.hospitalId);
   }
 
-  private async notifyAppointmentParticipants(appointment: {
+  private async notifyAppointmentUser(appointment: {
     id: string;
     appointmentReference: string;
     scheduledAt: Date;
     appointmentType: AppointmentType;
     donor: { userId: string; fullName: string; phone?: string | null; alternativePhoneNumber?: string | null; notificationSmsEnabled?: boolean };
     hospital: { userId: string; hospitalName: string; contactPhone?: string | null };
-  }, title: string, body: string, smsPurpose: SmsPurpose = SmsPurpose.APPOINTMENT_CREATED) {
-    await Promise.all([
-      this.notifications.createAndBroadcastNotification({
-        userId: appointment.donor.userId,
-        title,
-        body,
-        channel: 'IN_APP',
-        type: NotificationType.APPOINTMENT,
-        delivered: true,
-      }),
-      this.notifications.createAndBroadcastNotification({
-        userId: appointment.hospital.userId,
-        title,
-        body,
-        channel: 'IN_APP',
-        type: NotificationType.APPOINTMENT,
-        delivered: true,
-      }),
-    ]);
+  }, recipient: 'DONOR' | 'HOSPITAL', title: string, body: string, smsMessage: string, smsPurpose: SmsPurpose) {
+    const recipientUserId = recipient === 'DONOR' ? appointment.donor.userId : appointment.hospital.userId;
+    await this.notifications.createAndBroadcastNotification({
+      userId: recipientUserId,
+      title,
+      body,
+      channel: 'IN_APP',
+      type: NotificationType.APPOINTMENT,
+    });
 
-    const smsRecipients = [
-      appointment.donor.notificationSmsEnabled ? appointment.donor.phone ?? appointment.donor.alternativePhoneNumber : null,
-      appointment.hospital.contactPhone ?? null,
-    ];
+    const smsRecipients = recipient === 'DONOR'
+      ? [appointment.donor.notificationSmsEnabled ? appointment.donor.phone ?? appointment.donor.alternativePhoneNumber : null]
+      : [appointment.hospital.contactPhone ?? null];
     await this.smsService.sendAppointmentNotification({
       recipients: smsRecipients,
-      message: `BloodSOS: ${body}`.slice(0, 300),
+      message: smsMessage,
       purpose: smsPurpose,
       relatedEntityType: 'APPOINTMENT',
       relatedEntityId: appointment.id,
@@ -170,7 +171,7 @@ export class AppointmentsService {
         smsPurpose,
         'APPOINTMENT',
         appointment.id,
-        title,
+        `${recipient}:${title}`,
         smsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
       ),
     });
@@ -396,13 +397,39 @@ export class AppointmentsService {
       this.assertDonorCanAttendDonation(donor, scheduledAt);
     }
 
-    const appointment = await this.createAppointmentWithReference({
-      donor: { connect: { id: donor.id } },
-      hospital: { connect: { id: dto.hospitalId } },
-      scheduledAt,
-      appointmentType: dto.appointmentType ?? AppointmentType.BLOOD_DONATION,
-      notes: dto.notes,
+    const appointment = await this.createAppointmentWithReference(
+      {
+        donor: { connect: { id: donor.id } },
+        hospital: { connect: { id: dto.hospitalId } },
+        scheduledAt,
+        appointmentType: dto.appointmentType ?? AppointmentType.BLOOD_DONATION,
+        notes: dto.notes,
+      },
+      {
+        donor: { select: { userId: true, fullName: true, phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true } },
+        hospital: { select: { userId: true, hospitalName: true, contactPhone: true } },
+      },
+    );
+
+    const notificationAppointment = await this.prisma.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+      include: {
+        donor: { select: { userId: true, fullName: true, phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true } },
+        hospital: { select: { userId: true, hospitalName: true, contactPhone: true } },
+      },
     });
+
+    if (notificationAppointment.hospital.userId) {
+      const { date, time } = this.formatAppointmentDateTime(appointment.scheduledAt);
+      await this.notifyAppointmentUser(
+        notificationAppointment,
+        'HOSPITAL',
+        'Donation Appointment Booked',
+        `A donor booked a ${this.appointmentTypeLabel(appointment.appointmentType)} appointment for ${date} at ${time}. Please review it in the platform.`,
+        `BloodSOS: A donor has booked a donation appointment for ${date} at ${time}. Please review it in the platform.`,
+        SmsPurpose.APPOINTMENT_CREATED,
+      );
+    }
 
     await this.audit.log('APPOINTMENT_CREATED', 'APPOINTMENT', userId, appointment.id, {
       ...dto,
@@ -451,46 +478,28 @@ export class AppointmentsService {
         notes: dto.notes,
       },
       {
-        donor: { select: { id: true, donorNumber: true, fullName: true, firstName: true, otherNames: true, surname: true, bloodGroup: true, location: true } },
+        donor: { select: { id: true, userId: true, donorNumber: true, fullName: true, firstName: true, otherNames: true, surname: true, bloodGroup: true, location: true, phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true } },
+        hospital: { select: { userId: true, hospitalName: true, contactPhone: true } },
         bloodRequest: { select: { id: true, requestReference: true } },
       },
     );
 
-    await this.notifications.createAndBroadcastNotification({
-      userId: donor.user.id,
-      bloodRequestId: dto.bloodRequestId,
-      title: `${this.appointmentTypeLabel(appointment.appointmentType)} appointment scheduled`,
-      body: [
-        `Appointment ${appointment.appointmentReference} has been scheduled.`,
-        `${hospital.hospitalName} scheduled a ${this.appointmentTypeLabel(appointment.appointmentType)} appointment.`,
-        `Date and time: ${appointment.scheduledAt.toLocaleString()}.`,
-        dto.notes ? `Notes: ${dto.notes}` : null,
-      ].filter(Boolean).join(' '),
-      channel: 'IN_APP',
-      type: NotificationType.APPOINTMENT,
-      delivered: true,
+    const { date, time } = this.formatAppointmentDateTime(appointment.scheduledAt);
+    const notificationAppointment = await this.prisma.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+      include: {
+        donor: { select: { userId: true, fullName: true, phone: true, alternativePhoneNumber: true, notificationSmsEnabled: true } },
+        hospital: { select: { userId: true, hospitalName: true, contactPhone: true } },
+      },
     });
-
-    const createdSmsRecipients = [
-      donor.notificationSmsEnabled ? donor.phone ?? donor.alternativePhoneNumber : null,
-      hospital.contactPhone ?? null,
-    ];
-    await this.smsService.sendAppointmentNotification({
-      recipients: createdSmsRecipients,
-      message: `BloodSOS: ${hospital.hospitalName} proposed a blood donation appointment for ${appointment.scheduledAt.toLocaleDateString()} at ${appointment.scheduledAt.toLocaleTimeString()}. Log in to accept, decline, or request another time.`,
-      purpose: SmsPurpose.APPOINTMENT_CREATED,
-      hospitalId: hospital.id,
-      triggeredByUserId: userId,
-      relatedEntityType: 'APPOINTMENT',
-      relatedEntityId: appointment.id,
-      idempotencyKey: this.smsService.buildEventIdempotencyKey(
-        SmsPurpose.APPOINTMENT_CREATED,
-        'APPOINTMENT',
-        appointment.id,
-        'PENDING_CONFIRMATION',
-        createdSmsRecipients.filter((recipient): recipient is string => Boolean(recipient)),
-      ),
-    });
+    await this.notifyAppointmentUser(
+      notificationAppointment,
+      'DONOR',
+      'Donation Appointment Scheduled',
+      `Your blood donation appointment has been scheduled at ${hospital.hospitalName} for ${date} at ${time}.`,
+      `BloodSOS: Your blood donation appointment is scheduled at ${hospital.hospitalName} on ${date} at ${time}. Please check the app for details.`,
+      SmsPurpose.APPOINTMENT_CREATED,
+    );
 
     await this.audit.log('APPOINTMENT_CREATED_BY_HOSPITAL', 'APPOINTMENT', userId, appointment.id, {
       ...dto,
@@ -575,10 +584,13 @@ export class AppointmentsService {
       include: this.appointmentInclude,
     });
 
-    await this.notifyAppointmentParticipants(
+    const { date, time } = this.formatAppointmentDateTime(appointment.scheduledAt);
+    await this.notifyAppointmentUser(
       appointment,
-      `Appointment accepted: ${appointment.appointmentReference}`,
-      `${appointment.donor.fullName} accepted appointment ${appointment.appointmentReference} at ${appointment.hospital.hospitalName}. Date and time: ${appointment.scheduledAt.toLocaleString()}.`,
+      'HOSPITAL',
+      'Donation Appointment Accepted',
+      `${appointment.donor.fullName} accepted appointment ${appointment.appointmentReference} at ${appointment.hospital.hospitalName} for ${date} at ${time}.`,
+      `BloodSOS: A donor accepted appointment ${appointment.appointmentReference} for ${date} at ${time}. Check the platform for details.`,
       SmsPurpose.APPOINTMENT_CREATED,
     );
     await this.audit.log('APPOINTMENT_ACCEPTED_BY_DONOR', 'APPOINTMENT', userId, id, {
@@ -616,10 +628,14 @@ export class AppointmentsService {
       include: this.appointmentInclude,
     });
 
-    await this.notifyAppointmentParticipants(
+    const { date: currentDate, time: currentTime } = this.formatAppointmentDateTime(appointment.scheduledAt);
+    const { date: preferredDate, time: preferredTime } = this.formatAppointmentDateTime(preferredAt);
+    await this.notifyAppointmentUser(
       appointment,
-      `Reschedule requested: ${appointment.appointmentReference}`,
-      `${appointment.donor.fullName} requested to reschedule appointment ${appointment.appointmentReference}. Current time: ${appointment.scheduledAt.toLocaleString()}. Preferred time: ${preferredAt.toLocaleString()}${dto.reason ? `. Reason: ${dto.reason}` : ''}.`,
+      'HOSPITAL',
+      'Appointment Reschedule Requested',
+      `${appointment.donor.fullName} requested to reschedule appointment ${appointment.appointmentReference}. Current time: ${currentDate} at ${currentTime}. Preferred time: ${preferredDate} at ${preferredTime}.`,
+      `BloodSOS: A donor requested to reschedule appointment ${appointment.appointmentReference} to ${preferredDate} at ${preferredTime}. Please review it in the platform.`,
       SmsPurpose.APPOINTMENT_RESCHEDULED,
     );
     await this.audit.log('APPOINTMENT_RESCHEDULE_REQUESTED_BY_DONOR', 'APPOINTMENT', userId, id, {
@@ -651,10 +667,12 @@ export class AppointmentsService {
       include: this.appointmentInclude,
     });
 
-    await this.notifyAppointmentParticipants(
+    await this.notifyAppointmentUser(
       appointment,
-      `Appointment declined: ${appointment.appointmentReference}`,
-      `${appointment.donor.fullName} declined appointment ${appointment.appointmentReference}. Reason: ${dto.reason}${dto.notes ? `. Notes: ${dto.notes}` : ''}.`,
+      'HOSPITAL',
+      'Donation Appointment Declined',
+      `${appointment.donor.fullName} declined appointment ${appointment.appointmentReference}. Reason: ${dto.reason}.`,
+      `BloodSOS: A donor declined appointment ${appointment.appointmentReference}. Please check the platform for details.`,
       SmsPurpose.APPOINTMENT_CANCELLED,
     );
     await this.audit.log('APPOINTMENT_DECLINED_BY_DONOR', 'APPOINTMENT', userId, id, {
@@ -693,10 +711,13 @@ export class AppointmentsService {
       include: this.appointmentInclude,
     });
 
-    await this.notifyAppointmentParticipants(
+    const { date: cancelledDate } = this.formatAppointmentDateTime(appointment.scheduledAt);
+    await this.notifyAppointmentUser(
       appointment,
-      `Appointment cancelled: ${appointment.appointmentReference}`,
+      'HOSPITAL',
+      'Donation Appointment Cancelled',
       `${appointment.donor.fullName} cancelled appointment ${appointment.appointmentReference} at ${appointment.hospital.hospitalName}.`,
+      `BloodSOS: A donor cancelled appointment ${appointment.appointmentReference} scheduled for ${cancelledDate}. Please check the platform for details.`,
       SmsPurpose.APPOINTMENT_CANCELLED,
     );
     await this.audit.log('APPOINTMENT_CANCELLED_BY_DONOR', 'APPOINTMENT', userId, id, {
@@ -926,10 +947,15 @@ export class AppointmentsService {
         : dto.status === AppointmentStatus.CANCELLED
           ? `${appointment.hospital.hospitalName} cancelled appointment ${appointment.appointmentReference}.`
           : `${appointment.hospital.hospitalName} confirmed appointment ${appointment.appointmentReference}.`;
-      await this.notifyAppointmentParticipants(
+      const { date, time } = this.formatAppointmentDateTime(updated.scheduledAt);
+      await this.notifyAppointmentUser(
         appointment,
+        'DONOR',
         notificationTitle,
         notificationBody,
+        dto.status === AppointmentStatus.CANCELLED
+          ? `BloodSOS: Your donation appointment at ${appointment.hospital.hospitalName} on ${date} has been cancelled. Check the app for details.`
+          : `BloodSOS: Your donation appointment at ${appointment.hospital.hospitalName} has been rescheduled to ${date} at ${time}.`,
         dto.status === AppointmentStatus.CANCELLED ? SmsPurpose.APPOINTMENT_CANCELLED : SmsPurpose.APPOINTMENT_RESCHEDULED,
       );
     }

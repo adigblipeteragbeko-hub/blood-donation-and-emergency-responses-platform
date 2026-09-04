@@ -14,6 +14,7 @@ import { DonorSearchDto } from './dto/donor-search.dto';
 import { SubmitOfficeUseDto } from './dto/submit-office-use.dto';
 import { UpsertHospitalProfileDto } from './dto/upsert-hospital-profile.dto';
 import { getCompatibleDonorGroups } from '../../common/utils/blood-compatibility';
+import { normalizeEmail } from '../../common/utils/email-normalization';
 
 const BLOOD_GROUP_CODES = ['O_POS', 'O_NEG', 'A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'AB_POS', 'AB_NEG'] as const;
 const DEFERRED_STATUSES: DonorClinicalStatus[] = [
@@ -715,7 +716,11 @@ export class HospitalsService {
   }
 
   async createByAdmin(dto: CreateHospitalAdminDto, actorUserId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const email = normalizeEmail(dto.email);
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
     if (existing) {
       throw new BadRequestException('Email already exists');
     }
@@ -748,7 +753,7 @@ export class HospitalsService {
     const created = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: dto.email,
+          email,
           passwordHash: await argon2.hash(dto.password),
           role: Role.HOSPITAL_ADMIN,
           emailVerified: true,
@@ -778,7 +783,7 @@ export class HospitalsService {
       return hospital;
     });
 
-    await this.audit.log('HOSPITAL_CREATED_BY_ADMIN', 'HOSPITAL', actorUserId, created.id, { email: dto.email });
+    await this.audit.log('HOSPITAL_CREATED_BY_ADMIN', 'HOSPITAL', actorUserId, created.id, { email });
     this.realtime.broadcastHospitalMapUpdate({
       reason: 'hospital.created',
       hospitalId: created.id,

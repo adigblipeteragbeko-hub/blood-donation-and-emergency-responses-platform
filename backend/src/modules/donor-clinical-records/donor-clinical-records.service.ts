@@ -23,6 +23,8 @@ const PLATFORM_REVIEW_ROLES: Role[] = [Role.ADMIN];
 const RISK_YES_KEYS = new Set([
   'q2','q3','q4','q5','q6','q7','q8','q9','q10','q12','q13','q14','q15','q16','q17','q18','q19','q20','q21','q22',
 ]);
+const RISK_NO_KEYS = new Set(['q1']);
+const MINIMUM_HEALTH_SCREENING_ANSWERS = 9;
 
 const DOCUMENT_TYPES = new Set(['Ghana Card', 'Passport', "Driver's License", 'Voter ID', 'NHIS', 'Other']);
 
@@ -156,7 +158,7 @@ export class DonorClinicalRecordsService {
   private recordPayload(dto: UpsertDonorClinicalDraftDto) {
     const idNumber = dto.idType || dto.idNumber ? validateDocumentNumber(dto.idType, dto.idNumber) : dto.idNumber;
     return {
-      selectedHospitalId: dto.selectedHospitalId,
+      selectedHospitalId: dto.selectedHospitalId?.trim() || null,
       formDate: this.date(dto.formDate) ?? new Date(),
       venue: dto.venue,
       title: dto.title,
@@ -197,11 +199,15 @@ export class DonorClinicalRecordsService {
   }
 
   private riskForAnswers(answers: HealthAnswerDto[] = []) {
-    const risky = answers.filter((answer) => answer.answer && RISK_YES_KEYS.has(answer.questionKey));
+    const risky = answers.filter((answer) => this.isRiskAnswer(answer));
     return {
       donorRiskFlag: risky.length > 0,
       donorRiskSummary: risky.length ? risky.map((a) => `${a.questionKey}: ${a.questionText}`).join('\n') : null,
     };
+  }
+
+  private isRiskAnswer(answer: Pick<HealthAnswerDto, 'questionKey' | 'answer'>) {
+    return (answer.answer && RISK_YES_KEYS.has(answer.questionKey)) || (!answer.answer && RISK_NO_KEYS.has(answer.questionKey));
   }
 
   private includeAll = {
@@ -216,13 +222,17 @@ export class DonorClinicalRecordsService {
   async saveDraft(userId: string, dto: UpsertDonorClinicalDraftDto) {
     const donor = await this.donorForUser(userId);
     const latest = await this.prisma.donorClinicalRecord.findFirst({ where: { donorId: donor.id }, orderBy: { createdAt: 'desc' } });
-    if (latest && latest.status !== DonorClinicalStatus.DRAFT) {
+    const canCreateAfterTemporaryDeferral =
+      latest?.status === DonorClinicalStatus.TEMPORARILY_DEFERRED &&
+      donor.nextEligibilityDate &&
+      donor.nextEligibilityDate <= new Date();
+    if (latest && latest.status !== DonorClinicalStatus.DRAFT && !canCreateAfterTemporaryDeferral) {
       throw new BadRequestException('Submitted clinical records are locked. Create an amendment through hospital review.');
     }
 
     const risk = this.riskForAnswers(dto.healthAnswers);
     const data = { ...this.recordPayload(dto), ...risk };
-    const record = latest
+    const record = latest && latest.status === DonorClinicalStatus.DRAFT
       ? await this.prisma.donorClinicalRecord.update({ where: { id: latest.id }, data })
       : await this.prisma.donorClinicalRecord.create({ data: { donorId: donor.id, ...data } });
 
@@ -254,7 +264,7 @@ export class DonorClinicalRecordsService {
           questionText: answer.questionText,
           answer: answer.answer,
           details: answer.details,
-          riskFlag: answer.answer && RISK_YES_KEYS.has(answer.questionKey),
+          riskFlag: this.isRiskAnswer(answer),
         })),
       }),
     ]);
@@ -271,9 +281,6 @@ export class DonorClinicalRecordsService {
       if (!record.lastDonationDate) {
         throw new BadRequestException('Please provide your last donation date.');
       }
-      if (Number(record.numberOfVoluntaryDonations ?? 0) <= 0) {
-        throw new BadRequestException('Please enter total previous donations.');
-      }
     }
     if (record.donorType === 'REPLACEMENT_FAMILY') {
       const replacementRequired = ['patientName', 'requestReference', 'patientHospital', 'relationshipToPatient'];
@@ -282,8 +289,8 @@ export class DonorClinicalRecordsService {
         throw new BadRequestException(`Missing replacement donor fields: ${missingReplacement.join(', ')}`);
       }
     }
-    if (!record.healthAnswers || record.healthAnswers.length < 22) {
-      throw new BadRequestException('All 22 health questionnaire questions must be answered.');
+    if (!record.healthAnswers || record.healthAnswers.length < MINIMUM_HEALTH_SCREENING_ANSWERS) {
+      throw new BadRequestException('All eligibility screening questions must be answered.');
     }
     const age = Math.floor((Date.now() - new Date(record.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
     if (age < 17 || age > 66) throw new BadRequestException('Donor age must be between 17 and 66 years for this workflow.');
@@ -351,6 +358,7 @@ export class DonorClinicalRecordsService {
         fullName: donor.fullName,
         email: donor.user.email,
         phone: donor.phone,
+        nextEligibilityDate: donor.nextEligibilityDate,
       },
     };
   }

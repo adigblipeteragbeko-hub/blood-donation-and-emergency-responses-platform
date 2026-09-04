@@ -35,8 +35,9 @@ export class HealthAnswerDto {
 
 export class UpsertDonorClinicalDraftDto {
   @IsOptional()
+  @EmptyStringToNull()
   @IsString()
-  selectedHospitalId?: string;
+  selectedHospitalId?: string | null;
 
   @IsOptional()
   @EmptyStringToNull()

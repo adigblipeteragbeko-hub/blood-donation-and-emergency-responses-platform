@@ -1,5 +1,7 @@
+import { Transform } from 'class-transformer';
 import { BloodGroup } from '@prisma/client';
 import { IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { normalizeEmail } from '../../../../common/utils/email-normalization';
 
 const emergencyContactRelationships = [
   'Father',
@@ -14,6 +16,7 @@ const emergencyContactRelationships = [
 ] as const;
 
 export class CreateDonorAdminDto {
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeEmail(value) : value))
   @IsEmail()
   email!: string;
 

@@ -6,6 +6,7 @@ import { colors } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { ThemePreference } from '../theme/colors';
+import { radius, spacing, typography } from '../theme/design';
 
 export function HealthFormScreen() {
   return (
@@ -64,7 +65,7 @@ export function SettingsScreen() {
         <Text style={styles.detail}>Private is recommended. Your personal details are only visible to authorized hospital staff and administrators.</Text>
         <Text style={styles.detail}>Use Live Location to control secure emergency location sharing.</Text>
       </AppCard>
-      <AppButton title="Logout" variant="danger" onPress={() => void logout()} />
+      <AppButton title="Logout" icon="log-out-outline" variant="danger" onPress={() => void logout()} />
     </Screen>
   );
 }
@@ -84,8 +85,8 @@ export function SupportScreen() {
       </AppCard>
       <AppCard>
         <Text style={styles.section}>Ask Support</Text>
-        <TextInput style={styles.textArea} multiline placeholder="Describe what you need help with..." textAlignVertical="top" />
-        <AppButton title="Send Support Message" variant="outline" onPress={() => undefined} />
+        <TextInput style={styles.textArea} multiline placeholder="Describe what you need help with..." placeholderTextColor={colors.mutedOnLight} textAlignVertical="top" />
+        <AppButton title="Send Support Message" icon="send-outline" variant="outline" onPress={() => undefined} />
       </AppCard>
       <AppCard>
         <Text style={styles.section}>FAQs</Text>
@@ -111,12 +112,12 @@ function Faq({ question, answer }: { question: string; answer: string }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.primaryDark, fontSize: 26, fontWeight: '900' },
-  muted: { color: colors.muted, lineHeight: 20 },
-  section: { color: colors.ink, fontSize: 18, fontWeight: '900' },
+  title: { color: colors.ink, ...typography.screenTitle },
+  muted: { color: colors.muted, ...typography.body },
+  section: { color: colors.ink, ...typography.sectionTitle },
   detail: { color: colors.ink, lineHeight: 23 },
-  textArea: { minHeight: 110, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 12, backgroundColor: '#fff', color: colors.ink },
-  faq: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, gap: 4 },
+  textArea: { minHeight: 112, borderWidth: 1, borderColor: colors.borderOnLight, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.white, color: colors.textOnLight },
+  faq: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, gap: spacing.xs },
   faqQuestion: { color: colors.primaryDark, fontWeight: '900' },
-  themeGrid: { gap: 10, marginTop: 10 },
+  themeGrid: { gap: spacing.md, marginTop: spacing.md },
 });

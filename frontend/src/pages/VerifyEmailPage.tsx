@@ -23,6 +23,8 @@ export default function VerifyEmailPage() {
   const [maskedDestination, setMaskedDestination] = useState(state?.maskedDestination ?? '');
   const [secondsLeft, setSecondsLeft] = useState((state?.expiresInMinutes ?? 5) * 60);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [verified, setVerified] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -38,27 +40,29 @@ export default function VerifyEmailPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting || verified) return;
     setError('');
     setMessage('');
+    setSubmitting(true);
 
     try {
-      const response = await api.post('/auth/verify-email', { email, code });
-      setMessage(response.data?.data?.message ?? 'Email verified successfully.');
-
-      if (state?.role === 'hospital') {
-        navigate('/hospital-login');
-        return;
-      }
-
-      navigate('/donor-login');
+      await api.post('/auth/verify-email', { email, code });
+      setVerified(true);
+      setMessage('Account Verified Successfully! Your account has been successfully verified. You can now log in.');
+      window.setTimeout(() => {
+        navigate(state?.role === 'hospital' ? '/hospital-login' : '/donor-login');
+      }, 2500);
     } catch (err: any) {
       const apiError = err?.response?.data?.error;
       const extracted = typeof apiError === 'string' ? apiError : apiError?.message;
       setError(extracted ?? 'Verification failed. Check your code and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const requestCode = async (method: 'EMAIL' | 'SMS') => {
+    if (submitting || verified) return;
     setError('');
     setMessage('');
 
@@ -87,16 +91,40 @@ export default function VerifyEmailPage() {
         <p>Your verification code expires in 5 minutes. Do not share it with anyone.</p>
         <p className="mt-2 font-semibold">Didn&apos;t receive it?</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button className="rounded bg-white px-3 py-1 text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0} type="button" onClick={() => void requestCode(verificationMethod)}>
+          <button className="rounded bg-white px-3 py-1 text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0 || submitting || verified} type="button" onClick={() => void requestCode(verificationMethod)}>
             {verificationMethod === 'SMS' ? 'Resend by SMS' : 'Resend by Email'}
           </button>
-          <button className="rounded bg-white px-3 py-1 text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0} type="button" onClick={() => void requestCode(verificationMethod === 'SMS' ? 'EMAIL' : 'SMS')}>
+          <button className="rounded bg-white px-3 py-1 text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0 || submitting || verified} type="button" onClick={() => void requestCode(verificationMethod === 'SMS' ? 'EMAIL' : 'SMS')}>
             {verificationMethod === 'SMS' ? 'Send by Email' : 'Send by SMS'}
           </button>
         </div>
       </div>
       <p className="text-center text-sm font-semibold text-primary">Code expires in {minutes}:{seconds}</p>
-      {message ? <p className="rounded bg-green-50 p-2 text-sm text-green-700">{message}</p> : null}
+      {message ? (
+        <div
+          className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+          role="status"
+          aria-live="polite"
+        >
+          {verified ? (
+            <span
+              aria-hidden="true"
+              className="mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-green-600 text-sm font-black text-white"
+            >
+              ✓
+            </span>
+          ) : null}
+          <div>
+            <p className="font-black">{verified ? 'Account Verified Successfully!' : message}</p>
+            {verified ? (
+              <>
+                <p className="mt-1">Your account has been successfully verified. You can now log in.</p>
+                <p className="mt-1 text-xs font-bold">Redirecting you to login...</p>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {error ? <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p> : null}
 
       <form className="space-y-2" onSubmit={submit}>
@@ -106,6 +134,7 @@ export default function VerifyEmailPage() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          disabled={submitting || verified}
           required
         />
         <input
@@ -113,15 +142,16 @@ export default function VerifyEmailPage() {
           placeholder="Verification code"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          disabled={submitting || verified}
           required
         />
-        <button className="btn-primary w-full" type="submit">
-          Verify Email
+        <button className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70" disabled={submitting || verified} type="submit">
+          {submitting ? 'Verifying...' : verified ? 'Verified' : 'Verify Email'}
         </button>
       </form>
 
       <div className="flex justify-center gap-5 text-sm">
-        <button className="text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0} onClick={() => void requestCode(verificationMethod)} type="button">
+        <button className="text-primary underline disabled:cursor-not-allowed disabled:text-slate-400" disabled={resendCooldown > 0 || submitting || verified} onClick={() => void requestCode(verificationMethod)} type="button">
           {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : `Resend by ${verificationMethod === 'SMS' ? 'SMS' : 'Email'}`}
         </button>
         <Link className="text-primary underline" to="/donor-login">
