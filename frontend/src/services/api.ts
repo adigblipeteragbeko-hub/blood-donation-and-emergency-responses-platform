@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+const PRODUCTION_API_BASE_URL =
+  'https://blood-donation-and-emergency-responses-platform-production.up.railway.app';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000',
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL ||
+    (import.meta.env.PROD ? PRODUCTION_API_BASE_URL : 'http://localhost:4000'),
   headers: {
     'Content-Type': 'application/json',
   },
